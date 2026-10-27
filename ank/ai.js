@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.5.6';
+  var PANEL_VERSION = '1.5.8';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';

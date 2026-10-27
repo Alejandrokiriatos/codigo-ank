@@ -1,7 +1,7 @@
 {
-  "web": "1.5.7",
+  "web": "1.5.8",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "menu Actualizar ANK mas confiable y fecha de publicacion en Entorno",
-  "sig": "6ec6b61227eed5c5920b9f85aeac08eb7f609b1a6da6dcad39aa614056d9e65d"
+  "notas": "menu Actualizar ANK en los tres puntos y fecha de publicacion en Entorno",
+  "sig": "a1d8f3113a213fa88324657045c5fa551f9ab85f5af36e460841ae490f89680f"
 }
