@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.6.1';
+  var PANEL_VERSION = '1.6.2';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -88,6 +88,7 @@
   var cur = null; // burbuja del bot en curso
   var panel = null; // nodo raíz del panel
   var mountTimer = null;
+  var newsCerrada = false;
 
   /* ------------------------------------------------------------------ *
    * utilidades
@@ -2142,12 +2143,14 @@
 
   /* Cartel con el historial de lo que se acaba de instalar. Se queda hasta
      que el usuario lo cierra. */
-  function mostrarNovedades() {
+  function mostrarNovedades(forzado) {
     var u = actualizador();
     if (!u || !u.novedades) return;
-    var d = u.novedades();
+    if (!forzado && newsCerrada) return;
+    var d = forzado || u.novedades();
     if (!d) return;
     var el = q('#ank-news');
+    if (!forzado && el && el.classList.contains('open')) return;
     if (!el) {
       el = document.createElement('div');
       el.id = 'ank-news';
@@ -2170,8 +2173,22 @@
 
     pulsar(q('[data-news="cerrar"]', el), function () {
       el.classList.remove('open');
-      try { u.olvidarNovedades(); } catch (e) {}
+      newsCerrada = true;
+      if (!forzado) {
+        try { u.olvidarNovedades(); } catch (e) {}
+      }
     });
+  }
+
+  /* Muestra el historial de la versión instalada aunque ya se haya cerrado
+     el cartel automático. */
+  function verNovedades() {
+    var u = actualizador();
+    if (!u || !u.version) {
+      aviso('No hay novedades para mostrar.');
+      return;
+    }
+    mostrarNovedades({ version: u.version(), notas: u.notas ? u.notas() : '' });
   }
 
   /* Busca novedades. `forzar` muestra el diálogo aunque el usuario haya dicho
@@ -2417,6 +2434,7 @@
           '<section class="ank-ai-view" data-view="log">' +
             '<div class="ank-ai-logbar">' +
               '<button class="ank-ai-btn" data-accion="diag" title="Compartir versiones, entorno y errores recientes">Diagnóstico</button>' +
+              '<button class="ank-ai-btn" data-accion="novedades" title="Ver qué cambió en la última actualización">Novedades</button>' +
               '<button class="ank-ai-btn" data-accion="copiar-log">Copiar</button>' +
               '<button class="ank-ai-btn" data-accion="limpiar-log">Limpiar</button>' +
               '<div class="ank-ai-spacer"></div>' +
@@ -2614,6 +2632,7 @@
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
       case 'diag': compartirDiagnostico(); break;
+      case 'novedades': verNovedades(); break;
       case 'instalar-entorno': instalarEntorno(); break;
       case 'instalar-asistente': instalarAsistente(); break;
       case 'guardar-clave':
@@ -2786,6 +2805,9 @@
     botonIA();
     marcarActualizacion();
     inyectarMenu();
+    /* Si la app redibuja el cuerpo, el cartel de novedades se vuelve a montar
+       mientras siga pendiente y el usuario no lo haya cerrado. */
+    mostrarNovedades();
   }
 
   function iniciar() {

@@ -1,7 +1,7 @@
 {
-  "web": "1.6.1",
+  "web": "1.6.2",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Formato de propuesta de archivos para el asistente (diff + Aplicar/Descartar). Incluye lo de 1.6.0: reintentar, otro modelo, buscador, exportar, resumen automático, diagnóstico y chequeo en segundo plano",
-  "sig": "1f69a40a7c4de62edc1f0e889b0be29a04a56fb8f1d14f0aa1e15a82c3adf80f"
+  "notas": "Si una respuesta falla: Reintentar o Probar otro modelo · buscador de chats · exportar la conversación a Markdown · resumen automático de memoria · el asistente propone archivos con diff y botones Aplicar/Descartar (con respaldo .bak) · Diagnóstico para compartir · el cartel de novedades ahora se mantiene visible y hay un botón Novedades en Registro · la app busca actualizaciones cada 30 minutos",
+  "sig": "f1830a6502318347d4f6972e4528cc98f879bc995123360c9b2cb8bb42f4ec8f"
 }
