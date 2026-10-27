@@ -1,6 +1,7 @@
 {
-  "web": "1.5.1",
+  "web": "1.5.2",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Historial de chats, memoria por proyecto y marca ANK"
+  "notas": "firma de actualizaciones",
+  "sig": "6e3cdd822360f19623a766be5b6756a5697f3357b489417185b51c9543620d27"
 }
