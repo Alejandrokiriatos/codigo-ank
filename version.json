@@ -1,7 +1,7 @@
 {
-  "web": "1.5.8",
+  "web": "1.5.9",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "menu Actualizar ANK en los tres puntos y fecha de publicacion en Entorno",
-  "sig": "a1d8f3113a213fa88324657045c5fa551f9ab85f5af36e460841ae490f89680f"
+  "notas": "cartel flotante con barra de carga e historial de cambios al aplicar",
+  "sig": "4265f84a58ef46ea7eea95e99a48cd42dde24cd3dac9d87abe55ac57f96164bf"
 }

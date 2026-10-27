@@ -945,3 +945,100 @@
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* ---------- barra de progreso de la actualización ---------- */
+.ank-upd-prog {
+  margin-top: 12px;
+}
+
+.ank-upd-prog-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #1d2a2c;
+  overflow: hidden;
+}
+
+.ank-upd-prog-bar i {
+  display: block;
+  height: 100%;
+  width: 2%;
+  background: #e0a458;
+  transition: width 160ms linear;
+}
+
+.ank-upd-prog-txt {
+  margin-top: 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: #b8b1a3;
+}
+
+/* ---------- cartel de novedades tras aplicar ---------- */
+#ank-news {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483642;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 7, 0.72);
+  font-family: var(--app-font-family, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif);
+}
+
+#ank-news.open {
+  display: flex;
+}
+
+.ank-news-box {
+  width: 100%;
+  max-width: 360px;
+  background: #0f1618;
+  color: #e7e0d2;
+  border: 1px solid #26363a;
+  border-top: 2px solid #e0a458;
+  border-radius: 4px;
+  padding: 18px 16px 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  animation: ank-upd-in 160ms ease-out;
+}
+
+.ank-news-head {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8e8778;
+}
+
+.ank-news-ver {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 3px 0 10px;
+}
+
+.ank-news-list {
+  margin: 0 0 4px;
+  padding: 0 0 0 16px;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #b8b1a3;
+}
+
+.ank-news-list li {
+  margin-bottom: 6px;
+}
+
+.ank-news-notas {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #b8b1a3;
+  border-left: 2px solid #26363a;
+  padding-left: 10px;
+}
+
+#ank-news .ank-upd-btn {
+  width: 100%;
+  margin-top: 14px;
+}

@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.5.8';
+  var PANEL_VERSION = '1.5.9';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -1579,10 +1579,12 @@
     var notas = String(vista.notas || '').trim();
     el.innerHTML =
       '<div class="ank-upd-box">' +
-        '<div class="ank-upd-head">Nueva actualización</div>' +
+        '<div class="ank-upd-head">Nueva actualización disponible</div>' +
         '<div class="ank-upd-ver">ANK ' + esc(vista.version) + '</div>' +
         (notas ? '<div class="ank-upd-notas">' + esc(notas) + '</div>' :
           '<div class="ank-upd-notas">Mejoras de la interfaz y del asistente. No hace falta reinstalar la app.</div>') +
+        '<div class="ank-upd-prog" hidden><div class="ank-upd-prog-bar"><i></i></div>' +
+          '<div class="ank-upd-prog-txt">Preparando…</div></div>' +
         '<div class="ank-upd-hint"></div>' +
         '<div class="ank-upd-actions">' +
           '<button type="button" class="ank-upd-btn ghost" data-upd="despues">Después</button>' +
@@ -1592,7 +1594,20 @@
     el.classList.add('open');
 
     var hint = q('.ank-upd-hint', el);
+    var cajaProg = q('.ank-upd-prog', el);
+    var barra = q('.ank-upd-prog-bar i', el);
+    var txtProg = q('.ank-upd-prog-txt', el);
+
     function texto(t) { if (hint) hint.textContent = t || ''; }
+
+    function progreso(frac, txt) {
+      if (cajaProg) cajaProg.hidden = false;
+      if (barra) barra.style.width = Math.round(Math.max(0.02, frac || 0) * 100) + '%';
+      if (txtProg) {
+        txtProg.textContent = (txt || 'Descargando…') +
+          (frac > 0 && frac < 1 ? ' ' + Math.round(frac * 100) + '%' : '');
+      }
+    }
 
     var bDespues = q('[data-upd="despues"]', el);
     var bAhora = q('[data-upd="ahora"]', el);
@@ -1606,18 +1621,58 @@
     pulsar(bAhora, function () {
       if (bAhora.disabled) return;
       bAhora.disabled = true;
-      texto('Descargando…');
-      var tarea = vista.info ? u.descargar(vista.info)
-        : Promise.resolve({ ok: true, version: vista.version });
+      bDespues.disabled = true;
+      texto('');
+      progreso(0, 'Descargando…');
+      var tarea = vista.info ? u.descargar(vista.info, progreso)
+        : Promise.resolve({ ok: true, version: vista.version, notas: vista.notas });
       tarea.then(function (r) {
         if (!r || !r.ok) {
           bAhora.disabled = false;
+          bDespues.disabled = false;
+          if (cajaProg) cajaProg.hidden = true;
           texto('No se pudo actualizar: ' + (r && r.motivo ? r.motivo : 'error de red'));
           return;
         }
-        texto('Aplicando…');
-        setTimeout(function () { u.aplicar(); }, 350);
+        progreso(1, 'Aplicando…');
+        setTimeout(function () {
+          u.aplicar({ version: r.version || vista.version, notas: r.notas != null ? r.notas : vista.notas });
+        }, 500);
       });
+    });
+  }
+
+  /* Cartel con el historial de lo que se acaba de instalar. Se queda hasta
+     que el usuario lo cierra. */
+  function mostrarNovedades() {
+    var u = actualizador();
+    if (!u || !u.novedades) return;
+    var d = u.novedades();
+    if (!d) return;
+    var el = q('#ank-news');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ank-news';
+      (document.body || document.documentElement).appendChild(el);
+    }
+    var notas = String(d.notas || '').trim();
+    var puntos = notas ? notas.split(/\n|;|\u00b7/).map(function (t) { return t.trim(); }).filter(Boolean) : [];
+    el.innerHTML =
+      '<div class="ank-news-box">' +
+        '<div class="ank-news-head">Actualización aplicada</div>' +
+        '<div class="ank-news-ver">ANK ' + esc(d.version) + '</div>' +
+        (puntos.length
+          ? '<ul class="ank-news-list">' + puntos.map(function (t) {
+              return '<li>' + esc(t) + '</li>';
+            }).join('') + '</ul>'
+          : '<div class="ank-news-notas">Ya estás usando la última versión del panel.</div>') +
+        '<button type="button" class="ank-upd-btn" data-news="cerrar">Cerrar</button>' +
+      '</div>';
+    el.classList.add('open');
+
+    pulsar(q('[data-news="cerrar"]', el), function () {
+      el.classList.remove('open');
+      try { u.olvidarNovedades(); } catch (e) {}
     });
   }
 
@@ -2052,9 +2107,6 @@
       case 'probar':
         probarAsistente();
         break;
-      case 'buscar-actualizacion':
-        revisarActualizacion(false, true);
-        break;
       case 'nuevo-chat':
         nuevoChat(limpioRuta(st.project) || 'ank');
         st.tab = 'chat';
@@ -2227,6 +2279,8 @@
       .catch(function () {});
     mountTimer = setInterval(ciclo, 700);
     ciclo();
+    /* Si recién se aplicó una actualización, muestra qué cambió. */
+    setTimeout(mostrarNovedades, 1200);
     /* Revisa novedades sola un rato después de arrancar, sin frenar la app. */
     setTimeout(function () { revisarActualizacion(true, false); }, 5000);
     if (window.cordova) {
