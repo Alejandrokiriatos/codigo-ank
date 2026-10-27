@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.6.0';
+  var PANEL_VERSION = '1.6.1';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -37,6 +37,14 @@
   var MSG_MAX = 200;      // mensajes por chat
   var MEM_MAX = 40;       // líneas de bitácora por proyecto
   var ANSI = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07]*(\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
+
+  /* Se agrega al pedido para que el modelo proponga archivos en un formato
+     que el panel pueda mostrar como diff. */
+  var PROTOCOLO_ARCHIVO = '\n\n[Formato de ANK]\n' +
+    'Cuando propongas crear o modificar un archivo, no lo escribas directamente: ' +
+    'respondé con un bloque como este, con la ruta relativa al proyecto y el contenido completo:\n' +
+    '```ank:archivo ruta/al/archivo.ext\n<contenido completo del archivo>\n```\n' +
+    'El usuario verá el diff y decidirá si aplicarlo o descartarlo.\n';
 
   /* ------------------------------------------------------------------ *
    * estado
@@ -1618,7 +1626,7 @@
           /* Sin TTY, opencode lee stdin hasta EOF antes de arrancar: con el tubo
              del ejecutor abierto se queda esperando para siempre. */
           ' < /dev/null 2>&1';
-        return escribir(rutaPrompt, texto).then(function () {
+        return escribir(rutaPrompt, texto + PROTOCOLO_ARCHIVO).then(function () {
           log('i', 'Ejecutando opencode en ' + ws);
           return runner.start(acotar(env() + cmd), function (tipo, datos) {
             if (tipo === 'exit') {

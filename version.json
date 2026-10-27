@@ -1,7 +1,7 @@
 {
-  "web": "1.6.0",
+  "web": "1.6.1",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Reintentar y probar otro modelo · buscador de chats y exportar a Markdown · resumen automático de memoria · propuestas de archivo con diff, Aplicar/Descartar y respaldo .bak · diagnóstico compartible · actualizaciones en segundo plano",
-  "sig": "76e8f5601b1b27f1ef86a4c6d3c53d83aedcb47b545fd8f2a6d482a8c8dfefdc"
+  "notas": "Formato de propuesta de archivos para el asistente (diff + Aplicar/Descartar). Incluye lo de 1.6.0: reintentar, otro modelo, buscador, exportar, resumen automático, diagnóstico y chequeo en segundo plano",
+  "sig": "1f69a40a7c4de62edc1f0e889b0be29a04a56fb8f1d14f0aa1e15a82c3adf80f"
 }
