@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.7.0';
+  var PANEL_VERSION = '1.7.1';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -98,7 +98,9 @@
     ultimaRevision: 0,
     apps: [],              // mini apps descubiertas
     appsCargando: false,
-    appActual: null        // app abierta en el runner
+    appActual: null,       // app abierta en el runner
+    stats: null,           // resumen de usuarios leído del repositorio
+    statsError: ''
   };
 
   var cur = null; // burbuja del bot en curso
@@ -2965,8 +2967,162 @@
     pintarChats();
     pintarVersion();
     pintarApps();
+    pintarEstadisticas();
     var enc = q('.ank-ai-hint-cred');
     if (enc) enc.style.display = st.credencial === 'listo' ? 'none' : 'block';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * usuarios: conteo anónimo y lectura del resumen del repositorio
+   * ------------------------------------------------------------------ */
+
+  /* No hay servidor propio. El conteo se hace con un contador público y
+     gratuito: la app manda un aviso (una imagen de 1 píxel) la primera vez
+     que se abre, una vez por día y una vez por mes. El repositorio guarda el
+     resumen que arma GitHub Actions una vez al día. */
+  var STATS_NS = 'codigo-ank';
+  var STATS_BASE = 'https://abacus.jasoncameron.dev';
+  var STATS_REPO = 'Alejandrokiriatos/codigo-ank';
+  var STATS_URL = 'https://api.github.com/repos/' + STATS_REPO + '/contents/stats.json';
+  var K_STATS = 'ank.stats.v1';
+
+  function statsConfig() {
+    var crudo = leer(K_STATS, '');
+    var d = null;
+    if (crudo) {
+      try { d = JSON.parse(crudo); } catch (e) {}
+    }
+    if (!d || typeof d !== 'object') d = {};
+    if (!d.id) {
+      d.id = '';
+    }
+    return d;
+  }
+
+  function statsGuardar(d) {
+    guardar(K_STATS, JSON.stringify(d || {}));
+  }
+
+  function fechaISO(d) {
+    var x = d || new Date();
+    function dos(n) { return ('0' + n).slice(-2); }
+    return x.getFullYear() + '-' + dos(x.getMonth() + 1) + '-' + dos(x.getDate());
+  }
+
+  /* Un aviso que no necesita leer la respuesta ni CORS: el pedido llega y el
+     contador suma. Se usa una imagen porque un fetch bloqueado por CORS
+     puede no completarse en algunos WebView. */
+  function avisarContador(llave) {
+    try {
+      var img = new Image();
+      img.referrerPolicy = 'no-referrer';
+      img.src = STATS_BASE + '/hit/' + STATS_NS + '/' + llave + '?t=' + Date.now();
+    } catch (e) {}
+  }
+
+  /* Cuenta el equipo una vez, y el uso diario y mensual una sola vez por
+     período. No manda identificadores personales: solo el nombre de la llave. */
+  function enviarEstadistica() {
+    var s = statsConfig();
+    if (s.off) return Promise.resolve(false);
+    var hoy = fechaISO();
+    var mes = hoy.slice(0, 7);
+    var llaves = [];
+    if (!s.inst) { s.inst = hoy; llaves.push('instalaciones'); }
+    if (s.dia !== hoy) { s.dia = hoy; llaves.push('activos-d-' + hoy.replace(/-/g, '')); }
+    if (s.mes !== mes) { s.mes = mes; llaves.push('activos-m-' + mes.replace(/-/g, '')); }
+    if (!llaves.length) return Promise.resolve(false);
+    statsGuardar(s);
+    llaves.forEach(function (k, i) {
+      setTimeout(function () { avisarContador(k); }, 300 + i * 500);
+    });
+    return Promise.resolve(true);
+  }
+
+  /* Lee stats.json del repositorio. La API de GitHub responde con CORS, así
+     que se puede consultar desde la app sin servidor propio. */
+  function leerEstadisticas(forzar) {
+    if (st.stats && !forzar) return Promise.resolve(st.stats);
+    return fetch(STATS_URL + '?t=' + Date.now(), {
+      headers: { Accept: 'application/vnd.github.raw', 'Cache-Control': 'no-cache' }
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (t) {
+        var d = JSON.parse(t);
+        st.stats = d && typeof d === 'object' ? d : null;
+        st.statsError = '';
+        pintarEstadisticas();
+        return st.stats;
+      })
+      .catch(function (e) {
+        st.statsError = e && e.message ? e.message : String(e);
+        pintarEstadisticas();
+        return null;
+      });
+  }
+
+  function numero(n) {
+    var v = Number(n);
+    if (!isFinite(v)) return '—';
+    return v.toLocaleString('es');
+  }
+
+  function pintarEstadisticas() {
+    var caja = q('.ank-ai-stats');
+    var casilla = q('#ank-ai-stats-off');
+    if (casilla) casilla.checked = !!statsConfig().off;
+    if (!caja) return;
+    if (!st.stats) {
+      caja.innerHTML = '<div class="ank-ai-stats-empty">' +
+        (st.statsError
+          ? 'No se pudo leer el resumen (' + esc(st.statsError) + ').'
+          : 'Todavía no hay un resumen publicado. Se actualiza una vez al día.') +
+        '</div>';
+      return;
+    }
+    var d = st.stats;
+    var hoy = d.activosHoy != null ? d.activosHoy : null;
+    var mes = d.activosMes != null ? d.activosMes : null;
+    var inst = d.instalaciones != null ? d.instalaciones : null;
+    function dato(rotulo, valor) {
+      return '<div class="ank-ai-stat">' +
+        '<div class="ank-ai-stat-n">' + (valor == null ? '—' : numero(valor)) + '</div>' +
+        '<div class="ank-ai-stat-l">' + esc(rotulo) + '</div>' +
+      '</div>';
+    }
+    caja.innerHTML =
+      dato('Instalaciones', inst) +
+      dato('Activos hoy', hoy) +
+      dato('Activos este mes', mes) +
+      '<div class="ank-ai-stats-fecha">Actualizado: ' + esc(d.actualizado ? String(d.actualizado).replace('T', ' ').slice(0, 16) : 'sin fecha') + '</div>';
+  }
+
+  function compartirEstadisticas() {
+    leerEstadisticas(true).then(function (d) {
+      if (!d) return aviso('No se pudieron leer las estadísticas.');
+      var lineas = [
+        'Código ANK · usuarios',
+        'Instalaciones: ' + numero(d.instalaciones),
+        'Activos hoy: ' + numero(d.activosHoy),
+        'Activos este mes: ' + numero(d.activosMes),
+        'Actualizado: ' + (d.actualizado || 'sin fecha')
+      ];
+      var texto = lineas.join('\n');
+      return compartirTexto(texto);
+    }).catch(function () {
+      aviso('No se pudieron leer las estadísticas.');
+    });
+  }
+
+  function alternarEstadistica(activa) {
+    var s = statsConfig();
+    s.off = !activa;
+    statsGuardar(s);
+    if (activa) enviarEstadistica();
+    aviso(activa ? 'Estadística anónima activada.' : 'No se enviará más estadística.');
   }
 
   /* ------------------------------------------------------------------ *
@@ -3079,6 +3235,17 @@
                   '<input class="ank-ai-input-console" placeholder="comando para el entorno (opcional)" spellcheck="false" />' +
                   '<button class="ank-ai-btn" data-accion="consola">Ejecutar</button>' +
                 '</div>' +
+              '</div>' +
+
+              '<div class="ank-ai-field">' +
+                '<label>Usuarios</label>' +
+                '<div class="ank-ai-stats"></div>' +
+                '<div class="ank-ai-statsbar">' +
+                  '<button class="ank-ai-btn" data-accion="stats-refrescar">Actualizar</button>' +
+                  '<button class="ank-ai-btn" data-accion="stats-compartir">Compartir</button>' +
+                '</div>' +
+                '<label class="ank-ai-stats-off"><input type="checkbox" id="ank-ai-stats-off" data-accion="stats-off" /> No enviar estadística anónima</label>' +
+                '<div class="ank-ai-hint">Se cuenta una instalación, el uso diario y el mensual, sin datos personales. El resumen se arma en el repositorio una vez al día.</div>' +
               '</div>' +
 
               '<div class="ank-ai-field">' +
@@ -3283,6 +3450,7 @@
         st.tab = t.getAttribute('data-valor') || 'chat';
         pintar();
         if (st.tab === 'apps') cargarApps();
+        if (st.tab === 'entorno') leerEstadisticas(false);
         break;
       case 'enviar':
         if (st.corriendo) detener(); else enviar();
@@ -3356,6 +3524,8 @@
         break;
       case 'abrir-app': abrirApp(t.getAttribute('data-valor')); break;
       case 'editar-app': editarApp(t.getAttribute('data-valor')); break;
+      case 'stats-refrescar': leerEstadisticas(true); break;
+      case 'stats-compartir': compartirEstadisticas(); break;
       case 'cerrar-app': cerrarApp(); break;
       case 'ayuda-apps': abrirAyudaApps(); break;
       case 'cerrar-ayuda-apps': cerrarAyudaApps(); break;
@@ -3371,6 +3541,10 @@
   }
 
   function manejarCambio(e) {
+    if (e.target.id === 'ank-ai-stats-off') {
+      alternarEstadistica(!e.target.checked);
+      return;
+    }
     if (e.target.id === 'ank-ai-modelo' || e.target.id === 'ank-ai-chat-modelo') {
       st.model = limpioModelo(e.target.value) || MODEL_DEFAULT;
       guardar('ank.ai.model', st.model);
@@ -3497,6 +3671,10 @@
     window.addEventListener('message', atenderApp);
     /* Descubre las mini apps existentes sin esperar a que se abra la pestaña. */
     setTimeout(function () { cargarApps(); }, 2500);
+    /* Cuenta el uso (una instalación, un día y un mes por equipo) y lee el
+       resumen que publica el repositorio. */
+    setTimeout(function () { enviarEstadistica(); }, 6000);
+    setTimeout(function () { leerEstadisticas(false); }, 9000);
     engancharMenu();
     dirsIniciales()
       .then(function () { return asegurarMemoria(st.project); })
