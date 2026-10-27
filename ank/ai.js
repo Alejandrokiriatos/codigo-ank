@@ -1654,7 +1654,59 @@
 
   var menuPedido = 0;
 
+  function esMenu(n) {
+    return !!(n && n.nodeType === 1 && n.classList && n.classList.contains('context-menu'));
+  }
+
+  /* Agrega el ítem a un menú abierto. Devuelve true si lo hizo. */
+  function inyectarEn(m) {
+    if (!m || m.querySelector('[data-ank-upd-item]')) return false;
+    var u = actualizador();
+    if (!u) return false;
+    var pend = u.pendiente && u.pendiente(PANEL_VERSION);
+    var li = document.createElement('li');
+    li.setAttribute('data-ank-upd-item', '');
+    li.innerHTML = '<span class="icon refresh"></span>' +
+      '<span class="text">Actualizar ANK' +
+      '<span class="value">' + esc(pend ? 'versión ' + u.version() + ' lista' : 'comprobar novedades') +
+      '</span></span>';
+    li.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var mask = q('.mask');
+      if (mask) { try { mask.click(); } catch (e) {} }
+      revisarActualizacion(false, true);
+    }, true);
+    m.appendChild(li);
+    return true;
+  }
+
+  function inyectarMenu() {
+    if (!menuPedido || Date.now() - menuPedido > 4000) return;
+    var menus = document.querySelectorAll('.context-menu');
+    for (var i = 0; i < menus.length; i++) inyectarEn(menus[i]);
+    menuPedido = 0;
+  }
+
   function engancharMenu() {
+    /* Cualquier menú que la app agregue al documento: se completa al vuelo. */
+    try {
+      var obs = new MutationObserver(function (lista) {
+        for (var i = 0; i < lista.length; i++) {
+          var nuevos = lista[i].addedNodes;
+          for (var j = 0; j < nuevos.length; j++) {
+            var n = nuevos[j];
+            if (esMenu(n)) inyectarEn(n);
+            else if (n && n.querySelectorAll) {
+              var dentro = n.querySelectorAll('.context-menu');
+              for (var k = 0; k < dentro.length; k++) inyectarEn(dentro[k]);
+            }
+          }
+        }
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+
     document.addEventListener('click', function (e) {
       var t = e.target;
       if (!t || !t.closest) return;
@@ -1662,33 +1714,6 @@
         menuPedido = Date.now();
       }
     }, true);
-  }
-
-  function inyectarMenu() {
-    if (!menuPedido || Date.now() - menuPedido > 3000) return;
-    var menus = document.querySelectorAll('.context-menu');
-    for (var i = 0; i < menus.length; i++) {
-      var m = menus[i];
-      if (m.querySelector('[data-ank-upd-item]')) continue;
-      var u = actualizador();
-      if (!u) { menuPedido = 0; return; }
-      var pend = u.pendiente && u.pendiente(PANEL_VERSION);
-      var li = document.createElement('li');
-      li.setAttribute('data-ank-upd-item', '');
-      li.innerHTML = '<span class="icon refresh"></span>' +
-        '<span class="text">Actualizar ANK' +
-        '<span class="value">' + esc(pend ? 'versión ' + u.version() + ' lista' : 'comprobar novedades') +
-        '</span></span>';
-      li.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        var mask = q('.mask');
-        if (mask) { try { mask.click(); } catch (e) {} }
-        revisarActualizacion(false, true);
-      }, true);
-      m.appendChild(li);
-      menuPedido = 0;
-    }
   }
 
   function pintarPestanas() {
