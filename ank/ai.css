@@ -814,3 +814,134 @@
 .ank-ai-ver.upd {
   color: #e0a458 !important;
 }
+
+/* ---------- diálogo de actualización ---------- */
+#ank-upd {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483640;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 7, 0.72);
+  font-family: var(--app-font-family, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif);
+}
+
+#ank-upd.open {
+  display: flex;
+}
+
+.ank-upd-box {
+  width: 100%;
+  max-width: 360px;
+  background: #0f1618;
+  color: #e7e0d2;
+  border: 1px solid #26363a;
+  border-top: 2px solid #e0a458;
+  border-radius: 4px;
+  padding: 18px 16px 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  animation: ank-upd-in 160ms ease-out;
+}
+
+@keyframes ank-upd-in {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.ank-upd-head {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8e8778;
+}
+
+.ank-upd-ver {
+  font-size: 19px;
+  font-weight: 600;
+  color: #e7e0d2;
+  margin: 3px 0 10px;
+}
+
+.ank-upd-notas {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #b8b1a3;
+  border-left: 2px solid #26363a;
+  padding-left: 10px;
+  max-height: 34vh;
+  overflow-y: auto;
+}
+
+.ank-upd-hint {
+  min-height: 16px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #e0a458;
+}
+
+.ank-upd-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ank-upd-btn {
+  flex: 1 1 0;
+  min-height: 42px;
+  border-radius: 3px;
+  border: 1px solid #e0a458;
+  background: #e0a458;
+  color: #101817;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.ank-upd-btn:active {
+  opacity: 0.85;
+}
+
+.ank-upd-btn.ghost {
+  background: transparent;
+  border-color: #33474a;
+  color: #cfc8b8;
+}
+
+.ank-upd-btn[disabled] {
+  opacity: 0.5;
+}
+
+/* El ítem del menú hereda el estilo de la app (.context-menu). */
+.context-menu li[data-ank-upd-item] .text .value {
+  color: #e0a458;
+}
+
+/* ---------- aviso flotante propio ---------- */
+#ank-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translate(-50%, 8px);
+  z-index: 2147483641;
+  max-width: 84vw;
+  padding: 10px 14px;
+  border-radius: 4px;
+  background: #16211f;
+  color: #e7e0d2;
+  border: 1px solid #33474a;
+  border-left: 2px solid #e0a458;
+  font-family: var(--app-font-family, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+#ank-toast.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

@@ -1,7 +1,7 @@
 {
-  "web": "1.5.3",
+  "web": "1.5.6",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "aviso de actualizacion en el boton IA",
-  "sig": "3f99814193e4a0ddaa6584d182bf062052ef7a12dbf733a05b78590ca354f05d"
+  "notas": "fecha de publicacion en Entorno y aviso de actualizacion en toda la app",
+  "sig": "b79fc708cb863328072366a87ce02f4e2cbcdd90270f0a9c72cbf877dbe7a2eb"
 }
