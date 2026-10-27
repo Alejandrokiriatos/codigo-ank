@@ -1,7 +1,7 @@
 {
-  "web": "1.5.2",
+  "web": "1.5.3",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "firma de actualizaciones",
-  "sig": "6e3cdd822360f19623a766be5b6756a5697f3357b489417185b51c9543620d27"
+  "notas": "aviso de actualizacion en el boton IA",
+  "sig": "3f99814193e4a0ddaa6584d182bf062052ef7a12dbf733a05b78590ca354f05d"
 }

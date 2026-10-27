@@ -1496,7 +1496,28 @@
     }
     var v = u.version ? u.version() : 'incluida';
     var notas = u.notas ? u.notas() : '';
-    caja.textContent = 'Panel ' + v + (notas ? ' · ' + notas : '');
+    var pend = u.pendiente && u.pendiente();
+    caja.textContent = 'Panel ' + v + (notas ? ' · ' + notas : '') +
+      (pend ? ' · actualización descargada, reiniciá la app' : '');
+    caja.classList.toggle('upd', !!pend);
+  }
+
+  /* Punto dorado en el botón del asistente mientras haya una actualización
+     descargada que todavía necesita reabrir la app. */
+  function marcarActualizacion() {
+    var btn = q('#ank-dock .ank-ia');
+    if (!btn) return;
+    var u = window.__ankUpd;
+    var hay = !!(u && u.pendiente && u.pendiente());
+    btn.classList.toggle('upd', hay);
+    if (hay) {
+      var v = u.version ? u.version() : '';
+      btn.setAttribute('title', 'Actualización ' + v + ' lista · reiniciá la app');
+      btn.setAttribute('aria-label', 'Asistente de ANK, actualización ' + v + ' lista');
+    } else {
+      btn.setAttribute('title', 'Asistente de ANK');
+      btn.setAttribute('aria-label', 'Asistente de ANK');
+    }
   }
 
   function buscarActualizacion() {
@@ -1510,6 +1531,7 @@
       if (r && r.ok && r.actualizado) aviso('Ya tenés la última versión (' + r.version + ').');
       else if (r && r.ok) aviso('Actualización ' + r.version + ' lista: cerrá y abrí la app.');
       else aviso('No se pudo actualizar: ' + (r && r.motivo ? r.motivo : 'error de red'));
+      marcarActualizacion();
       pintar();
     });
   }
@@ -2013,10 +2035,12 @@
   function ciclo() {
     if (!document.body) return;
     botonIA();
+    marcarActualizacion();
   }
 
   function iniciar() {
     cargarChats();
+    document.addEventListener('ank-upd', marcarActualizacion);
     dirsIniciales()
       .then(function () { return asegurarMemoria(st.project); })
       .catch(function () {});

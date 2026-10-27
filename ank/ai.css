@@ -787,3 +787,30 @@
 .ank-ai-chatbar .ank-ai-btn {
   min-height: 34px;
 }
+
+/* ---------- aviso de actualización ---------- */
+#ank-dock .ank-ia {
+  position: relative;
+}
+
+#ank-dock .ank-ia.upd::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e0a458;
+  box-shadow: 0 0 0 2px #0f1618;
+  animation: ank-ai-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ank-ai-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.ank-ai-ver.upd {
+  color: #e0a458 !important;
+}
