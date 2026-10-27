@@ -1,7 +1,7 @@
 {
-  "web": "1.5.9",
+  "web": "1.6.0",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "cartel flotante con barra de carga e historial de cambios al aplicar",
-  "sig": "4265f84a58ef46ea7eea95e99a48cd42dde24cd3dac9d87abe55ac57f96164bf"
+  "notas": "Reintentar y probar otro modelo · buscador de chats y exportar a Markdown · resumen automático de memoria · propuestas de archivo con diff, Aplicar/Descartar y respaldo .bak · diagnóstico compartible · actualizaciones en segundo plano",
+  "sig": "76e8f5601b1b27f1ef86a4c6d3c53d83aedcb47b545fd8f2a6d482a8c8dfefdc"
 }

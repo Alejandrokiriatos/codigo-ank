@@ -25,10 +25,12 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.5.9';
+  var PANEL_VERSION = '1.6.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
+
+  var ERRORES_MAX = 12;
 
   var CHATS_KEY = 'ank.chats.v1';
   var CHAT_MAX = 40;      // chats guardados
@@ -64,7 +66,15 @@
     memoria: '',
     memoriaProyecto: '',
     probando: false,
-    probandoPrueba: false
+    probandoPrueba: false,
+    ultimo: null,          // último pedido, para reintentar
+    turnoError: null,      // burbuja con el error del último turno
+    archivos: {},          // propuestas de archivo pendientes de aplicar
+    archivosN: 0,
+    busqueda: '',
+    resumiendoAuto: false,
+    errores: [],           // últimos errores, para el diagnóstico
+    ultimaRevision: 0
   };
 
   var cur = null; // burbuja del bot en curso
@@ -154,9 +164,89 @@
     var linea = { t: hora(), n: nivel, m: String(texto == null ? '' : texto) };
     st.log.push(linea);
     if (st.log.length > LOG_MAX) st.log.shift();
-    if (nivel === 'e') console.warn('[ANK IA]', linea.m);
-    else console.log('[ANK IA]', linea.m);
+    if (nivel === 'e') {
+      capturarError(linea.m, 'panel');
+      console.warn('[ANK IA]', linea.m);
+    } else console.log('[ANK IA]', linea.m);
     pintarLog();
+  }
+
+  /* Guarda un resumen de los últimos errores. Sirve para compartir un
+     diagnóstico útil sin depender del registro completo. */
+  function capturarError(texto, origen) {
+    var m = String(texto == null ? '' : texto).replace(/\s+/g, ' ').trim().slice(0, 240);
+    if (!m) return;
+    var ult = st.errores[st.errores.length - 1];
+    if (ult && ult.m === m) return;
+    st.errores.push({ t: hora(), m: m, o: origen || '' });
+    if (st.errores.length > ERRORES_MAX) st.errores.shift();
+  }
+
+  function engancharErrores() {
+    window.addEventListener('error', function (e) {
+      var t = e && e.message ? e.message : 'error de la app';
+      if (e && e.filename) t += ' (' + String(e.filename).split('/').pop() + ':' + (e.lineno || 0) + ')';
+      capturarError(t, 'window');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var r = e && e.reason;
+      capturarError(r && r.message ? r.message : String(r || 'promesa rechazada'), 'promesa');
+    });
+  }
+
+  /* Texto plano con lo necesario para entender un fallo en el teléfono. */
+  function diagnostico() {
+    var u = window.__ankUpd;
+    var app = '';
+    try {
+      if (window.acode && typeof window.acode.getVersion === 'function') app = window.acode.getVersion();
+    } catch (e) {}
+    if (!app) {
+      var m = /Version\/([\d.]+)/.exec(navigator.userAgent || '');
+      app = m ? m[1] : '';
+    }
+    var lineas = [];
+    lineas.push('Código ANK · diagnóstico');
+    lineas.push('Fecha: ' + hoy());
+    lineas.push('Panel: ' + PANEL_VERSION + ' (' + PANEL_FECHA + ')' + (u && u.version ? ' · publicado ' + u.version() : ''));
+    if (app) lineas.push('App: ' + app);
+    lineas.push('Equipo: ' + (navigator.userAgent || 'desconocido'));
+    lineas.push('Entorno: sandbox=' + st.sandbox + ', asistente=' + st.binario + ', cuenta=' + st.credencial);
+    lineas.push('Modelo: ' + st.model + (st.modo === 'plan' ? ' · plan' : '') + (st.variant ? ' · ' + st.variant : ''));
+    lineas.push('Proyecto: ' + (limpioRuta(st.project) || 'ank') + ' · chats=' + st.chats.length);
+    if (st.errores.length) {
+      lineas.push('');
+      lineas.push('Errores recientes:');
+      st.errores.slice(-6).forEach(function (e) {
+        lineas.push('· ' + e.t + ' ' + (e.o ? '[' + e.o + '] ' : '') + e.m);
+      });
+    }
+    lineas.push('');
+    lineas.push('Registro (últimas 40 líneas):');
+    st.log.slice(-40).forEach(function (l) {
+      lineas.push(l.t + ' ' + l.n + ' ' + l.m);
+    });
+    return lineas.join('\n');
+  }
+
+  /* Comparte el diagnóstico con el menú del sistema; si no hay, lo copia. */
+  function compartirDiagnostico() {
+    var texto = diagnostico();
+    try {
+      if (navigator.share) {
+        navigator.share({ title: 'Diagnóstico de Código ANK', text: texto })
+          .catch(function () {});
+        return;
+      }
+    } catch (e) {}
+    copiarPortapapeles(texto)
+      .then(function () { aviso('Diagnóstico copiado. Pegalo en el grupo.'); })
+      .catch(function () {
+        st.tab = 'log';
+        pintar();
+        log('i', texto);
+        aviso('Diagnóstico guardado en Registro.');
+      });
   }
 
   /* Aviso breve en pantalla. Usa el de la app si existe; si no, uno propio. */
@@ -1086,6 +1176,8 @@
         pre.className = 'ank-ai-pre';
         pre.textContent = t.texto;
         d.appendChild(pre);
+      } else if (t.tipo === 'archivo') {
+        d.appendChild(bloqueArchivo(t.ruta, t.texto));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -1168,6 +1260,8 @@
           pre.className = 'ank-ai-pre';
           pre.textContent = t.texto;
           frag.appendChild(pre);
+        } else if (t.tipo === 'archivo') {
+          frag.appendChild(bloqueArchivo(t.ruta, t.texto));
         } else {
           var sp = document.createElement('span');
           sp.className = 'ank-ai-txt';
@@ -1178,19 +1272,46 @@
       cur.txt.parentNode.replaceChild(frag, cur.txt);
       cur.txt = null;
     }
-    if (error) cur.el.classList.add('err');
+    if (error) {
+      cur.el.classList.add('err');
+      cur.el.appendChild(barraReintento());
+      st.turnoError = cur.el;
+      capturarError('Fallo del asistente: ' + (cur.buf ? cur.buf.replace(/\s+/g, ' ').slice(0, 160) : 'sin respuesta'), 'turno');
+    }
     cur = null;
     autoScroll();
   }
 
-  /* markdown mínimo: bloques de código, código en línea, negrita */
+  /* Botones de recuperación al pie de una respuesta fallida. */
+  function barraReintento() {
+    var d = document.createElement('div');
+    d.className = 'ank-ai-retry';
+    d.innerHTML =
+      '<button type="button" class="ank-ai-act" data-accion="reintentar">Reintentar</button>' +
+      '<button type="button" class="ank-ai-act" data-accion="otro-modelo">Probar otro modelo</button>' +
+      '<button type="button" class="ank-ai-act ghost" data-accion="diag">Diagnóstico</button>';
+    return d;
+  }
+
+  /* markdown mínimo: bloques de código, código en línea, negrita.
+     Un bloque con el lenguaje `ank:archivo <ruta>` se convierte en una
+     propuesta de archivo aplicable (con diff contra el archivo local). */
   function mdLite(texto) {
     var partes = String(texto).split(/```/);
     var salida = [];
     for (var i = 0; i < partes.length; i++) {
       if (i % 2 === 1) {
-        var cuerpo = partes[i].replace(/^[A-Za-z0-9+#-]*\n/, '');
-        salida.push({ tipo: 'codigo', texto: cuerpo.replace(/\n$/, '') });
+        var bruto = partes[i];
+        var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
+        if (propuesta) {
+          salida.push({
+            tipo: 'archivo',
+            ruta: propuesta[1].replace(/\r/g, '').trim(),
+            texto: bruto.slice(propuesta[0].length).replace(/\n$/, '')
+          });
+        } else {
+          salida.push({ tipo: 'codigo', texto: bruto.replace(/^[A-Za-z0-9+#_-]*\n/, '').replace(/\n$/, '') });
+        }
       } else {
         var html = esc(partes[i])
           .replace(/`([^`\n]+)`/g, '<code>$1</code>')
@@ -1200,6 +1321,185 @@
       }
     }
     return salida;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * propuestas de archivo (bloques ank:archivo)
+   * ------------------------------------------------------------------ */
+
+  function rutaAbsolutaArchivo(rel) {
+    var r = limpioRuta(rel).replace(/^\/+/, '');
+    if (!r || /(^|\/)\.\.(\/|$)/.test(r)) return '';
+    return st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank') + '/' + r;
+  }
+
+  /* Diff por líneas con LCS. Se acota el tamaño para no trabar el teléfono
+     con archivos enormes. */
+  function diffLineas(antes, despues) {
+    var a = String(antes == null ? '' : antes).split('\n');
+    var b = String(despues == null ? '' : despues).split('\n');
+    var tope = 800;
+    var recortado = false;
+    if (a.length > tope) { a = a.slice(0, tope); recortado = true; }
+    if (b.length > tope) { b = b.slice(0, tope); recortado = true; }
+    var n = a.length, m = b.length;
+    var dp = [];
+    for (var i = 0; i <= n; i++) dp.push(new Uint32Array(m + 1));
+    for (var x = n - 1; x >= 0; x--) {
+      for (var y = m - 1; y >= 0; y--) {
+        dp[x][y] = a[x] === b[y] ? dp[x + 1][y + 1] + 1 : Math.max(dp[x + 1][y], dp[x][y + 1]);
+      }
+    }
+    var salida = [];
+    var p = 0, r = 0;
+    while (p < n && r < m) {
+      if (a[p] === b[r]) { salida.push('  ' + a[p]); p++; r++; }
+      else if (dp[p + 1][r] >= dp[p][r + 1]) { salida.push('- ' + a[p]); p++; }
+      else { salida.push('+ ' + b[r]); r++; }
+    }
+    while (p < n) { salida.push('- ' + a[p]); p++; }
+    while (r < m) { salida.push('+ ' + b[r]); r++; }
+    if (recortado) salida.push('… diff recortado');
+    return salida;
+  }
+
+  function bloqueArchivo(ruta, contenido) {
+    var id = 'a' + (++st.archivosN);
+    st.archivos[id] = { ruta: ruta, contenido: contenido, existe: false, actual: '', aplicado: false, descartado: false };
+    var caja = document.createElement('div');
+    caja.className = 'ank-ai-file';
+    caja.setAttribute('data-archivo', id);
+    caja.innerHTML =
+      '<div class="ank-ai-file-head">' +
+        '<span class="ank-ai-file-ruta"></span>' +
+        '<span class="ank-ai-file-est">leyendo…</span>' +
+      '</div>' +
+      '<pre class="ank-ai-file-diff" hidden></pre>' +
+      '<div class="ank-ai-file-acc">' +
+        '<button type="button" class="ank-ai-act" data-accion="aplicar-archivo" data-valor="' + id + '">Aplicar</button>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="descartar-archivo" data-valor="' + id + '">Descartar</button>' +
+      '</div>';
+    q('.ank-ai-file-ruta', caja).textContent = ruta;
+    leerParaDiff(id, caja);
+    return caja;
+  }
+
+  function leerParaDiff(id, caja) {
+    var a = st.archivos[id];
+    if (!a) return;
+    var ruta = rutaAbsolutaArchivo(a.ruta);
+    if (!ruta) { pintarDiff(id, caja); return; }
+    leerTexto(ruta)
+      .then(function (txt) {
+        a.actual = String(txt || '');
+        a.existe = !!a.actual;
+        pintarDiff(id, caja);
+      })
+      .catch(function () {
+        a.actual = '';
+        a.existe = false;
+        pintarDiff(id, caja);
+      });
+  }
+
+  function pintarDiff(id, caja) {
+    var a = st.archivos[id];
+    if (!a || !caja) return;
+    var est = q('.ank-ai-file-est', caja);
+    var pre = q('.ank-ai-file-diff', caja);
+    if (!rutaAbsolutaArchivo(a.ruta)) {
+      if (est) est.textContent = 'ruta no válida';
+      caja.classList.add('mal');
+      if (pre) { pre.hidden = false; pre.textContent = a.contenido; }
+      return;
+    }
+    if (!a.existe) {
+      if (est) est.textContent = 'archivo nuevo';
+      caja.classList.add('nuevo');
+      if (pre) { pre.hidden = false; pre.textContent = a.contenido; }
+      return;
+    }
+    var lineas = diffLineas(a.actual, a.contenido);
+    var sumas = 0, restas = 0;
+    lineas.forEach(function (l) {
+      if (l.charAt(0) === '+') sumas++;
+      else if (l.charAt(0) === '-') restas++;
+    });
+    if (!sumas && !restas) {
+      if (est) est.textContent = 'sin cambios';
+      var b = q('[data-accion="aplicar-archivo"]', caja);
+      if (b) b.disabled = true;
+      return;
+    }
+    if (est) est.textContent = '+' + sumas + ' −' + restas;
+    if (pre) {
+      pre.hidden = false;
+      var tope = 300;
+      pre.textContent = lineas.slice(0, tope).join('\n') +
+        (lineas.length > tope ? '\n… (' + (lineas.length - tope) + ' líneas más)' : '');
+    }
+  }
+
+  function selloFecha() {
+    var d = new Date();
+    function dos(n) { return ('0' + n).slice(-2); }
+    return d.getFullYear() + dos(d.getMonth() + 1) + dos(d.getDate()) + '-' +
+      dos(d.getHours()) + dos(d.getMinutes()) + dos(d.getSeconds());
+  }
+
+  function aplicarArchivo(id) {
+    var a = st.archivos[id];
+    if (!a || a.aplicado || a.descartado) return;
+    var ruta = rutaAbsolutaArchivo(a.ruta);
+    var caja = q('[data-archivo="' + id + '"]');
+    var est = caja ? q('.ank-ai-file-est', caja) : null;
+    if (!ruta) {
+      aviso('Ruta no válida: ' + a.ruta);
+      return;
+    }
+    if (est) est.textContent = 'aplicando…';
+    var carpeta = ruta.replace(/\/[^\/]+$/, '');
+    conSistema('mkdirs', carpeta)
+      .catch(function () {})
+      .then(function () { return leerTexto(ruta); })
+      .then(function (actual) {
+        if (!actual) return null;
+        return escribir(ruta + '.' + selloFecha() + '.bak', actual);
+      })
+      .then(function () { return escribir(ruta, a.contenido); })
+      .then(function () {
+        a.aplicado = true;
+        if (caja) {
+          caja.classList.add('aplicado');
+          var b = q('[data-accion="aplicar-archivo"]', caja);
+          var d = q('[data-accion="descartar-archivo"]', caja);
+          if (b) b.disabled = true;
+          if (d) d.disabled = true;
+        }
+        if (est) est.textContent = 'aplicado';
+        aviso('Aplicado: ' + a.ruta);
+        log('i', 'Archivo aplicado: ' + a.ruta);
+      })
+      .catch(function (e) {
+        if (est) est.textContent = 'error';
+        aviso('No se pudo aplicar el archivo.');
+        log('e', 'Aplicar ' + a.ruta + ': ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  function descartarArchivo(id) {
+    var a = st.archivos[id];
+    if (!a || a.aplicado) return;
+    a.descartado = true;
+    var caja = q('[data-archivo="' + id + '"]');
+    if (!caja) return;
+    caja.classList.add('descartado');
+    var b = q('[data-accion="aplicar-archivo"]', caja);
+    var d = q('[data-accion="descartar-archivo"]', caja);
+    if (b) b.disabled = true;
+    if (d) d.disabled = true;
+    var est = q('.ank-ai-file-est', caja);
+    if (est) est.textContent = 'descartado';
   }
 
   function autoScroll() {
@@ -1245,11 +1545,11 @@
     escribirBot(l + '\n');
   }
 
-  function enviar() {
+  function enviar(forzado) {
     if (st.corriendo) return;
     var ta = q('.ank-ai-input');
-    if (!ta) return;
-    var texto = String(ta.value || '').trim();
+    var pedido = forzado && forzado.texto != null ? String(forzado.texto) : (ta ? String(ta.value || '') : '');
+    var texto = pedido.trim();
     if (!texto) return;
     if (!listo()) {
       aviso('Falta preparar el entorno o conectar la cuenta.');
@@ -1264,16 +1564,28 @@
     var chat = chatActual();
     if (!chat || chat.proyecto !== proyecto) chat = nuevoChat(proyecto);
 
-    ta.value = '';
-    ta.style.height = '';
-    nuevoMensaje('user', texto);
-    burbuja(st.msgs[st.msgs.length - 1]);
+    if (ta && !(forzado && forzado.texto != null)) {
+      ta.value = '';
+      ta.style.height = '';
+    }
+    if (!(forzado && forzado.sinBurbuja)) {
+      nuevoMensaje('user', texto);
+      burbuja(st.msgs[st.msgs.length - 1]);
+    }
     abrirTurno();
     tocarChat();
 
     var rutaPrompt = st.prefix + '/public/.ank/prompt.txt';
     var runner = Ex().BackgroundExecutor || Ex();
     var variante = String(st.variant || '').trim();
+    st.ultimo = {
+      texto: texto,
+      proyecto: proyecto,
+      chatId: chat.id,
+      modelo: modelo,
+      modo: st.modo,
+      variant: variante
+    };
     st.corriendo = true;
     st.crudo = '';
     pintar();
@@ -1281,11 +1593,13 @@
     function alSalir(codigo) {
       st.corriendo = false;
       st.proc = null;
-      cerrarTurno(false);
-      if (String(codigo).trim() !== '0') log('w', 'opencode terminó con código ' + codigo);
+      var fallo = String(codigo).trim() !== '0';
+      cerrarTurno(fallo);
+      if (fallo) log('w', 'opencode terminó con código ' + codigo);
       tocarChat();
       var bot = st.msgs[st.msgs.length - 1];
       anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : '');
+      quizasResumir(proyecto, chat);
       if (!chat.sesion) {
         resolverSesion(chat).then(function () { pintarChats(); });
       }
@@ -1343,6 +1657,156 @@
       cerrarTurno(false);
       pintar();
     });
+  }
+
+  /* Repite el último pedido. Con `otro` cambia a otro modelo disponible. */
+  function reintentar(otro) {
+    if (st.corriendo) return;
+    var u = st.ultimo;
+    if (!u || !u.texto) {
+      aviso('No hay un pedido reciente para reintentar.');
+      return;
+    }
+    if (otro) {
+      var lista = (st.modelos.length ? st.modelos : MODELOS_SUGERIDOS).slice();
+      var actual = lista.indexOf(st.model);
+      var siguiente = lista.length > 1 ? lista[(actual + 1 + lista.length) % lista.length] : lista[0];
+      st.model = limpioModelo(siguiente) || MODEL_DEFAULT;
+      guardar('ank.ai.model', st.model);
+      if (st.variant && variantesDe(st.model).indexOf(st.variant) === -1) {
+        st.variant = '';
+        guardar('ank.ai.variant', '');
+      }
+      aviso('Probando con ' + st.model);
+    }
+    st.project = u.proyecto || st.project;
+    guardar('ank.ai.project', st.project);
+    for (var i = 0; i < st.chats.length; i++) {
+      if (st.chats[i].id === u.chatId) {
+        st.chatId = u.chatId;
+        st.msgs = st.chats[i].msgs;
+        break;
+      }
+    }
+    if (st.turnoError) {
+      var barra = q('.ank-ai-retry', st.turnoError);
+      if (barra && barra.parentNode) barra.parentNode.removeChild(barra);
+      st.turnoError = null;
+    }
+    st.tab = 'chat';
+    pintar();
+    enviar({ texto: u.texto, sinBurbuja: true });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * exportar el chat a Markdown
+   * ------------------------------------------------------------------ */
+
+  function exportarChat() {
+    var c = chatActual();
+    if (!c || !c.msgs || !c.msgs.length) {
+      aviso('Este chat todavía no tiene mensajes.');
+      return;
+    }
+    var proy = limpioRuta(st.project) || 'ank';
+    var d = new Date();
+    function dos(n) { return ('0' + n).slice(-2); }
+    var marca = d.getFullYear() + dos(d.getMonth() + 1) + dos(d.getDate()) + '-' + dos(d.getHours()) + dos(d.getMinutes());
+    var nombre = 'chat-' + marca + '.md';
+    var lineas = [
+      '# ' + (c.titulo || 'Chat de Código ANK'),
+      '',
+      '- Proyecto: ' + proy,
+      '- Fecha: ' + hoy(),
+      '- Modelo: ' + st.model,
+      '',
+      '---',
+      ''
+    ];
+    c.msgs.forEach(function (m) {
+      lineas.push('## ' + (m.rol === 'user' ? 'Vos' : 'Asistente') +
+        (m.ts ? ' · ' + new Date(m.ts).toLocaleString() : ''));
+      lineas.push('');
+      lineas.push(String(m.texto || '').trim());
+      lineas.push('');
+    });
+    var ruta = st.prefix + '/public/proyectos/' + proy + '/' + nombre;
+    conSistema('mkdirs', st.prefix + '/public/proyectos/' + proy)
+      .catch(function () {})
+      .then(function () { return escribir(ruta, lineas.join('\n')); })
+      .then(function () {
+        aviso('Chat exportado a ' + proy + '/' + nombre);
+        log('i', 'Chat exportado: ' + ruta);
+      })
+      .catch(function (e) {
+        aviso('No se pudo exportar el chat.');
+        log('e', 'Exportar: ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * resumen automático de la memoria
+   * ------------------------------------------------------------------ */
+
+  /* Cada ocho pedidos, pide un resumen corto de la conversación y lo suma a
+     la bitácora del proyecto. Es la única llamada automática al asistente. */
+  function quizasResumir(proyecto, chat) {
+    if (!chat || st.resumiendoAuto) return;
+    var usuarios = (chat.msgs || []).filter(function (m) { return m.rol === 'user'; }).length;
+    if (usuarios < 8 || usuarios % 8 !== 0) return;
+    resumenAutomatico(proyecto, chat);
+  }
+
+  function resumenAutomatico(proyecto, chat) {
+    st.resumiendoAuto = true;
+    var proy = proyecto || limpioRuta(st.project) || 'ank';
+    var msgs = (chat.msgs || []).slice(-24);
+    var guion = msgs.map(function (m) {
+      return (m.rol === 'user' ? 'Usuario: ' : 'Asistente: ') +
+        String(m.texto || '').replace(/\s+/g, ' ').slice(0, 400);
+    }).join('\n');
+    var pedido = 'Resumí esta conversación de desarrollo en 1 a 3 viñetas de una línea cada una. ' +
+      'Cada viñeta empieza con "- ". Solo hechos: qué se pidió, qué se hizo y qué quedó pendiente. ' +
+      'Sin introducción, sin bloques de código, en español.\n\n' + guion;
+    var rutaPrompt = st.prefix + '/public/.ank/resumen.txt';
+    var ws = st.work + '/' + proy;
+    var modelo = limpioModelo(st.model) || MODEL_DEFAULT;
+    escribir(rutaPrompt, pedido)
+      .then(function () {
+        var guionCmd = 'cd ' + shq(ws) + ' && opencode run --auto --agent plan --model ' + shq(modelo) +
+          ' "$(cat /public/.ank/resumen.txt)" < /dev/null 2>/dev/null';
+        return shell('timeout 90 sh -c ' + comilla(guionCmd), true);
+      })
+      .then(function (r) {
+        var txt = String(r.salida || '')
+          .replace(/^```[a-z]*\s*/i, '')
+          .replace(/```\s*$/, '')
+          .trim();
+        var puntos = txt.split('\n')
+          .map(function (l) { return l.replace(/^[-*]\s*/, '').replace(/\s+/g, ' ').trim(); })
+          .filter(function (l) { return l.length > 3; })
+          .slice(0, 3);
+        if (!puntos.length) throw new Error('resumen vacío');
+        return leerTexto(rutaMemProyecto(proy)).then(function (mem) {
+          if (!mem.trim()) mem = plantillaProyecto(proy);
+          if (mem.indexOf('## Bitácora') === -1) mem += '\n## Bitácora\n';
+          var partes = mem.split('## Bitácora');
+          var cuerpo = (partes[1] || '').split('\n');
+          puntos.forEach(function (l) {
+            cuerpo.push('- ' + hoy() + ' · resumen · ' + l.slice(0, 200));
+          });
+          var previas = cuerpo.filter(function (l) { return l.trim().indexOf('- ') === 0; });
+          partes[1] = '\n' + previas.slice(-MEM_MAX).join('\n') + '\n';
+          return escribir(rutaMemProyecto(proy), partes.join('## Bitácora'));
+        });
+      })
+      .then(function () {
+        log('i', 'Memoria resumida automáticamente (' + proy + ').');
+      })
+      .catch(function (e) {
+        log('w', 'Resumen automático: ' + (e && e.message ? e.message : e));
+      })
+      .then(function () { st.resumiendoAuto = false; });
   }
 
   /* ------------------------------------------------------------------ *
@@ -1487,15 +1951,41 @@
     var cont = q('.ank-ai-chatlist');
     if (!cont) return;
     var proyecto = limpioRuta(st.project) || 'ank';
-    var lista = chatsDe(proyecto);
-    if (!lista.length) {
+    var todos = chatsDe(proyecto);
+    var filtro = String(st.busqueda || '').trim().toLowerCase();
+    var lista = todos.filter(function (c) {
+      if (!filtro) return true;
+      var txt = (c.titulo || '') + '\n' + (c.msgs || []).map(function (m) {
+        return String(m.texto || '');
+      }).join('\n');
+      return txt.toLowerCase().indexOf(filtro) !== -1;
+    });
+    if (!todos.length) {
       cont.innerHTML = '<div class="ank-ai-empty">Todavía no hay chats en <b>' + esc(proyecto) +
         '</b>. Lo que hables queda guardado acá y en la memoria del proyecto.</div>';
       return;
     }
+    if (!lista.length) {
+      cont.innerHTML = '<div class="ank-ai-empty">Ningún chat coincide con «' + esc(st.busqueda) + '».</div>';
+      return;
+    }
     cont.innerHTML = lista.map(function (c) {
-      var ultimo = (c.msgs || []).filter(function (m) { return m.rol === 'user'; }).pop();
-      var vista = ultimo ? String(ultimo.texto).replace(/\s+/g, ' ').slice(0, 90) : 'Sin mensajes';
+      var vista = '';
+      if (filtro) {
+        var hit = (c.msgs || []).filter(function (m) {
+          return String(m.texto || '').toLowerCase().indexOf(filtro) !== -1;
+        }).pop();
+        if (hit) {
+          var plano = String(hit.texto || '').replace(/\s+/g, ' ');
+          var pos = plano.toLowerCase().indexOf(filtro);
+          var ini = Math.max(0, pos - 30);
+          vista = (ini ? '…' : '') + plano.slice(ini, ini + 100);
+        }
+      }
+      if (!vista) {
+        var ultimo = (c.msgs || []).filter(function (m) { return m.rol === 'user'; }).pop();
+        vista = ultimo ? String(ultimo.texto).replace(/\s+/g, ' ').slice(0, 90) : 'Sin mensajes';
+      }
       var activo = c.id === st.chatId ? ' active' : '';
       return '<div class="ank-ai-chat' + activo + '" data-accion="abrir-chat" data-valor="' + esc(c.id) + '">' +
         '<div class="ank-ai-chat-t">' + esc(c.titulo || 'Chat sin título') + '</div>' +
@@ -1684,6 +2174,7 @@
       if (!silencioso) aviso('Las actualizaciones todavía no están configuradas.');
       return Promise.resolve();
     }
+    st.ultimaRevision = Date.now();
     if (u.pendiente && u.pendiente(PANEL_VERSION)) {
       dialogoActualizacion({ version: u.version(), notas: u.notas(), info: null });
       return Promise.resolve();
@@ -1838,9 +2329,13 @@
           '</section>' +
 
           '<section class="ank-ai-view" data-view="chats">' +
+            '<div class="ank-ai-search">' +
+              '<input class="ank-ai-searchin" type="search" placeholder="Buscar en los chats…" spellcheck="false" autocomplete="off" />' +
+            '</div>' +
             '<div class="ank-ai-chatbar">' +
               '<button class="ank-ai-btn primary" data-accion="nuevo-chat">Nuevo chat</button>' +
-              '<button class="ank-ai-btn" data-accion="memoria">Memoria del proyecto</button>' +
+              '<button class="ank-ai-btn" data-accion="memoria" title="Editar la memoria del proyecto">Memoria</button>' +
+              '<button class="ank-ai-btn" data-accion="exportar" title="Exportar este chat a Markdown">Exportar</button>' +
             '</div>' +
             '<div class="ank-ai-chatlist"></div>' +
           '</section>' +
@@ -1913,10 +2408,11 @@
 
           '<section class="ank-ai-view" data-view="log">' +
             '<div class="ank-ai-logbar">' +
+              '<button class="ank-ai-btn" data-accion="diag" title="Compartir versiones, entorno y errores recientes">Diagnóstico</button>' +
               '<button class="ank-ai-btn" data-accion="copiar-log">Copiar</button>' +
               '<button class="ank-ai-btn" data-accion="limpiar-log">Limpiar</button>' +
               '<div class="ank-ai-spacer"></div>' +
-              '<button class="ank-ai-btn" data-accion="revisar">Diagnóstico</button>' +
+              '<button class="ank-ai-btn" data-accion="revisar">Revisar estado</button>' +
             '</div>' +
             '<pre class="ank-ai-log"></pre>' +
           '</section>' +
@@ -1962,6 +2458,14 @@
           consolaComando(ic.value);
           ic.value = '';
         }
+      });
+    }
+    var sb = q('.ank-ai-searchin', panel);
+    if (sb) {
+      sb.value = st.busqueda || '';
+      sb.addEventListener('input', function () {
+        st.busqueda = sb.value;
+        pintarChats();
       });
     }
     return panel;
@@ -2096,6 +2600,12 @@
         pintar();
         break;
       case 'detener': detener(); break;
+      case 'reintentar': reintentar(false); break;
+      case 'otro-modelo': reintentar(true); break;
+      case 'aplicar-archivo': aplicarArchivo(t.getAttribute('data-valor')); break;
+      case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
+      case 'exportar': exportarChat(); break;
+      case 'diag': compartirDiagnostico(); break;
       case 'instalar-entorno': instalarEntorno(); break;
       case 'instalar-asistente': instalarAsistente(); break;
       case 'guardar-clave':
@@ -2272,6 +2782,7 @@
 
   function iniciar() {
     cargarChats();
+    engancharErrores();
     document.addEventListener('ank-upd', marcarActualizacion);
     engancharMenu();
     dirsIniciales()
@@ -2283,6 +2794,17 @@
     setTimeout(mostrarNovedades, 1200);
     /* Revisa novedades sola un rato después de arrancar, sin frenar la app. */
     setTimeout(function () { revisarActualizacion(true, false); }, 5000);
+    /* Y sigue revisando mientras la app quede abierta. */
+    setInterval(function () {
+      if (document.hidden) return;
+      revisarActualizacion(true, false);
+    }, 30 * 60 * 1000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) return;
+      if (!st.ultimaRevision || Date.now() - st.ultimaRevision > 10 * 60 * 1000) {
+        revisarActualizacion(true, false);
+      }
+    });
     if (window.cordova) {
       document.addEventListener('deviceready', function () {
         setTimeout(ciclo, 200);
