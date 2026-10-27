@@ -1,0 +1,6 @@
+{
+  "web": "1.5.1",
+  "ai": "ank/ai.js",
+  "css": "ank/ai.css",
+  "notas": "Historial de chats, memoria por proyecto y marca ANK"
+}

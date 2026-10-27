@@ -1,0 +1,789 @@
+/* Código ANK — panel del asistente. Estilo plano, mismo lenguaje visual que la app. */
+
+#ank-ai {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  display: none;
+  background: rgba(5, 10, 11, 0.62);
+  font-family: var(--app-font-family, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif);
+}
+
+#ank-ai.open {
+  display: block;
+}
+
+.ank-ai-sheet {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0f1618;
+  color: #e7e0d2;
+  border-top: 2px solid #e0a458;
+  animation: ank-ai-in 160ms ease-out;
+}
+
+@keyframes ank-ai-in {
+  from {
+    transform: translateY(14px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ---------- cabecera ---------- */
+.ank-ai-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 46px;
+  padding: 0 8px 0 12px;
+  background: #111b1d;
+  border-bottom: 1px solid #2c3e41;
+  flex: 0 0 auto;
+}
+
+.ank-ai-title {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8e8778;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.ank-ai-title b {
+  color: #e0a458;
+  font-weight: 600;
+}
+
+.ank-ai-tab {
+  background: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #8e8778 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  padding: 6px 8px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  box-shadow: inset 0 -2px 0 transparent !important;
+}
+
+.ank-ai-tab.active {
+  color: #e0a458 !important;
+  box-shadow: inset 0 -2px 0 #e0a458 !important;
+}
+
+.ank-ai-spacer {
+  flex: 1 1 auto;
+}
+
+.ank-ai-x {
+  width: 34px !important;
+  height: 34px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: none !important;
+  border: 1px solid transparent !important;
+  color: #8e8778 !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+.ank-ai-x:active {
+  border-color: #33474a !important;
+  color: #e7e0d2 !important;
+}
+
+/* ---------- cuerpo ---------- */
+.ank-ai-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ank-ai-view {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ank-ai-view.active {
+  display: flex;
+}
+
+/* ---------- chat ---------- */
+.ank-ai-msgs {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 12px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ank-ai-empty {
+  color: #6f6a5f;
+  font-size: 12px;
+  line-height: 1.7;
+  border: 1px dashed #26363a;
+  padding: 14px;
+  margin: 4px 0 16px;
+}
+
+.ank-ai-empty b {
+  color: #cfc8b8;
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.ank-ai-msg {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.ank-ai-msg.user {
+  padding: 9px 11px;
+  background: #16211f;
+  border-left: 2px solid #e0a458;
+  color: #e7e0d2;
+  white-space: pre-wrap;
+}
+
+.ank-ai-msg.bot {
+  border-left: 2px solid #26363a;
+  padding: 2px 0 2px 11px;
+  color: #ded7c8;
+}
+
+.ank-ai-msg.bot .ank-ai-txt {
+  white-space: pre-wrap;
+}
+
+.ank-ai-msg.bot.err {
+  border-left-color: #c2624a;
+  color: #eba98f;
+}
+
+.ank-ai-msg .ank-ai-pre {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: #0c1315;
+  border: 1px solid #1e2c2e;
+  overflow-x: auto;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  color: #cfc8b8;
+}
+
+.ank-ai-msg code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  background: #0c1315;
+  border: 1px solid #1e2c2e;
+  padding: 0 3px;
+}
+
+.ank-ai-msg .ank-ai-tool {
+  display: block;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  color: #7c7566;
+  margin: 2px 0;
+  white-space: pre-wrap;
+}
+
+.ank-ai-msg .ank-ai-tool i {
+  color: #e0a458;
+  font-style: normal;
+}
+
+.ank-ai-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 13px;
+  background: #e0a458;
+  vertical-align: -2px;
+  animation: ank-ai-blink 1s steps(2) infinite;
+}
+
+@keyframes ank-ai-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------- barra de opciones del chat ---------- */
+.ank-ai-opts {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 0;
+  background: #111b1d;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ank-ai-opts::-webkit-scrollbar {
+  display: none;
+}
+
+.ank-ai-chip {
+  flex: 0 0 auto;
+  height: 30px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  background: #162326 !important;
+  border: 1px solid #33474a !important;
+  border-radius: 15px !important;
+  color: #cfc8b8 !important;
+  font-size: 11px !important;
+  font-family: inherit !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+  box-shadow: none !important;
+  outline: none;
+  touch-action: manipulation;
+}
+
+.ank-ai-chip:active {
+  background: #233638 !important;
+  border-color: #e0a458 !important;
+}
+
+.ank-ai-modo.plan {
+  background: #2a2318 !important;
+  border-color: #e0a458 !important;
+  color: #e0a458 !important;
+}
+
+.ank-ai-sel {
+  max-width: 46vw;
+  text-overflow: ellipsis;
+}
+
+.ank-ai-opts + .ank-ai-compose {
+  border-top: none;
+  padding-top: 6px;
+}
+
+/* ---------- compositor ---------- */
+.ank-ai-compose {
+  flex: 0 0 auto;
+  border-top: 1px solid #2c3e41;
+  background: #111b1d;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.ank-ai-input {
+  flex: 1 1 auto;
+  min-height: 38px;
+  max-height: 128px;
+  resize: none;
+  background: #0c1315 !important;
+  border: 1px solid #2c3e41 !important;
+  border-radius: 2px !important;
+  color: #e7e0d2 !important;
+  font-size: 13px !important;
+  line-height: 1.45;
+  padding: 9px 10px !important;
+  font-family: inherit !important;
+  outline: none;
+}
+
+.ank-ai-input:focus {
+  border-color: #e0a458 !important;
+}
+
+.ank-ai-send {
+  width: 40px !important;
+  height: 38px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: #1a282a !important;
+  border: 1px solid #33474a !important;
+  color: #e0a458 !important;
+  font-size: 15px !important;
+  border-radius: 2px !important;
+}
+
+.ank-ai-send:disabled {
+  color: #4a5a5c !important;
+  border-color: #223033 !important;
+}
+
+.ank-ai-send.stop {
+  color: #f2ddd6 !important;
+  background: #3a2320 !important;
+  border-color: #6b3a2e !important;
+}
+
+/* ---------- barra de estado ---------- */
+.ank-ai-status {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #0c1315;
+  border-top: 1px solid #1e2c2e;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 10.5px;
+  color: #6f6a5f;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ank-ai-dot {
+  width: 6px;
+  height: 6px;
+  background: #4a5a5c;
+  flex: 0 0 auto;
+}
+
+.ank-ai-dot.ok {
+  background: #7fb3a7;
+}
+
+.ank-ai-dot.busy {
+  background: #e0a458;
+}
+
+.ank-ai-dot.err {
+  background: #c2624a;
+}
+
+.ank-ai-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- entorno ---------- */
+.ank-ai-setup {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 14px 24px;
+}
+
+.ank-ai-lead {
+  color: #8e8778;
+  font-size: 12.5px;
+  line-height: 1.65;
+  margin: 0 0 18px;
+}
+
+.ank-ai-step {
+  border: 1px solid #1e2c2e;
+  background: #111b1d;
+  margin-bottom: 8px;
+  padding: 11px 12px;
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.ank-ai-step.done {
+  border-color: #26363a;
+}
+
+.ank-ai-step.run {
+  border-color: #3a4a2e;
+}
+
+.ank-ai-step.fail {
+  border-color: #6b3a2e;
+}
+
+.ank-ai-n {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #6f6a5f;
+  padding-top: 2px;
+}
+
+.ank-ai-step.done .ank-ai-n {
+  color: #7fb3a7;
+}
+
+.ank-ai-step.run .ank-ai-n {
+  color: #e0a458;
+}
+
+.ank-ai-step.fail .ank-ai-n {
+  color: #c2624a;
+}
+
+.ank-ai-sname {
+  font-size: 13px;
+  color: #e7e0d2;
+  margin-bottom: 3px;
+}
+
+.ank-ai-sdesc {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #8e8778;
+}
+
+.ank-ai-sdesc b {
+  color: #cfc8b8;
+  font-weight: 600;
+}
+
+.ank-ai-sact {
+  align-self: center;
+}
+
+.ank-ai-btn {
+  background: #1a282a !important;
+  border: 1px solid #33474a !important;
+  color: #e7e0d2 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  padding: 7px 10px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  border-radius: 2px !important;
+  white-space: nowrap;
+}
+
+.ank-ai-btn:active {
+  border-color: #e0a458 !important;
+}
+
+.ank-ai-btn[disabled] {
+  opacity: 0.4;
+}
+
+.ank-ai-btn.primary {
+  border-color: #e0a458 !important;
+  color: #e0a458 !important;
+}
+
+.ank-ai-field {
+  margin: 14px 0 0;
+}
+
+.ank-ai-field label {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6f6a5f;
+  margin-bottom: 5px;
+}
+
+.ank-ai-field input,
+.ank-ai-field select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0c1315 !important;
+  border: 1px solid #2c3e41 !important;
+  color: #e7e0d2 !important;
+  font-size: 13px !important;
+  padding: 9px 10px !important;
+  border-radius: 2px !important;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace !important;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ank-ai-field input:focus,
+.ank-ai-field select:focus {
+  border-color: #e0a458 !important;
+}
+
+.ank-ai-hint {
+  font-size: 11px;
+  color: #6f6a5f;
+  line-height: 1.55;
+  margin-top: 6px;
+}
+
+.ank-ai-hint a {
+  color: #7fb3a7;
+  text-decoration: none;
+  border-bottom: 1px dotted #7fb3a7;
+}
+
+/* ---------- consola ---------- */
+.ank-ai-console {
+  margin: 14px 0 0;
+  height: 170px;
+  overflow: auto;
+  background: #0a1113;
+  border: 1px solid #1e2c2e;
+  padding: 9px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: #8e8778;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ank-ai-console b {
+  color: #e0a458;
+  font-weight: 400;
+}
+
+.ank-ai-consolei {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ank-ai-consolei input {
+  flex: 1 1 auto;
+  background: #0c1315 !important;
+  border: 1px solid #2c3e41 !important;
+  color: #e7e0d2 !important;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace !important;
+  font-size: 11px !important;
+  padding: 7px 8px !important;
+  border-radius: 2px !important;
+  outline: none;
+}
+
+/* ---------- registro ---------- */
+.ank-ai-logbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1e2c2e;
+}
+
+.ank-ai-log {
+  flex: 1 1 auto;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px 24px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8e8778;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ank-ai-log .t {
+  color: #4f5c5e;
+}
+
+.ank-ai-log .w {
+  color: #c9a35f;
+}
+
+.ank-ai-log .e {
+  color: #c2624a;
+}
+
+/* ---------- botón del dock flotante ---------- */
+#ank-dock .ank-dock-btn.ank-ia {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- historial de chats ---------- */
+.ank-ai-chatbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid #1c2a2c;
+}
+
+.ank-ai-chatbar .ank-ai-btn {
+  flex: 0 0 auto;
+}
+
+.ank-ai-chatlist {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 12px 20px;
+}
+
+.ank-ai-chat {
+  border: 1px solid #1f2f31;
+  background: #101a19;
+  padding: 10px 11px;
+  margin-bottom: 8px;
+  border-radius: 3px;
+}
+
+.ank-ai-chat:active {
+  border-color: #33474a;
+}
+
+.ank-ai-chat.active {
+  border-left: 2px solid #e0a458;
+}
+
+.ank-ai-chat-t {
+  color: #e7e0d2;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ank-ai-chat-p {
+  color: #8b8577;
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ank-ai-chat-m {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #5d5a51;
+  font-size: 10.5px;
+  letter-spacing: 0.3px;
+}
+
+.ank-ai-chat-x {
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  color: #6f6a5f;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.ank-ai-chat-x:active {
+  color: #e0a458;
+}
+
+/* ---------- memoria ---------- */
+.ank-ai-mem {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 8, 0.82);
+  display: none;
+  align-items: flex-end;
+  z-index: 5;
+}
+
+.ank-ai-mem.open {
+  display: flex;
+}
+
+.ank-ai-mem-box {
+  width: 100%;
+  max-height: 88%;
+  background: #0d1615;
+  border-top: 1px solid #26363a;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 14px;
+}
+
+.ank-ai-mem-head {
+  color: #cfc8b8;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.ank-ai-mem-ruta {
+  color: #5d5a51;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ank-ai-mem-text {
+  flex: 1 1 auto;
+  min-height: 220px;
+  resize: none;
+  background: #0a1211;
+  color: #ded7c8;
+  border: 1px solid #1f2f31;
+  border-radius: 3px;
+  padding: 9px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ank-ai-mem-text:focus {
+  outline: none;
+  border-color: #33474a;
+}
+
+.ank-ai-mem-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ank-ai-mem-actions .ank-ai-btn {
+  flex: 1 1 0;
+}
+
+/* ---------- ajustes visuales ---------- */
+.ank-ai-head {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.ank-ai-head::-webkit-scrollbar {
+  display: none;
+}
+
+.ank-ai-title,
+.ank-ai-tab {
+  flex: 0 0 auto;
+}
+
+.ank-ai-ver {
+  color: #8e8778 !important;
+  font-size: 11px;
+  margin-bottom: 7px;
+  word-break: break-word;
+}
+
+/* El panel respeta el área segura del teléfono. */
+.ank-ai-sheet {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.ank-ai-chatbar .ank-ai-btn {
+  min-height: 34px;
+}
