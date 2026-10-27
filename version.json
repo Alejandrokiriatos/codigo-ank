@@ -1,7 +1,7 @@
 {
-  "web": "1.7.1",
+  "web": "1.7.2",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Usuarios: nueva seccion en Entorno con instalaciones, activos de hoy y del mes, leidos de stats.json en el repositorio. La app manda un aviso anonimo (instalacion, un dia y un mes por equipo) sin datos personales, con opcion de desactivarlo. GitHub Actions arma stats.json una vez al dia. Incluye docs/estadisticas.md con los datos para que el asistente responda cuantos usuarios hay",
-  "sig": "73f20d386cbd50d6bea8fb795e95d285d34b199d7a08b1a7a42d25032f943361"
+  "notas": "Comunidad: en Entorno hay dos accesos directos, Canal de Telegram (versiones y novedades) y Grupo de Telegram (dudas y errores). Los enlaces abren la app de Telegram o el navegador segun lo que tenga instalado el telefono",
+  "sig": "84a1c272b6f2b88cc3f86ecea346ce811f8e6aa8b639746a6382199bdde1fc92"
 }

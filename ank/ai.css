@@ -1581,3 +1581,12 @@
   font-size: 12px;
   color: #cfc8b8;
 }
+
+.ank-ai-social {
+  display: flex;
+  gap: 6px;
+}
+
+.ank-ai-social .ank-ai-btn {
+  flex: 1 1 auto;
+}

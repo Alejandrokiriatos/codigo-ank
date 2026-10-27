@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.7.1';
+  var PANEL_VERSION = '1.7.2';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -3249,6 +3249,15 @@
               '</div>' +
 
               '<div class="ank-ai-field">' +
+                '<label>Comunidad</label>' +
+                '<div class="ank-ai-social">' +
+                  '<button class="ank-ai-btn" data-accion="abrir-canal" title="Novedades y versiones nuevas">▶️ Canal de Telegram</button>' +
+                  '<button class="ank-ai-btn" data-accion="abrir-grupo" title="Dudas, errores y sugerencias">💬 Grupo de Telegram</button>' +
+                '</div>' +
+                '<div class="ank-ai-hint">En el canal se publica cada versión; en el grupo respondemos dudas y errores.</div>' +
+              '</div>' +
+
+              '<div class="ank-ai-field">' +
                 '<label>Versión del panel</label>' +
                 '<div class="ank-ai-hint ank-ai-ver"></div>' +
                 '<div class="ank-ai-hint">Para actualizar, usá el menú de la app → Actualizar ANK.</div>' +
@@ -3526,6 +3535,8 @@
       case 'editar-app': editarApp(t.getAttribute('data-valor')); break;
       case 'stats-refrescar': leerEstadisticas(true); break;
       case 'stats-compartir': compartirEstadisticas(); break;
+      case 'abrir-canal': abrirUrl('https://t.me/codigoank'); break;
+      case 'abrir-grupo': abrirUrl('https://t.me/Codigoank1'); break;
       case 'cerrar-app': cerrarApp(); break;
       case 'ayuda-apps': abrirAyudaApps(); break;
       case 'cerrar-ayuda-apps': cerrarAyudaApps(); break;
