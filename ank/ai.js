@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.6.2';
+  var PANEL_VERSION = '1.7.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -45,6 +45,19 @@
     'respondé con un bloque como este, con la ruta relativa al proyecto y el contenido completo:\n' +
     '```ank:archivo ruta/al/archivo.ext\n<contenido completo del archivo>\n```\n' +
     'El usuario verá el diff y decidirá si aplicarlo o descartarlo.\n';
+
+  /* Instrucciones que se suman al pedido para que la IA sepa cómo se arma
+     una mini app de Código ANK y no invente una API distinta. */
+  var PROTOCOLO_APP = '\n\n[Mini apps de Código ANK]\n' +
+    'Si el pedido es crear o modificar una app para el teléfono, generá una mini app:\n' +
+    '- Va en una carpeta propia dentro del proyecto, con ankapp.json, index.html, style.css y app.js.\n' +
+    '- ankapp.json: {"id","nombre","version","descripcion","icono"(emoji),"permisos":[...],"inicio":"index.html","archivos":["style.css","app.js"]}.\n' +
+    '- Permisos válidos: almacenamiento, notificaciones, camara, archivos, compartir, portapapeles, vibrar.\n' +
+    '- Dentro de la app usá solo window.ANK: ANK.storage.get/set/remove/clear, ANK.notify(titulo,texto), ' +
+    'ANK.share(texto), ANK.copy(texto), ANK.vibrate(ms), ANK.fs.list/read/write, ANK.pickFile({aceptar}), ANK.camera(), ANK.request(permiso).\n' +
+    '- Nunca uses localStorage, cookies ni rutas absolutas: el almacenamiento va por ANK.storage.\n' +
+    '- La app se ejecuta aislada en un iframe sin internet implícito; evitá dependencias externas.\n' +
+    '- Devolvé cada archivo en un bloque ank:archivo con la ruta relativa a la carpeta de la app.\n';
 
   /* ------------------------------------------------------------------ *
    * estado
@@ -82,7 +95,10 @@
     busqueda: '',
     resumiendoAuto: false,
     errores: [],           // últimos errores, para el diagnóstico
-    ultimaRevision: 0
+    ultimaRevision: 0,
+    apps: [],              // mini apps descubiertas
+    appsCargando: false,
+    appActual: null        // app abierta en el runner
   };
 
   var cur = null; // burbuja del bot en curso
@@ -1511,6 +1527,645 @@
     if (est) est.textContent = 'descartado';
   }
 
+  /* ------------------------------------------------------------------ *
+   * mini apps: apps creadas dentro de Código ANK
+   * ------------------------------------------------------------------ */
+
+  var MOTIVOS_PERMISO = {
+    almacenamiento: 'guardar datos de la app',
+    notificaciones: 'mostrar notificaciones',
+    camara: 'usar la cámara',
+    archivos: 'leer y guardar archivos',
+    compartir: 'compartir contenido',
+    portapapeles: 'usar el portapapeles',
+    vibrar: 'vibrar el teléfono'
+  };
+
+  var AYUDA_SNIPPETS = {
+    pedido: 'Creá una mini app de Código ANK llamada "Gastos".\n' +
+      'Qué hace: anotar gastos por día, mostrar el total y guardar los datos en el teléfono.\n' +
+      'Permisos: almacenamiento y notificaciones.\n' +
+      'Usá ankapp.json, index.html, style.css y app.js. No uses localStorage directo: usá ANK.storage.\n' +
+      'Devolvé cada archivo en un bloque ank:archivo con la ruta relativa.',
+    manifiesto: '{\n' +
+      '  "id": "gastos",\n' +
+      '  "nombre": "Gastos",\n' +
+      '  "version": "1.0.0",\n' +
+      '  "descripcion": "Anota gastos por día y muestra el total",\n' +
+      '  "icono": "💰",\n' +
+      '  "permisos": ["almacenamiento", "notificaciones"],\n' +
+      '  "inicio": "index.html"\n' +
+      '}',
+    api: '// Guardar y leer datos (queda solo dentro de esta app)\n' +
+      'await ANK.storage.set("gastos", [{ monto: 1500, texto: "almuerzo" }]);\n' +
+      'const datos = await ANK.storage.get("gastos");\n\n' +
+      '// Aviso dentro de ANK (y notificación del sistema si se permite)\n' +
+      'await ANK.notify("Listo", "Se guardó el gasto");\n\n' +
+      '// Cámara y archivos: devuelven un dataURL\n' +
+      'const foto = await ANK.camera();\n' +
+      'const archivo = await ANK.pickFile({ aceptar: "image/*" });\n\n' +
+      '// Archivos dentro de la carpeta de la app\n' +
+      'await ANK.fs.write("datos.json", JSON.stringify(datos));\n' +
+      'const lista = await ANK.fs.list();\n\n' +
+      '// Otros\n' +
+      'await ANK.share("Texto para compartir");\n' +
+      'await ANK.copy("Texto al portapapeles");\n' +
+      'ANK.vibrate(120);'
+  };
+
+  function slugApp(texto) {
+    return String(texto || 'app').toLowerCase()
+      .normalize ? String(texto || 'app').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'app'
+      : String(texto || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'app';
+  }
+
+  function cargarApps() {
+    return shell('find /public/proyectos -maxdepth 3 -name ankapp.json -print 2>/dev/null', true)
+      .then(function (r) {
+        var rutas = String(r.salida || '').split('\n').map(function (l) { return l.trim(); })
+          .filter(function (l) { return l.indexOf('/public/proyectos/') === 0 && /ankapp\.json$/.test(l); });
+        return Promise.all(rutas.map(function (ruta) {
+          return leerTexto(st.prefix + ruta).then(function (txt) {
+            var m = null;
+            try { m = JSON.parse(txt); } catch (e) { return null; }
+            if (!m || typeof m !== 'object') return null;
+            var carpeta = ruta.replace('/public/proyectos/', '').replace(/\/ankapp\.json$/, '');
+            var id = String(m.id || carpeta.split('/').pop()).replace(/[^A-Za-z0-9._-]/g, '') || carpeta;
+            return {
+              id: id,
+              carpeta: carpeta,
+              nombre: String(m.nombre || id),
+              descripcion: String(m.descripcion || ''),
+              version: String(m.version || '1.0'),
+              icono: String(m.icono || '📦'),
+              permisos: Array.isArray(m.permisos) ? m.permisos.map(String) : [],
+              inicio: String(m.inicio || 'index.html'),
+              archivos: Array.isArray(m.archivos) ? m.archivos.map(String) : []
+            };
+          }).catch(function () { return null; });
+        }));
+      })
+      .then(function (lista) {
+        st.apps = lista.filter(Boolean).sort(function (a, b) {
+          return a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase());
+        });
+        pintarApps();
+        return st.apps;
+      })
+      .catch(function (e) {
+        st.apps = [];
+        pintarApps();
+        log('w', 'Apps: ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  function pintarApps() {
+    var cont = q('.ank-ai-applist');
+    if (!cont) return;
+    if (!st.apps.length) {
+      cont.innerHTML = '<div class="ank-ai-empty">' +
+        'Todavía no hay apps. Tocá <b>Crear app</b> y contale a la IA qué querés; ' +
+        'ella arma los archivos y vos los aplicás con el diff.' +
+        '</div>';
+      return;
+    }
+    cont.innerHTML = st.apps.map(function (a) {
+      var permisos = a.permisos.length
+        ? a.permisos.map(function (p) { return '<span class="ank-app-tag">' + esc(p) + '</span>'; }).join('')
+        : '<span class="ank-app-tag">sin permisos</span>';
+      return '<div class="ank-app-card" data-app="' + esc(a.id) + '">' +
+        '<div class="ank-app-icon">' + esc(a.icono) + '</div>' +
+        '<div class="ank-app-info">' +
+          '<div class="ank-app-name">' + esc(a.nombre) + '</div>' +
+          '<div class="ank-app-desc">' + esc(a.descripcion || a.carpeta) + '</div>' +
+          '<div class="ank-app-tags">' + permisos + '</div>' +
+        '</div>' +
+        '<div class="ank-app-acc">' +
+          '<button type="button" class="ank-ai-act" data-accion="abrir-app" data-valor="' + esc(a.id) + '">Abrir</button>' +
+          '<button type="button" class="ank-ai-act ghost" data-accion="editar-app" data-valor="' + esc(a.id) + '">Editar</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function buscarApp(id) {
+    for (var i = 0; i < st.apps.length; i++) {
+      if (st.apps[i].id === id) return st.apps[i];
+    }
+    return null;
+  }
+
+  function inyectarBloque(html, etiqueta, bloque) {
+    var cierre = '</' + etiqueta + '>';
+    var pos = String(html).toLowerCase().lastIndexOf(cierre);
+    if (pos === -1) return bloque + html;
+    return html.slice(0, pos) + bloque + html.slice(pos);
+  }
+
+  function scriptCliente(app) {
+    var info = JSON.stringify({ id: app.id, nombre: app.nombre, version: app.version });
+    return '<script>(function(){' +
+      'var seq=0,esperas={};' +
+      'function llamar(fn,args){return new Promise(function(ok,mal){var id=++seq;esperas[id]={ok:ok,mal:mal};' +
+      'parent.postMessage({__ank:"call",id:id,fn:fn,args:args||[]},"*");});}' +
+      'window.addEventListener("message",function(e){var d=e.data;if(!d||d.__ank!=="res")return;' +
+      'var w=esperas[d.id];if(!w)return;delete esperas[d.id];if(d.ok)w.ok(d.valor);else w.mal(new Error(d.error||"error"));});' +
+      'window.ANK={version:"1.0",app:' + info + ',' +
+      'storage:{get:function(k){return llamar("storage.get",[k]);},set:function(k,v){return llamar("storage.set",[k,v]);},' +
+      'remove:function(k){return llamar("storage.remove",[k]);},clear:function(){return llamar("storage.clear",[]);}},' +
+      'notify:function(t,x){return llamar("notify",[t,x]);},share:function(t){return llamar("share",[t]);},' +
+      'copy:function(t){return llamar("copy",[t]);},vibrate:function(ms){return llamar("vibrate",[ms]);},' +
+      'fs:{list:function(){return llamar("fs.list",[]);},read:function(r){return llamar("fs.read",[r]);},' +
+      'write:function(r,c){return llamar("fs.write",[r,c]);}},' +
+      'pickFile:function(o){return llamar("pickFile",[o||{}]);},camera:function(){return llamar("camera",[]);},' +
+      'request:function(p){return llamar("permiso",[p]);}};' +
+      '})();<\/script>';
+  }
+
+  function abrirApp(id) {
+    var app = buscarApp(id);
+    if (!app) return aviso('No encontré esa app. Tocá Actualizar.');
+    var base = st.prefix + '/public/proyectos/' + app.carpeta + '/';
+    var nombres = app.archivos.length ? app.archivos.slice() : ['style.css', 'app.js'];
+    if (nombres.indexOf('style.css') === -1) nombres.push('style.css');
+    if (nombres.indexOf('app.js') === -1) nombres.push('app.js');
+    nombres = nombres.filter(function (n) { return n && n !== app.inicio; });
+    var archivos = [app.inicio].concat(nombres);
+    Promise.all(archivos.map(function (n) {
+      return leerTexto(base + n).catch(function () { return ''; });
+    })).then(function (t) {
+      var html = t[0] || '';
+      if (!html.trim()) return aviso('La app no tiene ' + app.inicio + '.');
+      var css = t[nombres.indexOf('style.css') + 1] || '';
+      var js = t[nombres.indexOf('app.js') + 1] || '';
+      if (css.trim()) html = inyectarBloque(html, 'head', '<style>' + css.replace(/<\/style>/gi, '<\\/style>') + '</style>');
+      if (js.trim()) html = inyectarBloque(html, 'body', '<script>' + js.replace(/<\/script>/gi, '<\\/script>') + '<\/script>');
+      html += scriptCliente(app);
+      montarApp(app, html);
+    }).catch(function (e) {
+      aviso('No se pudo abrir la app.');
+      log('e', 'Abrir app ' + app.id + ': ' + (e && e.message ? e.message : e));
+    });
+  }
+
+  function montarApp(app, html) {
+    st.appActual = app;
+    var el = q('#ank-app-run');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ank-app-run';
+      document.body.appendChild(el);
+      el.addEventListener('click', manejarClic);
+    }
+    el.innerHTML =
+      '<div class="ank-app-runbar">' +
+        '<span class="ank-app-runname"></span>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="cerrar-app">Cerrar</button>' +
+      '</div>' +
+      '<iframe class="ank-app-frame" title="App" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock"></iframe>';
+    q('.ank-app-runname', el).textContent = app.icono + '  ' + app.nombre;
+    q('iframe', el).srcdoc = html;
+    el.classList.add('open');
+  }
+
+  function cerrarApp() {
+    var el = q('#ank-app-run');
+    if (el) {
+      var f = q('iframe', el);
+      if (f) f.srcdoc = '';
+      el.classList.remove('open');
+    }
+    st.appActual = null;
+  }
+
+  function datosApp(app) {
+    var crudo = leer('ank.app.data.' + app.id, '');
+    if (!crudo) return {};
+    try {
+      var d = JSON.parse(crudo);
+      return d && typeof d === 'object' ? d : {};
+    } catch (e) { return {}; }
+  }
+
+  function guardarDatosApp(app, datos) {
+    guardar('ank.app.data.' + app.id, JSON.stringify(datos || {}));
+  }
+
+  function rutaDeApp(app, rel) {
+    var r = limpioRuta(rel || '').replace(/^\/+/, '');
+    if (/(^|\/)\.\.(\/|$)/.test(r)) throw new Error('ruta no permitida');
+    return st.prefix + '/public/proyectos/' + app.carpeta + (r ? '/' + r : '');
+  }
+
+  function pedirPermiso(app, permiso, motivo) {
+    var p = String(permiso || '');
+    if (!p) return Promise.resolve(true);
+    if (p === 'almacenamiento') return Promise.resolve(true);
+    if (app.permisos.indexOf(p) === -1) {
+      return Promise.resolve(false);
+    }
+    var clave = 'ank.app.perm.' + app.id + '.' + p;
+    var guardado = leer(clave, '');
+    if (guardado === 'si') return Promise.resolve(true);
+    if (guardado === 'no') return Promise.resolve(false);
+    return new Promise(function (res) {
+      var el = q('#ank-app-perm');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'ank-app-perm';
+        document.body.appendChild(el);
+        el.addEventListener('click', manejarClic);
+      }
+      el.innerHTML =
+        '<div class="ank-app-perm-box">' +
+          '<div class="ank-app-perm-head">Permiso de la app</div>' +
+          '<div class="ank-app-perm-txt"></div>' +
+          '<div class="ank-app-perm-acc">' +
+            '<button type="button" class="ank-ai-act ghost" data-accion="permiso-no" data-valor="' + esc(clave) + '">Denegar</button>' +
+            '<button type="button" class="ank-ai-act" data-accion="permiso-si" data-valor="' + esc(clave) + '">Permitir</button>' +
+          '</div>' +
+        '</div>';
+      q('.ank-app-perm-txt', el).textContent = '«' + app.nombre + '» quiere ' +
+        (motivo || MOTIVOS_PERMISO[p] || p) + '.';
+      el.classList.add('open');
+      el.__ankRes = res;
+      el.__ankClave = clave;
+    });
+  }
+
+  function responderPermiso(clave, permitido) {
+    var el = q('#ank-app-perm');
+    if (!el) return;
+    var actual = el.__ankClave || '';
+    var res = el.__ankRes;
+    el.__ankRes = null;
+    el.__ankClave = '';
+    el.classList.remove('open');
+    if (clave && actual && clave !== actual) return;
+    if (actual) guardar(actual, permitido ? 'si' : 'no');
+    if (typeof res === 'function') res(!!permitido);
+  }
+
+  function elegirArchivo(op) {    return new Promise(function (res) {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.style.display = 'none';
+      if (op && op.aceptar) input.accept = String(op.aceptar);
+      if (op && op.camara) input.setAttribute('capture', 'environment');
+      document.body.appendChild(input);
+      input.addEventListener('change', function () {
+        var f = input.files && input.files[0];
+        if (!f) { input.remove(); res(null); return; }
+        if (f.size > 8 * 1024 * 1024) {
+          aviso('El archivo supera 8 MB.');
+          input.remove();
+          res(null);
+          return;
+        }
+        var fr = new FileReader();
+        fr.onload = function () {
+          input.remove();
+          res({ nombre: f.name, tipo: f.type, tamano: f.size, data: String(fr.result || '') });
+        };
+        fr.onerror = function () { input.remove(); res(null); };
+        fr.readAsDataURL(f);
+      });
+      input.click();
+    });
+  }
+
+  function notificarApp(titulo, texto) {
+    var t = String(titulo || 'App de ANK');
+    var x = String(texto || '');
+    aviso(x ? t + ' · ' + x : t);
+    try {
+      var n = window.cordova && window.cordova.plugins && window.cordova.plugins.notification &&
+        window.cordova.plugins.notification.local;
+      if (n && typeof n.schedule === 'function') {
+        n.schedule({ id: Date.now() % 2147483647, title: t, text: x, foreground: true });
+      }
+    } catch (e) {}
+    return true;
+  }
+
+  function compartirTexto(texto) {
+    try {
+      if (navigator.share) {
+        return navigator.share({ text: String(texto || '') }).then(function () { return true; });
+      }
+    } catch (e) {}
+    return copiarPortapapeles(String(texto || '')).then(function () {
+      aviso('Copiado para compartir.');
+      return true;
+    });
+  }
+
+  function ejecutarLlamada(app, fn, args) {
+    if (fn === 'permiso') return pedirPermiso(app, String(args[0] || ''), '');
+    if (fn.indexOf('storage.') === 0) {
+      var datos = datosApp(app);
+      var clave = String(args[0] || '');
+      if (fn === 'storage.get') return datos[clave] == null ? null : datos[clave];
+      if (fn === 'storage.set') {
+        if (!clave) throw new Error('falta la clave');
+        datos[clave] = args[1];
+        guardarDatosApp(app, datos);
+        return true;
+      }
+      if (fn === 'storage.remove') { delete datos[clave]; guardarDatosApp(app, datos); return true; }
+      if (fn === 'storage.clear') { guardarDatosApp(app, {}); return true; }
+      throw new Error('operación de almacenamiento no válida');
+    }
+    if (fn === 'notify') {
+      return pedirPermiso(app, 'notificaciones', MOTIVOS_PERMISO.notificaciones).then(function (ok) {
+        if (!ok) throw new Error('permiso de notificaciones denegado');
+        return notificarApp(args[0], args[1]);
+      });
+    }
+    if (fn === 'share') {
+      return pedirPermiso(app, 'compartir', MOTIVOS_PERMISO.compartir).then(function (ok) {
+        if (!ok) throw new Error('permiso para compartir denegado');
+        return compartirTexto(args[0]);
+      });
+    }
+    if (fn === 'copy') {
+      return pedirPermiso(app, 'portapapeles', MOTIVOS_PERMISO.portapapeles).then(function (ok) {
+        if (!ok) throw new Error('permiso de portapapeles denegado');
+        return copiarPortapapeles(String(args[0] || '')).then(function () { return true; });
+      });
+    }
+    if (fn === 'vibrate') {
+      return pedirPermiso(app, 'vibrar', MOTIVOS_PERMISO.vibrar).then(function (ok) {
+        if (!ok) throw new Error('permiso para vibrar denegado');
+        try { if (navigator.vibrate) navigator.vibrate(Number(args[0]) || 120); } catch (e) {}
+        return true;
+      });
+    }
+    if (fn === 'camera') {
+      return pedirPermiso(app, 'camara', MOTIVOS_PERMISO.camara).then(function (ok) {
+        if (!ok) throw new Error('permiso de cámara denegado');
+        return elegirArchivo({ aceptar: 'image/*', camara: true });
+      });
+    }
+    if (fn === 'pickFile') {
+      return pedirPermiso(app, 'archivos', MOTIVOS_PERMISO.archivos).then(function (ok) {
+        if (!ok) throw new Error('permiso de archivos denegado');
+        return elegirArchivo(args[0] || {});
+      });
+    }
+    if (fn.indexOf('fs.') === 0) {
+      return pedirPermiso(app, 'archivos', MOTIVOS_PERMISO.archivos).then(function (ok) {
+        if (!ok) throw new Error('permiso de archivos denegado');
+        if (fn === 'fs.list') {
+          var dir = '/public/proyectos/' + app.carpeta + '/';
+          return shell('ls -1p ' + shq(dir) + ' 2>/dev/null', true).then(function (r) {
+            return String(r.salida || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+          });
+        }
+        var ruta = rutaDeApp(app, args[0]);
+        if (fn === 'fs.read') return leerTexto(ruta);
+        if (fn === 'fs.write') {
+          var carpeta = ruta.replace(/\/[^\/]+$/, '');
+          return conSistema('mkdirs', carpeta).catch(function () {}).then(function () {
+            return escribir(ruta, String(args[1] == null ? '' : args[1])).then(function () { return true; });
+          });
+        }
+        throw new Error('operación de archivos no válida');
+      });
+    }
+    throw new Error('función no disponible: ' + fn);
+  }
+
+  function atenderApp(ev) {
+    var d = ev && ev.data;
+    if (!d || d.__ank !== 'call' || !st.appActual) return;
+    var iframe = q('#ank-app-run iframe');
+    if (!iframe || ev.source !== iframe.contentWindow) return;
+    var app = st.appActual;
+    var id = d.id;
+    function responder(ok, valor) {
+      try {
+        iframe.contentWindow.postMessage({
+          __ank: 'res',
+          id: id,
+          ok: ok,
+          valor: ok ? valor : null,
+          error: ok ? '' : String(valor && valor.message ? valor.message : valor)
+        }, '*');
+      } catch (e) {}
+    }
+    var tarea;
+    try {
+      tarea = ejecutarLlamada(app, String(d.fn || ''), Array.isArray(d.args) ? d.args : []);
+    } catch (e) {
+      responder(false, e);
+      return;
+    }
+    Promise.resolve(tarea).then(function (v) { responder(true, v); }, function (e) { responder(false, e); });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * ayuda de mini apps
+   * ------------------------------------------------------------------ */
+
+  function contenidoAyuda() {
+    function bloque(id, titulo, cuerpo) {
+      return '<details class="ank-help-sec">' +
+        '<summary>' + esc(titulo) + '</summary>' +
+        '<div class="ank-help-body">' + cuerpo + '</div>' +
+      '</details>';
+    }
+    return [
+      '<p class="ank-help-lead">Una <b>mini app</b> es una aplicación que vive dentro de Código ANK. ' +
+        'No es un APK: se guarda en una carpeta del proyecto y se ejecuta aislada, con acceso solo a sus propios archivos.</p>',
+
+      bloque('pedir', '1. Cómo pedírsela a la IA',
+        '<p>Describí qué hace, para quién y qué datos guarda. Una idea por pedido.</p>' +
+        '<p><b>Bien:</b> «una app para anotar gastos por día, ver el total y guardar los datos en el teléfono».</p>' +
+        '<p><b>Mal:</b> «hacé una app» (sin decir qué hace ni qué necesita).</p>' +
+        '<p>La IA crea los archivos y el panel te muestra el <b>diff</b>: recién cuando tocás <b>Aplicar</b> se escriben.</p>' +
+        '<button type="button" class="ank-ai-btn" data-accion="copiar-ayuda" data-valor="pedido">Copiar pedido de ejemplo</button>'),
+
+      bloque('estructura', '2. Estructura de la app',
+        '<p>Todo va en <code>proyectos/&lt;carpeta&gt;/</code>:</p>' +
+        '<pre class="ank-help-pre">ankapp.json\nindex.html\nstyle.css\napp.js</pre>' +
+        '<p><code>index.html</code> es el inicio. Si existen, <code>style.css</code> y <code>app.js</code> se cargan solos. ' +
+        'También podés poner todo dentro del HTML.</p>' +
+        '<button type="button" class="ank-ai-btn" data-accion="copiar-ayuda" data-valor="manifiesto">Copiar ankapp.json</button>'),
+
+      bloque('permisos', '3. Permisos y privacidad',
+        '<p>La app declara en <code>ankapp.json</code> qué necesita. La primera vez, ANK te pregunta si lo permitís y lo recuerda.</p>' +
+        '<ul class="ank-help-list">' +
+          '<li><b>almacenamiento</b>: datos propios de la app (siempre aislados).</li>' +
+          '<li><b>notificaciones</b>: avisos dentro de ANK y del sistema si el teléfono lo permite.</li>' +
+          '<li><b>camara</b>: abrir la cámara y devolver una foto.</li>' +
+          '<li><b>archivos</b>: leer y guardar dentro de la carpeta de la app, y elegir archivos.</li>' +
+          '<li><b>compartir</b>: enviar texto al menú de compartir de Android.</li>' +
+          '<li><b>portapapeles</b> y <b>vibrar</b>: lo que dicen.</li>' +
+        '</ul>' +
+        '<p>Una app <b>no</b> puede leer otros proyectos, ni tus chats, ni la memoria de ANK.</p>'),
+
+      bloque('api', '4. La API ANK',
+        '<p>Dentro de la app usá <code>ANK.*</code>. No uses <code>localStorage</code> directo: en el entorno aislado no existe.</p>' +
+        '<pre class="ank-help-pre">' + esc(AYUDA_SNIPPETS.api) + '</pre>' +
+        '<button type="button" class="ank-ai-btn" data-accion="copiar-ayuda" data-valor="api">Copiar la API</button>'),
+
+      bloque('probar', '5. Probar, instalar y editar',
+        '<p>En <b>Apps</b> tocá <b>Abrir</b> para ejecutarla en pantalla completa. <b>Editar</b> abre el chat de esa carpeta ' +
+        'con el pedido listo para cambiar lo que quieras.</p>' +
+        '<p>Toda carpeta con un <code>ankapp.json</code> válido aparece sola en la lista. No hay que instalar nada aparte.</p>'),
+
+      bloque('limites', '6. Límites que conviene saber',
+        '<ul class="ank-help-list">' +
+          '<li>No corre en segundo plano ni con la app cerrada (salvo una notificación ya programada).</li>' +
+          '<li>No se publica en Play Store ni se instala como app independiente.</li>' +
+          '<li>Las imágenes deben ser emoji, dataURL o archivos de su propia carpeta.</li>' +
+          '<li>Sin internet, la app funciona solo con lo que tenga guardado.</li>' +
+          '<li>Si borrás la carpeta, se borra la app y sus datos.</li>' +
+        '</ul>'),
+
+      bloque('errores', '7. Si algo falla',
+        '<ul class="ank-help-list">' +
+          '<li>¿Existe <code>ankapp.json</code> y tiene <code>nombre</code> e <code>inicio</code>?</li>' +
+          '<li>¿El HTML tiene errores? Abrí <b>Registro</b> y luego <b>Diagnóstico</b>.</li>' +
+          '<li>¿Pidió un permiso que no declaró? Agregalo en <code>ankapp.json</code> y volvé a abrir.</li>' +
+          '<li>Los cambios se ven al cerrar y volver a abrir la app.</li>' +
+        '</ul>')
+    ].join('');
+  }
+
+  function abrirAyudaApps() {
+    var el = q('#ank-app-help');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ank-app-help';
+      document.body.appendChild(el);
+      el.addEventListener('click', manejarClic);
+    }
+    el.innerHTML =
+      '<div class="ank-help-box">' +
+        '<div class="ank-help-head">' +
+          '<span>Ayuda para crear apps</span>' +
+          '<button type="button" class="ank-ai-act ghost" data-accion="cerrar-ayuda-apps">Cerrar</button>' +
+        '</div>' +
+        '<div class="ank-help-scroll">' + contenidoAyuda() + '</div>' +
+      '</div>';
+    el.classList.add('open');
+  }
+
+  function cerrarAyudaApps() {
+    var el = q('#ank-app-help');
+    if (el) el.classList.remove('open');
+  }
+
+  function copiarAyuda(cual) {
+    var t = AYUDA_SNIPPETS[cual] || '';
+    if (!t) return;
+    copiarPortapapeles(t)
+      .then(function () { aviso('Copiado. Pegalo en el chat o en un archivo.'); })
+      .catch(function () { aviso('No se pudo copiar.'); });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * crear app desde el panel
+   * ------------------------------------------------------------------ */
+
+  function abrirNuevaApp() {
+    var el = q('#ank-app-new');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ank-app-new';
+      document.body.appendChild(el);
+      el.addEventListener('click', manejarClic);
+    }
+    var permisos = ['almacenamiento', 'archivos', 'camara', 'notificaciones', 'compartir', 'portapapeles', 'vibrar'];
+    el.innerHTML =
+      '<div class="ank-app-new-box">' +
+        '<div class="ank-app-new-head">Crear una mini app</div>' +
+        '<label class="ank-app-new-lbl">Nombre</label>' +
+        '<input class="ank-app-new-nombre" type="text" placeholder="Gastos" autocomplete="off" />' +
+        '<label class="ank-app-new-lbl">¿Qué hace?</label>' +
+        '<textarea class="ank-app-new-idea" rows="3" placeholder="Anotar gastos por día y mostrar el total"></textarea>' +
+        '<label class="ank-app-new-lbl">Permisos</label>' +
+        '<div class="ank-app-new-perms">' + permisos.map(function (p) {
+          return '<label><input type="checkbox" data-perm="' + p + '"' +
+            (p === 'almacenamiento' ? ' checked' : '') + ' /> ' + esc(p) + '</label>';
+        }).join('') + '</div>' +
+        '<div class="ank-app-new-hint">Se creará una carpeta nueva y el pedido quedará escrito en el chat. ' +
+          'Revisalo y tocá enviar.</div>' +
+        '<div class="ank-app-new-acc">' +
+          '<button type="button" class="ank-ai-act ghost" data-accion="cerrar-nueva-app">Cancelar</button>' +
+          '<button type="button" class="ank-ai-act" data-accion="preparar-app">Preparar pedido</button>' +
+        '</div>' +
+      '</div>';
+    el.classList.add('open');
+  }
+
+  function cerrarNuevaApp() {
+    var el = q('#ank-app-new');
+    if (el) el.classList.remove('open');
+  }
+
+  function prepararPedidoApp() {
+    var nombre = String((q('.ank-app-new-nombre') || {}).value || '').trim();
+    var idea = String((q('.ank-app-new-idea') || {}).value || '').trim();
+    if (!nombre || !idea) {
+      aviso('Completá el nombre y qué hace la app.');
+      return;
+    }
+    var carpeta = slugApp(nombre);
+    var marcados = document.querySelectorAll('#ank-app-new [data-perm]');
+    var permisos = [];
+    for (var i = 0; i < marcados.length; i++) {
+      if (marcados[i].checked) permisos.push(marcados[i].getAttribute('data-perm'));
+    }
+    st.project = carpeta;
+    guardar('ank.ai.project', carpeta);
+    st.chatId = '';
+    st.msgs = [];
+    st.tab = 'chat';
+    asegurarMemoria(carpeta);
+    var pedido = 'Creá una mini app de Código ANK llamada "' + nombre + '".\n' +
+      'Qué hace: ' + idea + '\n' +
+      'Carpeta del proyecto: ' + carpeta + '\n' +
+      'Permisos: ' + (permisos.length ? permisos.join(', ') : 'ninguno') + '\n' +
+      'Archivos: ankapp.json, index.html, style.css y app.js (podés usar todo inline).\n' +
+      'Usá la API window.ANK (ANK.storage, ANK.notify, ANK.camera, ANK.pickFile, ANK.fs, ' +
+      'ANK.share, ANK.copy, ANK.vibrate). No uses localStorage directo.\n' +
+      'Devolvé cada archivo en un bloque ank:archivo con la ruta relativa.';
+    cerrarNuevaApp();
+    pintar();
+    pintarMensajes();
+    var ta = q('.ank-ai-input');
+    if (ta) {
+      ta.value = pedido;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(128, ta.scrollHeight) + 'px';
+      ta.focus();
+    }
+    aviso('Pedido listo. Revisalo y tocá enviar.');
+  }
+
+  function editarApp(id) {
+    var app = buscarApp(id);
+    if (!app) return;
+    st.project = app.carpeta;
+    guardar('ank.ai.project', st.project);
+    var lista = chatsDe(st.project);
+    st.chatId = lista.length ? lista[0].id : '';
+    st.msgs = lista.length ? lista[0].msgs : [];
+    st.tab = 'chat';
+    pintar();
+    pintarMensajes();
+    var ta = q('.ank-ai-input');
+    if (ta) {
+      ta.value = 'Modificá la mini app "' + app.nombre + '" (carpeta ' + app.carpeta + '). ' +
+        'Mantené ankapp.json y la API ANK. Devolvé los archivos cambiados en bloques ank:archivo.';
+      ta.focus();
+    }
+  }
+
   function autoScroll() {
     var c = q('.ank-ai-msgs');
     if (!c) return;
@@ -1627,7 +2282,7 @@
           /* Sin TTY, opencode lee stdin hasta EOF antes de arrancar: con el tubo
              del ejecutor abierto se queda esperando para siempre. */
           ' < /dev/null 2>&1';
-        return escribir(rutaPrompt, texto + PROTOCOLO_ARCHIVO).then(function () {
+        return escribir(rutaPrompt, texto + PROTOCOLO_ARCHIVO + PROTOCOLO_APP).then(function () {
           log('i', 'Ejecutando opencode en ' + ws);
           return runner.start(acotar(env() + cmd), function (tipo, datos) {
             if (tipo === 'exit') {
@@ -2309,6 +2964,7 @@
     pintarLog();
     pintarChats();
     pintarVersion();
+    pintarApps();
     var enc = q('.ank-ai-hint-cred');
     if (enc) enc.style.display = st.credencial === 'listo' ? 'none' : 'block';
   }
@@ -2327,6 +2983,7 @@
           '<div class="ank-ai-title">ANK <b>IA</b></div>' +
           '<button class="ank-ai-tab active" data-tab="chat" data-accion="tab" data-valor="chat">Chat</button>' +
           '<button class="ank-ai-tab" data-tab="chats" data-accion="tab" data-valor="chats">Chats</button>' +
+          '<button class="ank-ai-tab" data-tab="apps" data-accion="tab" data-valor="apps">Apps</button>' +
           '<button class="ank-ai-tab" data-tab="entorno" data-accion="tab" data-valor="entorno">Entorno</button>' +
           '<button class="ank-ai-tab" data-tab="log" data-accion="tab" data-valor="log">Registro</button>' +
           '<div class="ank-ai-spacer"></div>' +
@@ -2363,6 +3020,15 @@
               '<button class="ank-ai-btn" data-accion="exportar" title="Exportar este chat a Markdown">Exportar</button>' +
             '</div>' +
             '<div class="ank-ai-chatlist"></div>' +
+          '</section>' +
+
+          '<section class="ank-ai-view" data-view="apps">' +
+            '<div class="ank-ai-appbar">' +
+              '<button class="ank-ai-btn primary" data-accion="nueva-app">Crear app</button>' +
+              '<button class="ank-ai-btn" data-accion="refrescar-apps" title="Volver a buscar ankapp.json en los proyectos">Actualizar</button>' +
+              '<button class="ank-ai-btn" data-accion="ayuda-apps" title="Cómo se crean y qué pueden hacer las mini apps">Ayuda</button>' +
+            '</div>' +
+            '<div class="ank-ai-applist"></div>' +
           '</section>' +
 
           '<section class="ank-ai-view" data-view="entorno">' +
@@ -2616,6 +3282,7 @@
       case 'tab':
         st.tab = t.getAttribute('data-valor') || 'chat';
         pintar();
+        if (st.tab === 'apps') cargarApps();
         break;
       case 'enviar':
         if (st.corriendo) detener(); else enviar();
@@ -2686,6 +3353,19 @@
         break;
       case 'abrir-carpeta':
         abrirCarpeta();
+        break;
+      case 'abrir-app': abrirApp(t.getAttribute('data-valor')); break;
+      case 'editar-app': editarApp(t.getAttribute('data-valor')); break;
+      case 'cerrar-app': cerrarApp(); break;
+      case 'ayuda-apps': abrirAyudaApps(); break;
+      case 'cerrar-ayuda-apps': cerrarAyudaApps(); break;
+      case 'copiar-ayuda': copiarAyuda(t.getAttribute('data-valor')); break;
+      case 'nueva-app': abrirNuevaApp(); break;
+      case 'cerrar-nueva-app': cerrarNuevaApp(); break;
+      case 'preparar-app': prepararPedidoApp(); break;
+      case 'refrescar-apps': cargarApps(); break;
+      case 'permiso-si': case 'permiso-no':
+        responderPermiso(t.getAttribute('data-valor'), accion === 'permiso-si');
         break;
     }
   }
@@ -2814,6 +3494,9 @@
     cargarChats();
     engancharErrores();
     document.addEventListener('ank-upd', marcarActualizacion);
+    window.addEventListener('message', atenderApp);
+    /* Descubre las mini apps existentes sin esperar a que se abra la pestaña. */
+    setTimeout(function () { cargarApps(); }, 2500);
     engancharMenu();
     dirsIniciales()
       .then(function () { return asegurarMemoria(st.project); })

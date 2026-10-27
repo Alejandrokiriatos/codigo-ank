@@ -1,7 +1,7 @@
 {
-  "web": "1.6.2",
+  "web": "1.7.0",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Si una respuesta falla: Reintentar o Probar otro modelo · buscador de chats · exportar la conversación a Markdown · resumen automático de memoria · el asistente propone archivos con diff y botones Aplicar/Descartar (con respaldo .bak) · Diagnóstico para compartir · el cartel de novedades ahora se mantiene visible y hay un botón Novedades en Registro · la app busca actualizaciones cada 30 minutos",
-  "sig": "f1830a6502318347d4f6972e4528cc98f879bc995123360c9b2cb8bb42f4ec8f"
+  "notas": "Nuevo: mini apps dentro de ANK. Pedile al asistente una app (pestaña Apps -> Crear app) y la crea con ankapp.json, HTML, CSS y JS; se ejecuta aislada con la API ANK (almacenamiento propio, notificaciones, camara, archivos, compartir, portapapeles y vibracion) y permisos con consentimiento por app. Incluye ventana de Ayuda en espanol con ejemplos copiables, lanzador con Abrir/Editar y reglas automaticas para que la IA genere mini apps validas",
+  "sig": "5c0a1e32bb568ea970526ed710055830c1f4997a7628033e56a6ff10776a4ab0"
 }

@@ -1178,3 +1178,337 @@
   padding: 8px 10px;
   border-top: 1px solid #1c2a2c;
 }
+
+/* ---------- mini apps ---------- */
+.ank-ai-appbar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1c2a2c;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.ank-ai-appbar .ank-ai-btn {
+  flex: 1 1 auto;
+}
+
+.ank-ai-applist {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+
+.ank-app-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #111b1d;
+  border: 1px solid #1e2c2e;
+}
+
+.ank-app-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: #0a1213;
+  border: 1px solid #26363a;
+}
+
+.ank-app-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ank-app-name {
+  font-size: 13.5px;
+  color: #e7e0d2;
+  font-weight: 600;
+}
+
+.ank-app-desc {
+  font-size: 11.5px;
+  color: #8e8778;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+.ank-app-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.ank-app-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8e8778;
+  border: 1px solid #26363a;
+  padding: 1px 5px;
+}
+
+.ank-app-acc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ank-app-acc .ank-ai-act {
+  min-width: 66px;
+}
+
+/* runner */
+#ank-app-run {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483644;
+  display: none;
+  flex-direction: column;
+  background: #0f1618;
+}
+
+#ank-app-run.open {
+  display: flex;
+}
+
+.ank-app-runbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 10px;
+  background: #111b1d;
+  border-bottom: 1px solid #2c3e41;
+  flex: 0 0 auto;
+}
+
+.ank-app-runname {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: #e7e0d2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ank-app-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: #ffffff;
+}
+
+/* permisos */
+#ank-app-perm,
+#ank-app-new {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 7, 0.72);
+}
+
+#ank-app-perm.open,
+#ank-app-new.open {
+  display: flex;
+}
+
+.ank-app-perm-box,
+.ank-app-new-box {
+  width: 100%;
+  max-width: 360px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #0f1618;
+  color: #e7e0d2;
+  border: 1px solid #2c3e41;
+  padding: 16px;
+}
+
+.ank-app-perm-head,
+.ank-app-new-head {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e0a458;
+  margin-bottom: 10px;
+}
+
+.ank-app-perm-txt {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cfc8b8;
+}
+
+.ank-app-perm-acc,
+.ank-app-new-acc {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.ank-app-new-lbl {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8e8778;
+  margin: 10px 0 4px;
+}
+
+.ank-app-new-nombre,
+.ank-app-new-idea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0a1213;
+  border: 1px solid #26363a;
+  color: #e7e0d2;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.ank-app-new-perms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: #cfc8b8;
+}
+
+.ank-app-new-perms label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ank-app-new-hint {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8e8778;
+}
+
+/* ayuda */
+#ank-app-help {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 7, 7, 0.78);
+}
+
+#ank-app-help.open {
+  display: flex;
+}
+
+.ank-help-box {
+  width: 100%;
+  max-width: 420px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #0f1618;
+  color: #e7e0d2;
+  border: 1px solid #2c3e41;
+}
+
+.ank-help-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #111b1d;
+  border-bottom: 1px solid #2c3e41;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e0a458;
+}
+
+.ank-help-head span {
+  flex: 1 1 auto;
+}
+
+.ank-help-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ank-help-lead {
+  color: #cfc8b8;
+  margin: 0 0 12px;
+}
+
+.ank-help-sec {
+  border-top: 1px solid #1c2a2c;
+  padding: 8px 0;
+}
+
+.ank-help-sec summary {
+  cursor: pointer;
+  color: #e0a458;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+.ank-help-body {
+  padding: 8px 0 2px;
+  color: #cfc8b8;
+}
+
+.ank-help-body p {
+  margin: 0 0 8px;
+}
+
+.ank-help-body code {
+  background: #0a1213;
+  border: 1px solid #26363a;
+  padding: 0 3px;
+  font-size: 11.5px;
+}
+
+.ank-help-pre {
+  margin: 8px 0;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  background: #0a1213;
+  border: 1px solid #1c2a2c;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+  color: #cfc8b8;
+}
+
+.ank-help-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ank-help-list li {
+  margin-bottom: 4px;
+}
