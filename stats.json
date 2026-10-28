@@ -1,18 +1,23 @@
 {
-  "actualizado": "2026-10-27T23:47:46Z",
+  "actualizado": "2026-10-28T09:40:25Z",
   "proyecto": "Código ANK",
   "repo": "Alejandrokiriatos/codigo-ank",
-  "instalaciones": 0,
-  "activosHoy": 0,
-  "activosMes": 0,
+  "instalaciones": 3,
+  "activosHoy": 3,
+  "activosMes": 3,
   "mes": "2026-10",
-  "promedio7": 0,
-  "diasConDatos": 1,
+  "promedio7": 2,
+  "diasConDatos": 2,
   "historial": [
     {
       "fecha": "2026-10-27",
       "activos": 0,
       "instalaciones": 0
+    },
+    {
+      "fecha": "2026-10-28",
+      "activos": 3,
+      "instalaciones": 3
     }
   ],
   "notas": "Instalaciones = equipos que abrieron la app al menos una vez. Activos = avisos por día y por mes (un aviso por equipo y período). Sin datos personales; el equipo puede desactivarlo en Entorno → Usuarios."
