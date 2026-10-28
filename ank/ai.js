@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.7.4';
+  var PANEL_VERSION = '1.8.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -51,13 +51,21 @@
   var PROTOCOLO_APP = '\n\n[Mini apps de Código ANK]\n' +
     'Si el pedido es crear o modificar una app para el teléfono, generá una mini app:\n' +
     '- Va en una carpeta propia dentro del proyecto, con ankapp.json, index.html, style.css y app.js.\n' +
-    '- ankapp.json: {"id","nombre","version","descripcion","icono"(emoji),"permisos":[...],"inicio":"index.html","archivos":["style.css","app.js"]}.\n' +
+    '- ankapp.json: {"id","nombre","version","descripcion","icono"(emoji),"tipo":"mini"|"completa","permisos":[...],"inicio":"index.html","archivos":["style.css","app.js"]}.\n' +
     '- Permisos válidos: almacenamiento, notificaciones, camara, archivos, compartir, portapapeles, vibrar.\n' +
     '- Dentro de la app usá solo window.ANK: ANK.storage.get/set/remove/clear, ANK.notify(titulo,texto), ' +
     'ANK.share(texto), ANK.copy(texto), ANK.vibrate(ms), ANK.fs.list/read/write, ANK.pickFile({aceptar}), ANK.camera(), ANK.request(permiso).\n' +
     '- Nunca uses localStorage, cookies ni rutas absolutas: el almacenamiento va por ANK.storage.\n' +
     '- La app se ejecuta aislada en un iframe sin internet implícito; evitá dependencias externas.\n' +
-    '- Devolvé cada archivo en un bloque ank:archivo con la ruta relativa a la carpeta de la app.\n';
+    '- Devolvé cada archivo en un bloque ank:archivo con la ruta relativa a la carpeta de la app.\n' +
+    '\n[App completa]\n' +
+    'Si el pedido dice "app completa" o pide una aplicación de verdad (no una prueba), usá "tipo":"completa" y entregá una app terminada:\n' +
+    '- Varias pantallas con navegación propia: inicio, lista, detalle y ajustes (las que el pedido necesite).\n' +
+    '- Datos reales guardados con ANK.storage: alta, edición, borrado, búsqueda y totales. Nada de datos de ejemplo fijos.\n' +
+    '- Estados vacíos, confirmaciones, validaciones y mensajes de error claros.\n' +
+    '- Diseño propio y coherente: encabezado, tarjetas, botones grandes, tema oscuro, buen contraste y áreas táctiles de 44 px.\n' +
+    '- Sin marcadores de posición: nada de "TODO", "acá va tu código" ni "próximamente". Debe funcionar al aplicarla.\n' +
+    '- Archivos separados (index.html, style.css, app.js) y, si hace falta, más módulos declarados en "archivos".\n';
 
   /* ------------------------------------------------------------------ *
    * estado
@@ -1684,6 +1692,7 @@
       '  "version": "1.0.0",\n' +
       '  "descripcion": "Anota gastos por día y muestra el total",\n' +
       '  "icono": "💰",\n' +
+      '  "tipo": "completa",\n' +
       '  "permisos": ["almacenamiento", "notificaciones"],\n' +
       '  "inicio": "index.html"\n' +
       '}',
@@ -1730,6 +1739,7 @@
               descripcion: String(m.descripcion || ''),
               version: String(m.version || '1.0'),
               icono: String(m.icono || '📦'),
+              tipo: String(m.tipo || 'mini') === 'completa' ? 'completa' : 'mini',
               permisos: Array.isArray(m.permisos) ? m.permisos.map(String) : [],
               inicio: String(m.inicio || 'index.html'),
               archivos: Array.isArray(m.archivos) ? m.archivos.map(String) : []
@@ -1765,6 +1775,7 @@
       var permisos = a.permisos.length
         ? a.permisos.map(function (p) { return '<span class="ank-app-tag">' + esc(p) + '</span>'; }).join('')
         : '<span class="ank-app-tag">sin permisos</span>';
+      if (a.tipo === 'completa') permisos = '<span class="ank-app-tag full">completa</span>' + permisos;
       return '<div class="ank-app-card" data-app="' + esc(a.id) + '">' +
         '<div class="ank-app-icon">' + esc(a.icono) + '</div>' +
         '<div class="ank-app-info">' +
@@ -1775,6 +1786,7 @@
         '<div class="ank-app-acc">' +
           '<button type="button" class="ank-ai-act" data-accion="abrir-app" data-valor="' + esc(a.id) + '">Abrir</button>' +
           '<button type="button" class="ank-ai-act ghost" data-accion="editar-app" data-valor="' + esc(a.id) + '">Editar</button>' +
+          '<button type="button" class="ank-ai-act ghost" data-accion="exportar-app" data-valor="' + esc(a.id) + '" title="Generar una PWA instalable en el teléfono">Exportar</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -1814,24 +1826,45 @@
       '})();<\/script>';
   }
 
-  function abrirApp(id) {
-    var app = buscarApp(id);
-    if (!app) return aviso('No encontré esa app. Tocá Actualizar.');
+  /* Lee el inicio y todos los archivos declarados de la app. */
+  function fuentesApp(app) {
     var base = st.prefix + '/public/proyectos/' + app.carpeta + '/';
-    var nombres = app.archivos.length ? app.archivos.slice() : ['style.css', 'app.js'];
+    var nombres = (app.archivos || []).slice();
     if (nombres.indexOf('style.css') === -1) nombres.push('style.css');
     if (nombres.indexOf('app.js') === -1) nombres.push('app.js');
     nombres = nombres.filter(function (n) { return n && n !== app.inicio; });
-    var archivos = [app.inicio].concat(nombres);
-    Promise.all(archivos.map(function (n) {
+    var todos = [app.inicio].concat(nombres);
+    return Promise.all(todos.map(function (n) {
       return leerTexto(base + n).catch(function () { return ''; });
     })).then(function (t) {
-      var html = t[0] || '';
+      var mapa = {};
+      todos.forEach(function (n, i) { mapa[n] = t[i] || ''; });
+      return mapa;
+    });
+  }
+
+  /* Arma un único HTML con el CSS y los JS incrustados en orden. */
+  function armarHtml(app, mapa) {
+    var html = mapa[app.inicio] || '';
+    Object.keys(mapa).forEach(function (n) {
+      if (n === app.inicio) return;
+      var c = mapa[n];
+      if (!c || !String(c).trim()) return;
+      if (/\.css$/i.test(n)) {
+        html = inyectarBloque(html, 'head', '<style>' + c.replace(/<\/style>/gi, '<\\/style>') + '</style>');
+      } else if (/\.js$/i.test(n)) {
+        html = inyectarBloque(html, 'body', '<script>' + c.replace(/<\/script>/gi, '<\\/script>') + '<\/script>');
+      }
+    });
+    return html;
+  }
+
+  function abrirApp(id) {
+    var app = buscarApp(id);
+    if (!app) return aviso('No encontré esa app. Tocá Actualizar.');
+    fuentesApp(app).then(function (mapa) {
+      var html = armarHtml(app, mapa);
       if (!html.trim()) return aviso('La app no tiene ' + app.inicio + '.');
-      var css = t[nombres.indexOf('style.css') + 1] || '';
-      var js = t[nombres.indexOf('app.js') + 1] || '';
-      if (css.trim()) html = inyectarBloque(html, 'head', '<style>' + css.replace(/<\/style>/gi, '<\\/style>') + '</style>');
-      if (js.trim()) html = inyectarBloque(html, 'body', '<script>' + js.replace(/<\/script>/gi, '<\\/script>') + '<\/script>');
       html += scriptCliente(app);
       montarApp(app, html);
     }).catch(function (e) {
@@ -1868,6 +1901,265 @@
       el.classList.remove('open');
     }
     st.appActual = null;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * exportar una app como PWA (instalable en el teléfono)
+   * ------------------------------------------------------------------ */
+
+  /* Dentro de ANK la app habla con el panel por postMessage. Exportada corre
+     sola en el navegador, así que se le da la misma API apoyada en
+     localStorage, sin depender de ANK. */
+  function scriptIndependiente(app) {
+    var id = JSON.stringify('ank.app.' + app.id + '.');
+    return '<script>(function(){' +
+      'var P=' + id + ';' +
+      'function get(k){try{var v=localStorage.getItem(P+k);return v==null?null:JSON.parse(v);}catch(e){return null;}}' +
+      'function set(k,v){try{localStorage.setItem(P+k,JSON.stringify(v));return true;}catch(e){return false;}}' +
+      'function no(t){return Promise.reject(new Error(t));}' +
+      'function entrada(aceptar,captura){return new Promise(function(ok,mal){' +
+        'var i=document.createElement("input");i.type="file";if(aceptar)i.accept=aceptar;' +
+        'if(captura)i.setAttribute("capture","environment");' +
+        'i.onchange=function(){var f=i.files&&i.files[0];if(!f)return mal(new Error("sin archivo"));' +
+        'if(/^(image|text|application\/json)/.test(f.type)){var r=new FileReader();' +
+        'r.onload=function(){ok(captura?String(r.result):String(r.result));};' +
+        'r.onerror=function(){mal(new Error("no se pudo leer"));};' +
+        'if(captura)r.readAsDataURL(f);else r.readAsText(f);}else ok(f);};' +
+        'i.click();});}' +
+      'window.ANK={version:"1.0",app:' + JSON.stringify({ id: app.id, nombre: app.nombre, version: app.version }) + ',' +
+      'storage:{get:function(k){return Promise.resolve(get(k));},set:function(k,v){return Promise.resolve(set(k,v));},' +
+      'remove:function(k){try{localStorage.removeItem(P+k);}catch(e){}return Promise.resolve(true);},' +
+      'clear:function(){try{Object.keys(localStorage).forEach(function(k){if(k.indexOf(P)===0)localStorage.removeItem(k);});}catch(e){}return Promise.resolve(true);}},' +
+      'notify:function(t,x){try{if(window.Notification&&Notification.permission==="granted")new Notification(String(t||""),{body:String(x||"")});else window.alert(String(t||"")+(x?"\\n"+x:""));}catch(e){}return Promise.resolve(true);},' +
+      'share:function(t){if(navigator.share)return navigator.share({text:String(t||"")});return no("compartir no disponible");},' +
+      'copy:function(t){if(navigator.clipboard)return navigator.clipboard.writeText(String(t||""));return no("portapapeles no disponible");},' +
+      'vibrate:function(ms){if(navigator.vibrate)navigator.vibrate(Number(ms)||100);return Promise.resolve(true);},' +
+      'fs:{list:function(){return Promise.resolve([]);},read:function(){return no("solo dentro de ANK");},write:function(){return no("solo dentro de ANK");}},' +
+      'pickFile:function(o){return entrada(o&&o.aceptar,false);},' +
+      'camera:function(){return entrada("image/*",true);},' +
+      'request:function(){return Promise.resolve(true);}};' +
+      '})();<\/script>';
+  }
+
+  function utf8Bytes(texto) {
+    var s = String(texto == null ? '' : texto);
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s);
+    var esc = unescape(encodeURIComponent(s));
+    var u = new Uint8Array(esc.length);
+    for (var i = 0; i < esc.length; i++) u[i] = esc.charCodeAt(i);
+    return u;
+  }
+
+  var CRC_TABLA = null;
+  function crc32(u8) {
+    if (!CRC_TABLA) {
+      CRC_TABLA = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+        CRC_TABLA[n] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < u8.length; i++) crc = CRC_TABLA[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  /* ZIP sin compresión (método 0): alcanza para HTML, CSS y JS. */
+  function zipBytes(archivos) {
+    var partes = [];
+    var central = [];
+    var offset = 0;
+    archivos.forEach(function (a) {
+      var nombre = utf8Bytes(a.nombre);
+      var datos = a.datos;
+      var crc = crc32(datos);
+      var cab = new Uint8Array(30 + nombre.length);
+      var v = new DataView(cab.buffer);
+      v.setUint32(0, 0x04034b50, true);
+      v.setUint16(4, 20, true);
+      v.setUint16(6, 0x0800, true);
+      v.setUint16(8, 0, true);
+      v.setUint16(10, 0, true);
+      v.setUint16(12, 0x21, true);
+      v.setUint32(14, crc, true);
+      v.setUint32(18, datos.length, true);
+      v.setUint32(22, datos.length, true);
+      v.setUint16(26, nombre.length, true);
+      v.setUint16(28, 0, true);
+      cab.set(nombre, 30);
+      partes.push(cab, datos);
+
+      var cen = new Uint8Array(46 + nombre.length);
+      var w = new DataView(cen.buffer);
+      w.setUint32(0, 0x02014b50, true);
+      w.setUint16(4, 20, true);
+      w.setUint16(6, 20, true);
+      w.setUint16(8, 0x0800, true);
+      w.setUint16(10, 0, true);
+      w.setUint16(12, 0, true);
+      w.setUint16(14, 0x21, true);
+      w.setUint32(16, crc, true);
+      w.setUint32(20, datos.length, true);
+      w.setUint32(24, datos.length, true);
+      w.setUint16(28, nombre.length, true);
+      w.setUint32(42, offset, true);
+      cen.set(nombre, 46);
+      central.push(cen);
+      offset += cab.length + datos.length;
+    });
+
+    var tamCentral = 0;
+    central.forEach(function (c) { tamCentral += c.length; });
+    var fin = new Uint8Array(22);
+    var f = new DataView(fin.buffer);
+    f.setUint32(0, 0x06054b50, true);
+    f.setUint16(8, archivos.length, true);
+    f.setUint16(10, archivos.length, true);
+    f.setUint32(12, tamCentral, true);
+    f.setUint32(16, offset, true);
+
+    var total = offset + tamCentral + 22;
+    var salida = new Uint8Array(total);
+    var pos = 0;
+    partes.concat(central, [fin]).forEach(function (b) {
+      salida.set(b, pos);
+      pos += b.length;
+    });
+    return salida;
+  }
+
+  function base64Bytes(u8) {
+    var s = '';
+    for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    return btoa(s);
+  }
+
+  function manifiestoApp(app) {
+    return JSON.stringify({
+      name: app.nombre,
+      short_name: app.nombre.slice(0, 12),
+      description: app.descripcion || 'App creada con Código ANK',
+      start_url: './',
+      scope: './',
+      display: 'standalone',
+      orientation: 'any',
+      background_color: '#0f1618',
+      theme_color: '#0f1618',
+      lang: 'es',
+      icons: [
+        { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+      ]
+    }, null, 2) + '\n';
+  }
+
+  function iconoApp(app) {
+    var letra = String(app.nombre || 'A').trim().charAt(0).toUpperCase();
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">' +
+      '<rect width="512" height="512" rx="96" fill="#0f1618"/>' +
+      '<text x="256" y="332" font-family="system-ui,sans-serif" font-size="260" font-weight="700" ' +
+      'text-anchor="middle" fill="#e0a458">' + esc(letra) + '</text></svg>\n';
+  }
+
+  function trabajadorApp(app) {
+    var v = String(app.version || '1');
+    return "var CACHE = 'ank-" + app.id + "-" + v + "';\n" +
+      "self.addEventListener('install', function (e) {\n" +
+      "  e.waitUntil(caches.open(CACHE).then(function (c) {\n" +
+      "    return c.addAll(['./', 'index.html', 'manifest.webmanifest', 'icon.svg']).catch(function () {});\n" +
+      "  }).then(function () { return self.skipWaiting(); }));\n" +
+      "});\n" +
+      "self.addEventListener('activate', function (e) {\n" +
+      "  e.waitUntil(caches.keys().then(function (ks) {\n" +
+      "    return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));\n" +
+      "  }).then(function () { return self.clients.claim(); }));\n" +
+      "});\n" +
+      "self.addEventListener('fetch', function (e) {\n" +
+      "  if (e.request.method !== 'GET') return;\n" +
+      "  e.respondWith(caches.match(e.request).then(function (r) {\n" +
+      "    return r || fetch(e.request).then(function (res) {\n" +
+      "      var copia = res.clone();\n" +
+      "      caches.open(CACHE).then(function (c) { c.put(e.request, copia); });\n" +
+      "      return res;\n" +
+      "    }).catch(function () { return caches.match('index.html'); });\n" +
+      "  }));\n" +
+      "});\n";
+  }
+
+  function leemeApp(app) {
+    return '# ' + app.nombre + '\n\n' +
+      'App creada con Código ANK y exportada como PWA (aplicación web instalable).\n\n' +
+      '## Probarla en el teléfono\n\n' +
+      '1. Copiá esta carpeta a un servidor con HTTPS o a GitHub Pages.\n' +
+      '2. Abrí la dirección en Chrome.\n' +
+      '3. Menú ⋮ → «Instalar aplicación» / «Agregar a pantalla principal».\n\n' +
+      '## Publicarla con GitHub Pages\n\n' +
+      '1. Creá un repositorio y subí el contenido de esta carpeta a la raíz.\n' +
+      '2. En el repositorio: Settings → Pages → Branch: main / carpeta raíz.\n' +
+      '3. Esperá un minuto y abrí la dirección `https://USUARIO.github.io/REPO/`.\n' +
+      '4. En Chrome, instalá la app. Queda con su ícono y abre sin ANK.\n\n' +
+      '## Qué incluye\n\n' +
+      '- `index.html`: toda la app en un archivo (HTML, CSS y JS incrustados).\n' +
+      '- `manifest.webmanifest`: nombre, colores e ícono para instalarla.\n' +
+      '- `sw.js`: copia local para que abra sin internet.\n' +
+      '- `icon.svg`: ícono generado a partir del nombre.\n\n' +
+      'Los datos se guardan en el navegador de la app instalada (`localStorage`).\n' +
+      'Si borrás los datos del sitio, se borran; no se sincronizan con ANK.\n';
+  }
+
+  /* Escribe export/ dentro de la app con todo lo necesario y arma el ZIP. */
+  function exportarApp(id) {
+    var app = buscarApp(id);
+    if (!app) return aviso('No encontré esa app. Tocá Actualizar.');
+    var carpeta = '/public/proyectos/' + app.carpeta;
+    var base = st.prefix + carpeta;
+    aviso('Preparando la exportación…');
+    return fuentesApp(app).then(function (mapa) {
+      var html = armarHtml(app, mapa);
+      if (!html.trim()) throw new Error('la app no tiene ' + app.inicio);
+      var manifiesto = manifiestoApp(app);
+      var trabajo = trabajadorApp(app);
+      var icono = iconoApp(app);
+      var leeme = leemeApp(app);
+      var cabecera = '<link rel="manifest" href="manifest.webmanifest" />' +
+        '<meta name="theme-color" content="#0f1618" />' +
+        '<meta name="mobile-web-app-capable" content="yes" />' +
+        '<meta name="apple-mobile-web-app-capable" content="yes" />' +
+        '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />' +
+        '<link rel="icon" href="icon.svg" type="image/svg+xml" />';
+      html = inyectarBloque(html, 'head', cabecera);
+      html = inyectarBloque(html, 'body',
+        '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){' +
+        'navigator.serviceWorker.register("sw.js").catch(function(){});});}<\/script>');
+      html += scriptIndependiente(app);
+
+      var archivos = [
+        { nombre: 'index.html', texto: html },
+        { nombre: 'manifest.webmanifest', texto: manifiesto },
+        { nombre: 'sw.js', texto: trabajo },
+        { nombre: 'icon.svg', texto: icono },
+        { nombre: 'LEEME.md', texto: leeme }
+      ];
+      return archivos.reduce(function (p, a) {
+        return p.then(function () { return escribir(base + '/export/' + a.nombre, a.texto); });
+      }, conSistema('mkdirs', base + '/export').catch(function () {})).then(function () {
+        var zip = zipBytes(archivos.map(function (a) {
+          return { nombre: a.nombre, datos: utf8Bytes(a.texto) };
+        }));
+        return escribir(base + '/export/app.zip.b64', base64Bytes(zip));
+      }).then(function () {
+        return shell('cd ' + shq(carpeta + '/export') + ' && base64 -d app.zip.b64 > app.zip && rm -f app.zip.b64', true);
+      }).then(function () {
+        aviso('App exportada en ' + carpeta + '/export (index.html, manifest, sw.js, icono y app.zip).');
+        log('i', 'Exportada ' + app.nombre + ' en ' + carpeta + '/export');
+        return true;
+      });
+    }).catch(function (e) {
+      aviso('No se pudo exportar: ' + (e && e.message ? e.message : e));
+      log('e', 'Exportar app ' + app.id + ': ' + (e && e.message ? e.message : e));
+      return false;
+    });
   }
 
   function datosApp(app) {
@@ -2108,8 +2400,19 @@
       '</details>';
     }
     return [
-      '<p class="ank-help-lead">Una <b>mini app</b> es una aplicación que vive dentro de Código ANK. ' +
-        'No es un APK: se guarda en una carpeta del proyecto y se ejecuta aislada, con acceso solo a sus propios archivos.</p>',
+      '<p class="ank-help-lead">Una <b>app</b> vive dentro de Código ANK: se guarda en una carpeta del proyecto ' +
+        'y se ejecuta aislada, con acceso solo a sus propios archivos. Hay dos tamaños: <b>mini app</b> ' +
+        '(una pantalla, para algo rápido) y <b>app completa</b> (varias pantallas, datos guardados y lista ' +
+        'para exportarse e instalarse en el teléfono).</p>',
+
+      bloque('completa', '0. App completa o mini app',
+        '<p><b>App completa</b> es la opción que viene marcada al crear: la IA arma navegación entre pantallas, ' +
+        'alta/edición/borrado de datos, estados vacíos y diseño propio. Está pensada para usarse de verdad.</p>' +
+        '<p><b>Mini app</b> es una sola pantalla: sirve para una calculadora, un contador o una nota rápida.</p>' +
+        '<p>En los dos casos podés <b>Exportar</b> la app desde la pestaña Apps. Se genera una carpeta ' +
+        '<code>export/</code> con la app entera en un HTML, el manifiesto, el ícono y un <code>app.zip</code>. ' +
+        'Subida a GitHub Pages (o cualquier servidor con HTTPS) se instala en Chrome con ' +
+        '«Agregar a pantalla principal» y abre con su propio ícono, sin ANK.</p>'),
 
       bloque('pedir', '1. Cómo pedírsela a la IA',
         '<p>Describí qué hace, para quién y qué datos guarda. Una idea por pedido.</p>' +
@@ -2142,15 +2445,18 @@
         '<pre class="ank-help-pre">' + esc(AYUDA_SNIPPETS.api) + '</pre>' +
         '<button type="button" class="ank-ai-btn" data-accion="copiar-ayuda" data-valor="api">Copiar la API</button>'),
 
-      bloque('probar', '5. Probar, instalar y editar',
+      bloque('probar', '5. Probar, exportar y editar',
         '<p>En <b>Apps</b> tocá <b>Abrir</b> para ejecutarla en pantalla completa. <b>Editar</b> abre el chat de esa carpeta ' +
         'con el pedido listo para cambiar lo que quieras.</p>' +
+        '<p><b>Exportar</b> deja en <code>proyectos/&lt;carpeta&gt;/export/</code> la app como PWA instalable: ' +
+        '<code>index.html</code>, <code>manifest.webmanifest</code>, <code>sw.js</code>, <code>icon.svg</code>, ' +
+        '<code>LEEME.md</code> y <code>app.zip</code>.</p>' +
         '<p>Toda carpeta con un <code>ankapp.json</code> válido aparece sola en la lista. No hay que instalar nada aparte.</p>'),
 
       bloque('limites', '6. Límites que conviene saber',
         '<ul class="ank-help-list">' +
           '<li>No corre en segundo plano ni con la app cerrada (salvo una notificación ya programada).</li>' +
-          '<li>No se publica en Play Store ni se instala como app independiente.</li>' +
+          '<li>Dentro de ANK no se instala como app aparte; para eso usá <b>Exportar</b> y publicala con HTTPS.</li>' +
           '<li>Las imágenes deben ser emoji, dataURL o archivos de su propia carpeta.</li>' +
           '<li>Sin internet, la app funciona solo con lo que tenga guardado.</li>' +
           '<li>Si borrás la carpeta, se borra la app y sus datos.</li>' +
@@ -2213,11 +2519,15 @@
     var permisos = ['almacenamiento', 'archivos', 'camara', 'notificaciones', 'compartir', 'portapapeles', 'vibrar'];
     el.innerHTML =
       '<div class="ank-app-new-box">' +
-        '<div class="ank-app-new-head">Crear una mini app</div>' +
+        '<div class="ank-app-new-head">Crear una app</div>' +
         '<label class="ank-app-new-lbl">Nombre</label>' +
         '<input class="ank-app-new-nombre" type="text" placeholder="Gastos" autocomplete="off" />' +
         '<label class="ank-app-new-lbl">¿Qué hace?</label>' +
-        '<textarea class="ank-app-new-idea" rows="3" placeholder="Anotar gastos por día y mostrar el total"></textarea>' +
+        '<textarea class="ank-app-new-idea" rows="4" placeholder="Anotar gastos por día, ver el total del mes y guardar todo en el teléfono"></textarea>' +
+        '<label class="ank-app-new-type">' +
+          '<input type="checkbox" id="ank-app-new-completa" checked /> ' +
+          '<span>App completa<em>Varias pantallas, datos guardados y lista para instalarse en el teléfono.</em></span>' +
+        '</label>' +
         '<label class="ank-app-new-lbl">Permisos</label>' +
         '<div class="ank-app-new-perms">' + permisos.map(function (p) {
           return '<label><input type="checkbox" data-perm="' + p + '"' +
@@ -2245,6 +2555,8 @@
       aviso('Completá el nombre y qué hace la app.');
       return;
     }
+    var casilla = q('#ank-app-new-completa');
+    var completa = !casilla || casilla.checked;
     var carpeta = slugApp(nombre);
     var marcados = document.querySelectorAll('#ank-app-new [data-perm]');
     var permisos = [];
@@ -2257,14 +2569,35 @@
     st.msgs = [];
     st.tab = 'chat';
     asegurarMemoria(carpeta);
-    var pedido = 'Creá una mini app de Código ANK llamada "' + nombre + '".\n' +
-      'Qué hace: ' + idea + '\n' +
-      'Carpeta del proyecto: ' + carpeta + '\n' +
-      'Permisos: ' + (permisos.length ? permisos.join(', ') : 'ninguno') + '\n' +
-      'Archivos: ankapp.json, index.html, style.css y app.js (podés usar todo inline).\n' +
-      'Usá la API window.ANK (ANK.storage, ANK.notify, ANK.camera, ANK.pickFile, ANK.fs, ' +
-      'ANK.share, ANK.copy, ANK.vibrate). No uses localStorage directo.\n' +
-      'Devolvé cada archivo en un bloque ank:archivo con la ruta relativa.';
+    var pedido;
+    if (completa) {
+      pedido = 'Creá una app completa de Código ANK llamada "' + nombre + '".\n' +
+        'Qué hace: ' + idea + '\n' +
+        'Carpeta del proyecto: ' + carpeta + '\n' +
+        'Permisos: ' + (permisos.length ? permisos.join(', ') : 'ninguno') + '\n\n' +
+        'Quiero una app terminada, no una maqueta:\n' +
+        '- Varias pantallas con navegación propia (por ejemplo inicio, lista, detalle y ajustes), ' +
+        'con botón para volver y estado de la sección actual.\n' +
+        '- Datos reales guardados con ANK.storage: crear, editar, borrar, buscar y totales. ' +
+        'Que se conserven al cerrar y reabrir.\n' +
+        '- Estados vacíos con un texto que explique qué hacer, validaciones y confirmaciones antes de borrar.\n' +
+        '- Diseño propio y coherente, tema oscuro, botones grandes (44 px), buen contraste y nada de texto de relleno.\n' +
+        '- Sin "TODO", sin "próximamente" y sin datos de ejemplo fijos: que funcione apenas se aplique.\n' +
+        '- Archivos: ankapp.json (con "tipo":"completa"), index.html, style.css y app.js. ' +
+        'Si necesitás más archivos, declaralos en "archivos".\n\n' +
+        'Usá la API window.ANK (ANK.storage, ANK.notify, ANK.camera, ANK.pickFile, ANK.fs, ' +
+        'ANK.share, ANK.copy, ANK.vibrate). No uses localStorage directo.\n' +
+        'Devolvé cada archivo en un bloque ank:archivo con la ruta relativa.';
+    } else {
+      pedido = 'Creá una mini app de Código ANK llamada "' + nombre + '".\n' +
+        'Qué hace: ' + idea + '\n' +
+        'Carpeta del proyecto: ' + carpeta + '\n' +
+        'Permisos: ' + (permisos.length ? permisos.join(', ') : 'ninguno') + '\n' +
+        'Archivos: ankapp.json, index.html, style.css y app.js (podés usar todo inline).\n' +
+        'Usá la API window.ANK (ANK.storage, ANK.notify, ANK.camera, ANK.pickFile, ANK.fs, ' +
+        'ANK.share, ANK.copy, ANK.vibrate). No uses localStorage directo.\n' +
+        'Devolvé cada archivo en un bloque ank:archivo con la ruta relativa.';
+    }
     cerrarNuevaApp();
     pintar();
     pintarMensajes();
@@ -2291,8 +2624,10 @@
     pintarMensajes();
     var ta = q('.ank-ai-input');
     if (ta) {
-      ta.value = 'Modificá la mini app "' + app.nombre + '" (carpeta ' + app.carpeta + '). ' +
-        'Mantené ankapp.json y la API ANK. Devolvé los archivos cambiados en bloques ank:archivo.';
+      ta.value = 'Modificá la ' + (app.tipo === 'completa' ? 'app completa' : 'mini app') +
+        ' "' + app.nombre + '" (carpeta ' + app.carpeta + '). ' +
+        'Mantené ankapp.json, el tipo "' + app.tipo + '" y la API ANK. ' +
+        'Devolvé los archivos cambiados en bloques ank:archivo.';
       ta.focus();
     }
   }
@@ -3707,6 +4042,7 @@
         break;
       case 'abrir-app': abrirApp(t.getAttribute('data-valor')); break;
       case 'editar-app': editarApp(t.getAttribute('data-valor')); break;
+      case 'exportar-app': exportarApp(t.getAttribute('data-valor')); break;
       case 'stats-refrescar': leerEstadisticas(true); break;
       case 'stats-compartir': compartirEstadisticas(); break;
       case 'abrir-canal': abrirUrl('https://t.me/codigoank'); break;

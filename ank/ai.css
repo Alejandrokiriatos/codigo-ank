@@ -1787,3 +1787,36 @@
 .ank-ai-work-line.err {
   color: #d98a6a;
 }
+
+/* ---------- apps completas ---------- */
+.ank-app-tag.full {
+  color: #e0a458;
+  border-color: #6b5227;
+  background: rgba(224, 164, 88, 0.08);
+}
+
+.ank-app-new-type {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 4px;
+  padding: 9px 10px;
+  border: 1px solid #2c3e41;
+  background: #0b1415;
+  font-size: 13px;
+  color: #e7e0d2;
+  cursor: pointer;
+}
+
+.ank-app-new-type input {
+  margin-top: 2px;
+}
+
+.ank-app-new-type em {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #8e8778;
+}

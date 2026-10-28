@@ -1,7 +1,7 @@
 {
-  "web": "1.7.4",
+  "web": "1.8.0",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Chat mas limpio: los pasos intermedios del asistente (leer, escribir, ejecutar, avisos) ya no llenan la conversacion. Aparece una sola linea con lo que esta haciendo, con un punto dorado mientras trabaja, y una flecha para desplegar todo el detalle. Al terminar resume cuantos pasos hizo. El bloque se guarda con el chat",
-  "sig": "eee4768be2a1b682dccf150c3e9aa87ea3797c5cfd7fdf539c1a24b294721275"
+  "notas": "Apps completas: al crear una app la IA entrega varias pantallas, navegacion, datos guardados y diseno terminado, no una maqueta. Nuevo boton Exportar que deja en export/ la app como PWA instalable (index.html, manifest, service worker, icono, LEEME y app.zip) para publicarla con HTTPS e instalarla en Chrome. ankapp.json acepta tipo completa y el runner incrusta todos los CSS y JS declarados",
+  "sig": "ae01c06e14b5518d06e5b7fd2831bb68ffd5eac848e24832d39f6f98033f0ca6"
 }
