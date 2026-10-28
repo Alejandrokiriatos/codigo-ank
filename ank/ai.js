@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.8.0';
+  var PANEL_VERSION = '1.8.1';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -66,6 +66,14 @@
     '- Diseño propio y coherente: encabezado, tarjetas, botones grandes, tema oscuro, buen contraste y áreas táctiles de 44 px.\n' +
     '- Sin marcadores de posición: nada de "TODO", "acá va tu código" ni "próximamente". Debe funcionar al aplicarla.\n' +
     '- Archivos separados (index.html, style.css, app.js) y, si hace falta, más módulos declarados en "archivos".\n';
+
+  /* La memoria del proyecto y su bitácora son contexto interno: se leen, no
+     se muestran. */
+  var PROTOCOLO_CONTEXTO = '\n\n[Contexto y memoria]\n' +
+    'El AGENTS.md de la carpeta, su bitácora y el índice global son contexto interno tuyo.\n' +
+    '- Leelos si hace falta, en silencio, pero no copies ni resumas su contenido en la respuesta.\n' +
+    '- No enumeres qué archivos leíste ni narres los pasos previos: respondé con el resultado.\n' +
+    '- Si el usuario no preguntó por la memoria, no la menciones.\n';
 
   /* ------------------------------------------------------------------ *
    * estado
@@ -1167,6 +1175,26 @@
    * chat
    * ------------------------------------------------------------------ */
 
+  /* ¿La línea es parte de la memoria interna (AGENTS.md o su bitácora)? Se lee
+     para tener contexto, pero no se muestra en el hilo del chat. */
+  function esContexto(linea) {
+    var s = String(linea || '').trim();
+    if (!s) return false;
+    if (/^##\s*bit[áa]cora\b/i.test(s)) return true;
+    if (/^#\s*(proyecto:|memoria global de c[óo]digo ank)/i.test(s)) return true;
+    if (/^<!--\s*\/?\s*proyectos\s*-->$/i.test(s)) return true;
+    if (/^>\s*[áa]mbito:\s*solo este proyecto/i.test(s)) return true;
+    if (/^-\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+·/.test(s)) return true;
+    if (/^-\s*\(se anotan a medida/i.test(s)) return true;
+    return false;
+  }
+
+  function sinContexto(texto) {
+    return String(texto || '').split('\n').filter(function (l) {
+      return !esContexto(l);
+    }).join('\n');
+  }
+
   function nuevoMensaje(rol, texto) {
     var m = { rol: rol, texto: texto || '', crudo: '', ts: Date.now(), nodo: null };
     st.msgs.push(m);
@@ -1207,7 +1235,7 @@
     }
     d.innerHTML = '';
     if (m.acciones && m.acciones.length) d.appendChild(bloqueTrabajo(m.acciones, false));
-    var trozos = mdLite(m.texto || '');
+    var trozos = mdLite(sinContexto(m.texto || ''));
     if (!String(m.texto || '').trim()) {
       if (!(m.acciones && m.acciones.length)) {
         d.innerHTML = '<span class="ank-ai-tool">Sin respuesta del modelo.</span>';
@@ -1292,11 +1320,12 @@
   }
 
   function resumenAcciones(lista, error) {
-    var n = lista.length;
-    if (!n) return error ? 'No se pudo completar' : 'Trabajando…';
+    var reales = (lista || []).filter(function (a) { return a && !a.ctx; });
+    if (!reales.length) return error ? 'No se pudo completar' : 'Contexto leído';
+    var n = reales.length;
     if (error) return 'No se pudo completar · ' + n + (n === 1 ? ' paso' : ' pasos');
-    if (n === 1) return fraseAccion(lista[0].n, lista[0].d);
-    var ult = lista[n - 1];
+    if (n === 1) return fraseAccion(reales[0].n, reales[0].d);
+    var ult = reales[n - 1];
     return n + ' pasos · ' + fraseAccion(ult.n, ult.d);
   }
 
@@ -1368,6 +1397,15 @@
   }
 
   function escribirBot(texto) {
+    var bruto = String(texto == null ? '' : texto);
+    if (bruto.trim()) {
+      var limpio = sinContexto(bruto);
+      if (!limpio.trim()) {
+        notaTrabajo(bruto.trim());
+        return;
+      }
+      texto = limpio;
+    }
     if (!cur) abrirTurno();
     if (!cur.txt) {
       cur.txt = document.createElement('span');
@@ -1379,6 +1417,18 @@
     cur.txt.textContent = cur.buf;
     cur.msg.texto = cur.buf;
     autoScroll();
+  }
+
+  /* Una línea de contexto leída en segundo plano: queda en el detalle del
+     bloque de trabajo, nunca en el hilo del chat. */
+  function notaTrabajo(texto) {
+    if (!cur) return;
+    var acc = { n: '·', d: recortar(texto, 200), ctx: true };
+    cur.acciones.push(acc);
+    var cuerpo = cur.work && cur.work.querySelector('.ank-ai-work-body');
+    if (!cuerpo) return;
+    cuerpo.appendChild(lineaTrabajo(acc));
+    cuerpo.scrollTop = cuerpo.scrollHeight;
   }
 
   function herramienta(nombre, detalle) {
@@ -1401,8 +1451,7 @@
     if (cur.cursor && cur.cursor.parentNode) cur.cursor.remove();
     var pasos = cur.acciones ? cur.acciones.length : 0;
     if (cur.work) {
-      if (!pasos) {
-        cur.work.remove();
+      if (!pasos) {        cur.work.remove();
       } else {
         cur.work.classList.remove('live');
         var l = cur.work.querySelector('.ank-ai-work-label');
@@ -1416,7 +1465,9 @@
     if (!cur.buf.trim() && !error && !pasos) {
       cur.el.innerHTML = '<span class="ank-ai-tool">Sin respuesta del modelo.</span>';
     } else if (cur.txt) {
-      var trozos = mdLite(cur.bloque || cur.buf);
+      var limpio = sinContexto(cur.bloque || cur.buf);
+      cur.msg.texto = sinContexto(cur.buf);
+      var trozos = mdLite(limpio);
       var frag = document.createDocumentFragment();
       trozos.forEach(function (t) {
         if (t.tipo === 'codigo') {
@@ -2675,6 +2726,11 @@
       escribirBot('\n');
       return;
     }
+    /* La memoria y su bitácora se leen en segundo plano. */
+    if (esContexto(l)) {
+      notaTrabajo(l);
+      return;
+    }
     if (/^\s*(\$|>|┃|\||\[[a-z-]+\]|●|○|◆|◇|■|□|✓|✗|→|←|↑|↓)/.test(l)) {
       var nombre = l.replace(/^\s*[$>┃|]\s*/, '').trim();
       var partes = nombre.split(/\s+/);
@@ -2757,7 +2813,7 @@
           /* Sin TTY, opencode lee stdin hasta EOF antes de arrancar: con el tubo
              del ejecutor abierto se queda esperando para siempre. */
           ' < /dev/null 2>&1';
-        return escribir(rutaPrompt, texto + PROTOCOLO_ARCHIVO + PROTOCOLO_APP).then(function () {
+        return escribir(rutaPrompt, texto + PROTOCOLO_ARCHIVO + PROTOCOLO_APP + PROTOCOLO_CONTEXTO).then(function () {
           log('i', 'Ejecutando opencode en ' + ws);
           return runner.start(acotar(env() + cmd), function (tipo, datos) {
             if (tipo === 'exit') {

@@ -1,7 +1,7 @@
 {
-  "web": "1.8.0",
+  "web": "1.8.1",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Apps completas: al crear una app la IA entrega varias pantallas, navegacion, datos guardados y diseno terminado, no una maqueta. Nuevo boton Exportar que deja en export/ la app como PWA instalable (index.html, manifest, service worker, icono, LEEME y app.zip) para publicarla con HTTPS e instalarla en Chrome. ankapp.json acepta tipo completa y el runner incrusta todos los CSS y JS declarados",
-  "sig": "ae01c06e14b5518d06e5b7fd2831bb68ffd5eac848e24832d39f6f98033f0ca6"
+  "notas": "La memoria del proyecto y su bitacora se leen en segundo plano: ya no aparecen en el chat, quedan en el detalle plegado del bloque de trabajo. El asistente no enumera que archivos leyo ni repite la memoria; responde solo el resultado. Los chats viejos tambien se muestran limpios",
+  "sig": "838a794690dea37bc7c42c396023f5e5af49bdc2def51b6c429b251cb7b3debb"
 }
