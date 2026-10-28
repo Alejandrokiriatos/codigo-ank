@@ -1,7 +1,7 @@
 {
-  "web": "1.8.1",
+  "web": "1.8.2",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "La memoria del proyecto y su bitacora se leen en segundo plano: ya no aparecen en el chat, quedan en el detalle plegado del bloque de trabajo. El asistente no enumera que archivos leyo ni repite la memoria; responde solo el resultado. Los chats viejos tambien se muestran limpios",
-  "sig": "838a794690dea37bc7c42c396023f5e5af49bdc2def51b6c429b251cb7b3debb"
+  "notas": "La creacion de apps ya no se traba: mientras el modelo escribe el chat solo muestra texto y los archivos no se vuelcan en el hilo; al terminar aparecen las propuestas con Aplicar. Si el turno devuelve solo bloques ank:archivo ahora se renderiza. Avisa y no arranca un segundo proceso si se pide otra cosa con Enter mientras trabaja, ni al tocar Crear app o Editar. Los bloques de codigo de mas de 14 lineas quedan plegados",
+  "sig": "a5bc9c11efdf4acd1c1b055972a976d99fd75a156f2a99e409496f470edea1a2"
 }

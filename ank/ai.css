@@ -1820,3 +1820,41 @@
   line-height: 1.4;
   color: #8e8778;
 }
+
+/* bloques de código largos, plegados en el chat */
+.ank-ai-code {
+  margin: 8px 0;
+  border: 1px solid #1e2c2e;
+  background: #0c1315;
+}
+
+.ank-ai-code > summary {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: #e0a458;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ank-ai-code > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ank-ai-code > summary::before {
+  content: "› ";
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.ank-ai-code[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.ank-ai-code .ank-ai-pre,
+.ank-ai-msg .ank-ai-code .ank-ai-pre {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid #1e2c2e;
+  max-height: 320px;
+  overflow: auto;
+}

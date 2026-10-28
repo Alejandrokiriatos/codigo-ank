@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.8.1';
+  var PANEL_VERSION = '1.8.2';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -1226,6 +1226,41 @@
     return d;
   }
 
+  /* Un bloque de código largo no se vuelca entero en el chat: queda plegado
+     con la cantidad de líneas, para que la conversación siga legible. */
+  function nodoCodigo(texto) {
+    var lineas = String(texto == null ? '' : texto).split('\n').length;
+    var pre = document.createElement('pre');
+    pre.className = 'ank-ai-pre';
+    pre.textContent = texto;
+    if (lineas <= 14) return pre;
+    var det = document.createElement('details');
+    det.className = 'ank-ai-code';
+    var sum = document.createElement('summary');
+    sum.textContent = 'Ver código (' + lineas + ' líneas)';
+    det.appendChild(sum);
+    det.appendChild(pre);
+    return det;
+  }
+
+  /* Convierte los trozos de mdLite en nodos del mensaje. */
+  function nodoTrozos(trozos) {
+    var frag = document.createDocumentFragment();
+    trozos.forEach(function (t) {
+      if (t.tipo === 'codigo') {
+        frag.appendChild(nodoCodigo(t.texto));
+      } else if (t.tipo === 'archivo') {
+        frag.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else {
+        var sp = document.createElement('span');
+        sp.className = 'ank-ai-txt';
+        sp.innerHTML = t.html;
+        frag.appendChild(sp);
+      }
+    });
+    return frag;
+  }
+
   /* Pinta un mensaje ya guardado (sin animación ni cursor). */
   function pintarBurbuja(m) {
     var d = burbuja(m);
@@ -1244,10 +1279,7 @@
     }
     trozos.forEach(function (t) {
       if (t.tipo === 'codigo') {
-        var pre = document.createElement('pre');
-        pre.className = 'ank-ai-pre';
-        pre.textContent = t.texto;
-        d.appendChild(pre);
+        d.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         d.appendChild(bloqueArchivo(t.ruta, t.texto));
       } else {
@@ -1372,7 +1404,10 @@
       el: m.nodo,
       txt: null,
       buf: '',
+      visible: '',
       bloque: '',
+      enBloque: false,
+      bloqueRuta: '',
       acciones: [],
       work: bloqueTrabajo([], true),
       cursor: document.createElement('span')
@@ -1398,24 +1433,63 @@
 
   function escribirBot(texto) {
     var bruto = String(texto == null ? '' : texto);
+    if (!bruto) return;
     if (bruto.trim()) {
       var limpio = sinContexto(bruto);
       if (!limpio.trim()) {
         notaTrabajo(bruto.trim());
         return;
       }
-      texto = limpio;
+      bruto = limpio;
     }
     if (!cur) abrirTurno();
+    var i = 0;
+    while (i < bruto.length) {
+      var j = bruto.indexOf('\n', i);
+      var linea = j === -1 ? bruto.slice(i) : bruto.slice(i, j + 1);
+      i = j === -1 ? bruto.length : j + 1;
+      escribirLineaBot(linea);
+    }
+  }
+
+  /* Una línea del modelo. Mientras se está escribiendo un bloque de código no
+     se pinta: el chat solo muestra texto y, al cerrar el turno, el bloque
+     aparece plegado o como propuesta de archivo. */
+  function escribirLineaBot(linea) {
+    cur.buf += linea;
+    cur.bloque = (cur.bloque || '') + linea;
+    cur.msg.texto = cur.buf;
+
+    if (/^\s*```/.test(linea)) {
+      cur.enBloque = !cur.enBloque;
+      if (cur.enBloque) {
+        cur.bloqueRuta = '';
+        etiquetaTrabajo('Escribiendo código…', true);
+      } else {
+        cur.enBloque = false;
+        cur.bloqueRuta = '';
+        if (!cur.acciones || !cur.acciones.length) etiquetaTrabajo('Pensando…', true);
+      }
+      autoScroll();
+      return;
+    }
+
+    if (cur.enBloque) {
+      var m = /^ank:archivo\s+(.+)$/i.exec(linea.trim());
+      if (m) {
+        cur.bloqueRuta = m[1].trim();
+        etiquetaTrabajo('Preparando ' + recortar(cur.bloqueRuta, 40), true);
+      }
+      return;
+    }
+
+    cur.visible = (cur.visible || '') + linea;
     if (!cur.txt) {
       cur.txt = document.createElement('span');
       cur.txt.className = 'ank-ai-txt';
       cur.el.insertBefore(cur.txt, cur.cursor);
     }
-    cur.buf += texto;
-    cur.bloque = (cur.bloque || '') + texto;
-    cur.txt.textContent = cur.buf;
-    cur.msg.texto = cur.buf;
+    cur.txt.textContent = cur.visible;
     autoScroll();
   }
 
@@ -1433,8 +1507,12 @@
 
   function herramienta(nombre, detalle) {
     if (!cur) abrirTurno();
+    /* Lo ya escrito queda a la vista; lo que venga después va en un span
+       nuevo, para que el bloque de código no se mezcle con el texto. */
     cur.txt = null;
+    cur.visible = '';
     cur.bloque = '';
+    cur.enBloque = false;
     var acc = { n: String(nombre || ''), d: recortar(detalle, 160) };
     cur.acciones.push(acc);
     var cuerpo = cur.work && cur.work.querySelector('.ank-ai-work-body');
@@ -1464,28 +1542,17 @@
     }
     if (!cur.buf.trim() && !error && !pasos) {
       cur.el.innerHTML = '<span class="ank-ai-tool">Sin respuesta del modelo.</span>';
-    } else if (cur.txt) {
+    } else {
       var limpio = sinContexto(cur.bloque || cur.buf);
       cur.msg.texto = sinContexto(cur.buf);
-      var trozos = mdLite(limpio);
-      var frag = document.createDocumentFragment();
-      trozos.forEach(function (t) {
-        if (t.tipo === 'codigo') {
-          var pre = document.createElement('pre');
-          pre.className = 'ank-ai-pre';
-          pre.textContent = t.texto;
-          frag.appendChild(pre);
-        } else if (t.tipo === 'archivo') {
-          frag.appendChild(bloqueArchivo(t.ruta, t.texto));
-        } else {
-          var sp = document.createElement('span');
-          sp.className = 'ank-ai-txt';
-          sp.innerHTML = t.html;
-          frag.appendChild(sp);
-        }
-      });
-      cur.txt.parentNode.replaceChild(frag, cur.txt);
-      cur.txt = null;
+      if (cur.txt) {
+        cur.txt.parentNode.replaceChild(nodoTrozos(mdLite(limpio)), cur.txt);
+        cur.txt = null;
+      } else if (limpio.trim()) {
+        /* La respuesta fue solo código: no hay span de texto donde
+           reemplazar, así que se agrega al final de la burbuja. */
+        cur.el.appendChild(nodoTrozos(mdLite(limpio)));
+      }
     }
     if (error) {
       cur.el.classList.add('err');
@@ -2470,6 +2537,8 @@
         '<p><b>Bien:</b> «una app para anotar gastos por día, ver el total y guardar los datos en el teléfono».</p>' +
         '<p><b>Mal:</b> «hacé una app» (sin decir qué hace ni qué necesita).</p>' +
         '<p>La IA crea los archivos y el panel te muestra el <b>diff</b>: recién cuando tocás <b>Aplicar</b> se escriben.</p>' +
+        '<p>Mientras trabaja, esperá a que termine (o tocá <b>Detener</b>): no pidas otra app en el medio, ' +
+        'porque se mezclarían las dos.</p>' +
         '<button type="button" class="ank-ai-btn" data-accion="copiar-ayuda" data-valor="pedido">Copiar pedido de ejemplo</button>'),
 
       bloque('estructura', '2. Estructura de la app',
@@ -2600,6 +2669,10 @@
   }
 
   function prepararPedidoApp() {
+    if (st.corriendo) {
+      aviso('Todavía está trabajando. Esperá o tocá Detener.');
+      return;
+    }
     var nombre = String((q('.ank-app-new-nombre') || {}).value || '').trim();
     var idea = String((q('.ank-app-new-idea') || {}).value || '').trim();
     if (!nombre || !idea) {
@@ -2663,6 +2736,10 @@
   }
 
   function editarApp(id) {
+    if (st.corriendo) {
+      aviso('Todavía está trabajando. Esperá o tocá Detener.');
+      return;
+    }
     var app = buscarApp(id);
     if (!app) return;
     st.project = app.carpeta;
@@ -2741,7 +2818,10 @@
   }
 
   function enviar(forzado) {
-    if (st.corriendo) return;
+    if (st.corriendo) {
+      aviso('Todavía está trabajando. Esperá o tocá Detener.');
+      return;
+    }
     var ta = q('.ank-ai-input');
     var pedido = forzado && forzado.texto != null ? String(forzado.texto) : (ta ? String(ta.value || '') : '');
     var texto = pedido.trim();
