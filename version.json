@@ -1,7 +1,7 @@
 {
-  "web": "1.7.3",
+  "web": "1.7.4",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Entorno queda solo con lo necesario: pasos, proveedor, clave, modelo y carpeta. La consola y Probar asistente pasan a Registro. Comunidad (Canal y Grupo de Telegram), Usuarios, version del panel y Actualizar ANK ahora estan en Ajustes > Acerca de, para toda la app",
-  "sig": "5038a0f9d46b0b8f539610acc7443cf833878090d898cde473fb90c4d5d6c002"
+  "notas": "Chat mas limpio: los pasos intermedios del asistente (leer, escribir, ejecutar, avisos) ya no llenan la conversacion. Aparece una sola linea con lo que esta haciendo, con un punto dorado mientras trabaja, y una flecha para desplegar todo el detalle. Al terminar resume cuantos pasos hizo. El bloque se guarda con el chat",
+  "sig": "eee4768be2a1b682dccf150c3e9aa87ea3797c5cfd7fdf539c1a24b294721275"
 }

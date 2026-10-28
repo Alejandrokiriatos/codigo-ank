@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.7.3';
+  var PANEL_VERSION = '1.7.4';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -938,7 +938,13 @@
           actualizado: c.actualizado || 0,
           sesion: c.sesion || '',
           msgs: (c.msgs || []).slice(-MSG_MAX).map(function (m) {
-            return { rol: m.rol, texto: String(m.texto || '').slice(0, 12000), ts: m.ts || 0 };
+            var g = { rol: m.rol, texto: String(m.texto || '').slice(0, 12000), ts: m.ts || 0 };
+            if (m.acciones && m.acciones.length) {
+              g.acciones = m.acciones.slice(-60).map(function (a) {
+                return { n: recortar(a && a.n, 40), d: recortar(a && a.d, 160), err: !!(a && a.err) };
+              });
+            }
+            return g;
           })
         };
       });
@@ -1192,9 +1198,12 @@
       return d;
     }
     d.innerHTML = '';
+    if (m.acciones && m.acciones.length) d.appendChild(bloqueTrabajo(m.acciones, false));
     var trozos = mdLite(m.texto || '');
     if (!String(m.texto || '').trim()) {
-      d.innerHTML = '<span class="ank-ai-tool">Sin respuesta del modelo.</span>';
+      if (!(m.acciones && m.acciones.length)) {
+        d.innerHTML = '<span class="ank-ai-tool">Sin respuesta del modelo.</span>';
+      }
       return d;
     }
     trozos.forEach(function (t) {
@@ -1226,10 +1235,96 @@
       return;
     }
     st.msgs.forEach(function (m) {
-      if (m.rol === 'bot' && !String(m.texto || '').trim()) return;
+      if (m.rol === 'bot' && !String(m.texto || '').trim() && !(m.acciones && m.acciones.length)) return;
       pintarBurbuja(m);
     });
     cont.scrollTop = cont.scrollHeight;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * trabajo del asistente (bloque plegable)
+   *
+   * Los pasos intermedios no llenan el chat: van dentro de un bloque
+   * cerrado con una sola línea que dice qué está haciendo. La flecha lo
+   * abre si el usuario quiere ver el detalle.
+   * ------------------------------------------------------------------ */
+
+  var VERBO_ACCION = {
+    read: 'Leyendo', view: 'Leyendo', cat: 'Leyendo', open: 'Abriendo',
+    write: 'Escribiendo', edit: 'Editando', patch: 'Editando', apply: 'Aplicando',
+    bash: 'Ejecutando', sh: 'Ejecutando', exec: 'Ejecutando', run: 'Ejecutando',
+    grep: 'Buscando', search: 'Buscando', glob: 'Buscando', find: 'Buscando',
+    list: 'Revisando', ls: 'Revisando', tree: 'Revisando',
+    fetch: 'Consultando', web: 'Consultando', curl: 'Consultando',
+    test: 'Probando', check: 'Comprobando'
+  };
+
+  function recortar(t, n) {
+    var s = String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+
+  function fraseAccion(nombre, detalle) {
+    var clave = String(nombre || '').toLowerCase().replace(/[^a-z]/g, '');
+    var verbo = VERBO_ACCION[clave];
+    /* Las opciones (`-la`, `--json`) no aportan a la frase. */
+    var limpio = String(detalle || '').split(/\s+/).filter(function (x) {
+      return x && x.charAt(0) !== '-';
+    }).join(' ');
+    if (/^[\w.\/-]+$/.test(limpio) && limpio.indexOf('/') !== -1) {
+      limpio = limpio.slice(limpio.lastIndexOf('/') + 1);
+    }
+    var d = recortar(limpio, 58);
+    if (!verbo) {
+      /* A veces la primera palabra ya es una ruta o un comando. */
+      var juntas = recortar((nombre || '') + ' ' + limpio, 58);
+      return juntas ? 'Trabajando en ' + juntas : 'Trabajando…';
+    }
+    return verbo + (d ? ' ' + d : '…');
+  }
+
+  function resumenAcciones(lista, error) {
+    var n = lista.length;
+    if (!n) return error ? 'No se pudo completar' : 'Trabajando…';
+    if (error) return 'No se pudo completar · ' + n + (n === 1 ? ' paso' : ' pasos');
+    if (n === 1) return fraseAccion(lista[0].n, lista[0].d);
+    var ult = lista[n - 1];
+    return n + ' pasos · ' + fraseAccion(ult.n, ult.d);
+  }
+
+  /* Construye el bloque. `vivo` lo deja abierto y con la línea pulsando. */
+  function bloqueTrabajo(acciones, vivo) {
+    var caja = document.createElement('div');
+    caja.className = 'ank-ai-work' + (vivo ? ' live' : '');
+    var cabeza = document.createElement('button');
+    cabeza.type = 'button';
+    cabeza.className = 'ank-ai-work-head';
+    cabeza.setAttribute('aria-expanded', vivo ? 'true' : 'false');
+    cabeza.innerHTML = '<span class="ank-ai-work-arrow">›</span>' +
+      '<span class="ank-ai-work-label"></span>';
+    var cuerpo = document.createElement('div');
+    cuerpo.className = 'ank-ai-work-body';
+    (acciones || []).forEach(function (a) {
+      cuerpo.appendChild(lineaTrabajo(a));
+    });
+    caja.appendChild(cabeza);
+    caja.appendChild(cuerpo);
+    caja.querySelector('.ank-ai-work-label').textContent = vivo ? 'Pensando…' : resumenAcciones(acciones || []);
+    if (vivo) caja.classList.add('open');
+    cabeza.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var abierto = caja.classList.toggle('open');
+      cabeza.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+    });
+    return caja;
+  }
+
+  function lineaTrabajo(a) {
+    var l = document.createElement('div');
+    l.className = 'ank-ai-work-line' + (a && a.err ? ' err' : '');
+    l.textContent = String((a && a.n) || '') + (a && a.d ? ' ' + a.d : '');
+    return l;
   }
 
   function abrirTurno() {
@@ -1238,14 +1333,30 @@
     cur = {
       msg: m,
       el: m.nodo,
-      txt: q('.ank-ai-txt', m.nodo),
+      txt: null,
       buf: '',
       bloque: '',
+      acciones: [],
+      work: bloqueTrabajo([], true),
       cursor: document.createElement('span')
     };
+    m.acciones = cur.acciones;
+    cur.el.appendChild(cur.work);
+    cur.txt = document.createElement('span');
+    cur.txt.className = 'ank-ai-txt';
+    cur.el.appendChild(cur.txt);
     cur.cursor.className = 'ank-ai-cursor';
     cur.el.appendChild(cur.cursor);
     return cur;
+  }
+
+  /* Actualiza la línea visible del bloque sin abrirlo. */
+  function etiquetaTrabajo(texto, vivo) {
+    if (!cur || !cur.work) return;
+    var l = cur.work.querySelector('.ank-ai-work-label');
+    if (l) l.textContent = texto;
+    cur.work.classList.toggle('live', !!vivo);
+    if (vivo) cur.work.classList.add('live');
   }
 
   function escribirBot(texto) {
@@ -1266,17 +1377,35 @@
     if (!cur) abrirTurno();
     cur.txt = null;
     cur.bloque = '';
-    var d = document.createElement('span');
-    d.className = 'ank-ai-tool';
-    d.innerHTML = '<i>›</i> ' + esc(nombre) + (detalle ? ' ' + esc(detalle) : '');
-    cur.el.insertBefore(d, cur.cursor);
+    var acc = { n: String(nombre || ''), d: recortar(detalle, 160) };
+    cur.acciones.push(acc);
+    var cuerpo = cur.work && cur.work.querySelector('.ank-ai-work-body');
+    if (cuerpo) {
+      cuerpo.appendChild(lineaTrabajo(acc));
+      cuerpo.scrollTop = cuerpo.scrollHeight;
+    }
+    etiquetaTrabajo(fraseAccion(acc.n, acc.d), true);
     autoScroll();
   }
 
   function cerrarTurno(error) {
     if (!cur) return;
     if (cur.cursor && cur.cursor.parentNode) cur.cursor.remove();
-    if (!cur.buf.trim() && !error && !cur.el.querySelector('.ank-ai-tool')) {
+    var pasos = cur.acciones ? cur.acciones.length : 0;
+    if (cur.work) {
+      if (!pasos) {
+        cur.work.remove();
+      } else {
+        cur.work.classList.remove('live');
+        var l = cur.work.querySelector('.ank-ai-work-label');
+        if (l) l.textContent = resumenAcciones(cur.acciones, !!error);
+        var cabeza = cur.work.querySelector('.ank-ai-work-head');
+        /* Si falló, el detalle queda a la vista sin obligar a abrirlo. */
+        cur.work.classList.toggle('open', !!error);
+        if (cabeza) cabeza.setAttribute('aria-expanded', error ? 'true' : 'false');
+      }
+    }
+    if (!cur.buf.trim() && !error && !pasos) {
       cur.el.innerHTML = '<span class="ank-ai-tool">Sin respuesta del modelo.</span>';
     } else if (cur.txt) {
       var trozos = mdLite(cur.bloque || cur.buf);
@@ -2185,7 +2314,16 @@
       var l = limpiar(texto).trim();
       if (l) log('w', l);
       if (/error|not found|denied|failed|panic/i.test(l)) {
-        escribirBot('\n' + l + '\n');
+        /* Los avisos van al bloque de trabajo, no al hilo del chat. */
+        if (cur && cur.work) {
+          var cuerpo = cur.work.querySelector('.ank-ai-work-body');
+          if (cuerpo) {
+            cuerpo.appendChild(lineaTrabajo({ n: '!', d: recortar(l, 200), err: true }));
+            cuerpo.scrollTop = cuerpo.scrollHeight;
+          }
+        } else {
+          escribirBot('\n' + l + '\n');
+        }
       }
       return;
     }
