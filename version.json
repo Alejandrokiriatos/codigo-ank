@@ -1,7 +1,7 @@
 {
-  "web": "1.7.2",
+  "web": "1.7.3",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "Comunidad: en Entorno hay dos accesos directos, Canal de Telegram (versiones y novedades) y Grupo de Telegram (dudas y errores). Los enlaces abren la app de Telegram o el navegador segun lo que tenga instalado el telefono",
-  "sig": "84a1c272b6f2b88cc3f86ecea346ce811f8e6aa8b639746a6382199bdde1fc92"
+  "notas": "Entorno queda solo con lo necesario: pasos, proveedor, clave, modelo y carpeta. La consola y Probar asistente pasan a Registro. Comunidad (Canal y Grupo de Telegram), Usuarios, version del panel y Actualizar ANK ahora estan en Ajustes > Acerca de, para toda la app",
+  "sig": "5038a0f9d46b0b8f539610acc7443cf833878090d898cde473fb90c4d5d6c002"
 }

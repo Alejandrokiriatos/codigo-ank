@@ -25,7 +25,7 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.7.2';
+  var PANEL_VERSION = '1.7.3';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/10/2026';
@@ -2916,8 +2916,78 @@
     menuPedido = 0;
   }
 
-  function engancharMenu() {
-    /* Cualquier menú que la app agregue al documento: se completa al vuelo. */
+  /* ------------------------------------------------------------------ *
+   * comunidad y datos del proyecto dentro de la página «Acerca de»
+   * ------------------------------------------------------------------ */
+
+  /* La página Acerca de la arma la app y la vuelve a crear cada vez que se
+     abre, así que el bloque se inyecta de nuevo cuando falta. */
+  function inyectarAcerca() {
+    var pagina = q('main.about-page');
+    if (!pagina) return;
+    if (pagina.querySelector('[data-ank-about]')) return;
+    var nota = q('.about-note', pagina);
+    var caja = document.createElement('div');
+    caja.className = 'info-section ank-about-extra';
+    caja.setAttribute('data-ank-about', '');
+    caja.innerHTML =
+      '<div class="ank-about-title">Comunidad</div>' +
+      '<button class="ank-about-item" data-ank="canal">' +
+        '<span class="ank-about-ico">▶</span>' +
+        '<span class="ank-about-txt">Canal de Telegram' +
+          '<span class="ank-about-sub">Novedades y versiones nuevas</span>' +
+        '</span>' +
+      '</button>' +
+      '<button class="ank-about-item" data-ank="grupo">' +
+        '<span class="ank-about-ico">💬</span>' +
+        '<span class="ank-about-txt">Grupo de Telegram' +
+          '<span class="ank-about-sub">Dudas, errores y sugerencias</span>' +
+        '</span>' +
+      '</button>' +
+      '<div class="ank-about-title">Usuarios</div>' +
+      '<div class="ank-ai-stats"></div>' +
+      '<div class="ank-about-actions">' +
+        '<button class="ank-about-mini" data-ank="stats-refrescar">Actualizar</button>' +
+        '<button class="ank-about-mini" data-ank="stats-compartir">Compartir</button>' +
+      '</div>' +
+      '<label class="ank-about-off"><input type="checkbox" id="ank-ai-stats-off" /> No enviar estadística anónima</label>' +
+      '<div class="ank-about-title">Versión</div>' +
+      '<div class="ank-about-ver ank-ai-ver"></div>' +
+      '<button class="ank-about-item" data-ank="actualizar">' +
+        '<span class="ank-about-ico">↓</span>' +
+        '<span class="ank-about-txt">Actualizar ANK' +
+          '<span class="ank-about-sub">Buscar una versión nueva del panel</span>' +
+        '</span>' +
+      '</button>';
+    if (nota && nota.parentNode) nota.parentNode.insertBefore(caja, nota);
+    else pagina.appendChild(caja);
+
+    caja.addEventListener('click', function (ev) {
+      var t = ev.target.closest ? ev.target.closest('[data-ank]') : null;
+      if (!t) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      var que = t.getAttribute('data-ank');
+      if (que === 'canal') abrirUrl('https://t.me/codigoank');
+      else if (que === 'grupo') abrirUrl('https://t.me/Codigoank1');
+      else if (que === 'stats-refrescar') leerEstadisticas(true);
+      else if (que === 'stats-compartir') compartirEstadisticas();
+      else if (que === 'actualizar') revisarActualizacion(false, true);
+    }, true);
+
+    var casilla = q('#ank-ai-stats-off', caja);
+    if (casilla) {
+      casilla.addEventListener('change', function () {
+        alternarEstadistica(!casilla.checked);
+      });
+    }
+
+    pintarVersion();
+    pintarEstadisticas();
+    leerEstadisticas(false);
+  }
+
+  function engancharMenu() {    /* Cualquier menú que la app agregue al documento: se completa al vuelo. */
     try {
       var obs = new MutationObserver(function (lista) {
         for (var i = 0; i < lista.length; i++) {
@@ -3228,48 +3298,6 @@
                 '<div class="ank-ai-hint">Relativa a /public/proyectos. Se crea sola al primer mensaje.</div>' +
               '</div>' +
 
-              '<div class="ank-ai-field">' +
-                '<label>Consola del entorno</label>' +
-                '<div class="ank-ai-console"></div>' +
-                '<div class="ank-ai-consolei">' +
-                  '<input class="ank-ai-input-console" placeholder="comando para el entorno (opcional)" spellcheck="false" />' +
-                  '<button class="ank-ai-btn" data-accion="consola">Ejecutar</button>' +
-                '</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field">' +
-                '<label>Usuarios</label>' +
-                '<div class="ank-ai-stats"></div>' +
-                '<div class="ank-ai-statsbar">' +
-                  '<button class="ank-ai-btn" data-accion="stats-refrescar">Actualizar</button>' +
-                  '<button class="ank-ai-btn" data-accion="stats-compartir">Compartir</button>' +
-                '</div>' +
-                '<label class="ank-ai-stats-off"><input type="checkbox" id="ank-ai-stats-off" data-accion="stats-off" /> No enviar estadística anónima</label>' +
-                '<div class="ank-ai-hint">Se cuenta una instalación, el uso diario y el mensual, sin datos personales. El resumen se arma en el repositorio una vez al día.</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field">' +
-                '<label>Comunidad</label>' +
-                '<div class="ank-ai-social">' +
-                  '<button class="ank-ai-btn" data-accion="abrir-canal" title="Novedades y versiones nuevas">▶️ Canal de Telegram</button>' +
-                  '<button class="ank-ai-btn" data-accion="abrir-grupo" title="Dudas, errores y sugerencias">💬 Grupo de Telegram</button>' +
-                '</div>' +
-                '<div class="ank-ai-hint">En el canal se publica cada versión; en el grupo respondemos dudas y errores.</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field">' +
-                '<label>Versión del panel</label>' +
-                '<div class="ank-ai-hint ank-ai-ver"></div>' +
-                '<div class="ank-ai-hint">Para actualizar, usá el menú de la app → Actualizar ANK.</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field">' +
-                '<button class="ank-ai-btn" data-accion="revisar" style="width:100%">Revisar estado</button>' +
-              '</div>' +
-              '<div class="ank-ai-field">' +
-                '<button class="ank-ai-btn" data-accion="probar" style="width:100%">Probar asistente</button>' +
-                '<div class="ank-ai-hint">Ejecuta el asistente con un mensaje corto y muestra el resultado en la consola.</div>' +
-              '</div>' +
             '</div>' +
           '</section>' +
 
@@ -3281,6 +3309,14 @@
               '<button class="ank-ai-btn" data-accion="limpiar-log">Limpiar</button>' +
               '<div class="ank-ai-spacer"></div>' +
               '<button class="ank-ai-btn" data-accion="revisar">Revisar estado</button>' +
+            '</div>' +
+            '<div class="ank-ai-logtools">' +
+              '<div class="ank-ai-console"></div>' +
+              '<div class="ank-ai-consolei">' +
+                '<input class="ank-ai-input-console" placeholder="comando para el entorno (opcional)" spellcheck="false" />' +
+                '<button class="ank-ai-btn" data-accion="consola">Ejecutar</button>' +
+              '</div>' +
+              '<button class="ank-ai-btn" data-accion="probar" style="width:100%;margin-top:6px">Probar asistente</button>' +
             '</div>' +
             '<pre class="ank-ai-log"></pre>' +
           '</section>' +
@@ -3670,6 +3706,7 @@
     botonIA();
     marcarActualizacion();
     inyectarMenu();
+    inyectarAcerca();
     /* Si la app redibuja el cuerpo, el cartel de novedades se vuelve a montar
        mientras siga pendiente y el usuario no lo haya cerrado. */
     mostrarNovedades();

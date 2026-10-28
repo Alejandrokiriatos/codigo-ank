@@ -1590,3 +1590,103 @@
 .ank-ai-social .ank-ai-btn {
   flex: 1 1 auto;
 }
+
+/* ---------- herramientas de la vista Registro ---------- */
+.ank-ai-logtools {
+  padding: 8px 10px;
+  border-bottom: 1px solid #1c2a2c;
+}
+
+.ank-ai-logtools .ank-ai-console {
+  margin-bottom: 6px;
+}
+
+/* ---------- bloque extra en Acerca de ---------- */
+.ank-about-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ank-about-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #8e8778;
+  margin: 10px 0 4px;
+}
+
+.ank-about-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 4px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #1c2a2c;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ank-about-item:active {
+  background: rgba(224, 164, 88, 0.08);
+}
+
+.ank-about-ico {
+  flex: 0 0 auto;
+  width: 22px;
+  text-align: center;
+  color: #e0a458;
+}
+
+.ank-about-txt {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.ank-about-sub {
+  font-size: 11.5px;
+  color: #8e8778;
+}
+
+.ank-about-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ank-about-mini {
+  flex: 1 1 auto;
+  padding: 7px 10px;
+  background: #141c1d;
+  border: 1px solid #263437;
+  color: #cfc8b8;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ank-about-off {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8e8778;
+}
+
+.ank-about-ver {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8e8778;
+  padding: 4px 0 8px;
+}
+
+.ank-about-ver.upd {
+  color: #e0a458;
+}
