@@ -1,7 +1,7 @@
 {
-  "web": "1.8.2",
+  "web": "1.8.3",
   "ai": "ank/ai.js",
   "css": "ank/ai.css",
-  "notas": "La creacion de apps ya no se traba: mientras el modelo escribe el chat solo muestra texto y los archivos no se vuelcan en el hilo; al terminar aparecen las propuestas con Aplicar. Si el turno devuelve solo bloques ank:archivo ahora se renderiza. Avisa y no arranca un segundo proceso si se pide otra cosa con Enter mientras trabaja, ni al tocar Crear app o Editar. Los bloques de codigo de mas de 14 lineas quedan plegados",
-  "sig": "a5bc9c11efdf4acd1c1b055972a976d99fd75a156f2a99e409496f470edea1a2"
+  "notas": "Corrige el cierre al abrir enlaces: los enlaces abren con CustomTabs y nunca se lanza un intent con URL vacia.",
+  "sig": "bac5decf3b4dfad0ba672df4347511ffd1b6db40da1300f7ee96bc44167b132a"
 }

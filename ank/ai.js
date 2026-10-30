@@ -25,10 +25,10 @@
   var LOG_MAX = 400;
   var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.8.2';
+  var PANEL_VERSION = '1.8.3';
 
   /* Fecha de esta publicación, visible en Entorno. */
-  var PANEL_FECHA = '27/10/2026';
+  var PANEL_FECHA = '29/10/2026';
 
   var ERRORES_MAX = 12;
 
@@ -3888,7 +3888,7 @@
               '<div class="ank-ai-field ank-ai-hint-cred">' +
                 '<label>Clave</label>' +
                 '<input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />' +
-                '<div class="ank-ai-hint">Para los modelos gratis: <a data-accion="abrir-auth">opencode.ai/auth</a> → crear clave → pegarla acá.</div>' +
+                '<div class="ank-ai-hint">Para los modelos gratis: <a href="https://opencode.ai/auth" target="_blank" rel="noopener" data-accion="abrir-auth">opencode.ai/auth</a> → crear clave → pegarla acá.</div>' +
               '</div>' +
 
               '<div class="ank-ai-field ank-ai-hint-cred">' +
@@ -3949,6 +3949,16 @@
     document.body.appendChild(panel);
 
     panel.addEventListener('click', manejarClic);
+    // Red de seguridad: ningún clic sobre un enlace del panel debe llegar al
+    // listener global de Acode con un href vacío.
+    panel.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('a') : null;
+      if (!a) return;
+      if (!a.getAttribute('href')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
     panel.addEventListener('change', manejarCambio);
     var ta = q('.ank-ai-input', panel);
     if (ta) {
@@ -4096,6 +4106,10 @@
   function manejarClic(e) {
     var t = e.target.closest ? e.target.closest('[data-accion]') : null;
     if (!t) return;
+    // El panel vive en document.body, donde Acode tiene un listener global que
+    // abre cualquier <a> con system.openInBrowser(href). Un enlace sin href
+    // llega ahí como "" y el intent VIEW vacío tumba la app (ActivityNotFound).
+    e.stopPropagation();
     var accion = t.getAttribute('data-accion');
     if (accion !== 'tab' && accion !== 'cerrar') e.preventDefault();
     switch (accion) {
@@ -4229,24 +4243,45 @@
     }
   }
 
+  /* Abre un enlace fuera de la app. Nunca lanza un intent con datos vacíos:
+     eso provoca ActivityNotFoundException y cierra la app. Si no hay con qué
+     abrirlo, copia el enlace para que el usuario lo pegue en el navegador. */
   function abrirUrl(url) {
-    try {
-      if (window.cordova && window.cordova.InAppBrowser) {
-        window.cordova.InAppBrowser.open(url, '_system');
-        return;
-      }
-    } catch (e) {}
-    try {
-      if (window.acode && typeof window.acode.openUrl === 'function') {
-        window.acode.openUrl(url);
-        return;
-      }
-    } catch (e2) {}
-    try {
-      window.open(url, '_system');
+    url = String(url == null ? '' : url).trim();
+    if (!/^https?:\/\//i.test(url)) {
+      log('e', 'abrirUrl: enlace descartado (' + url + ')');
       return;
-    } catch (e3) {}
-    aviso(url);
+    }
+    function copiar() {
+      copiarPortapapeles(url).then(function () {
+        aviso('No se pudo abrir el navegador. Enlace copiado.');
+      }, function () {
+        aviso(url);
+      });
+    }
+    function nativo() {
+      try {
+        if (window.system && typeof window.system.openInBrowser === 'function') {
+          window.system.openInBrowser(url);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+    try {
+      if (window.CustomTabs && typeof window.CustomTabs.open === 'function') {
+        window.CustomTabs.open(url, {}, function () {}, function () {
+          if (!nativo()) copiar();
+        });
+        return;
+      }
+    } catch (e1) {}
+    if (nativo()) return;
+    try {
+      var v = window.open(url, '_blank');
+      if (v) return;
+    } catch (e2) {}
+    copiar();
   }
 
   function abrirCarpeta() {
