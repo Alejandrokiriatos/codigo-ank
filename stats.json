@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-11-22T11:25:44Z",
+  "actualizado": "2026-11-23T12:39:26Z",
   "proyecto": "Código ANK",
   "repo": "Alejandrokiriatos/codigo-ank",
   "instalaciones": 4,
@@ -7,7 +7,7 @@
   "activosMes": 1,
   "mes": "2026-11",
   "promedio7": 0,
-  "diasConDatos": 27,
+  "diasConDatos": 28,
   "historial": [
     {
       "fecha": "2026-10-27",
@@ -141,6 +141,11 @@
     },
     {
       "fecha": "2026-11-22",
+      "activos": 0,
+      "instalaciones": 4
+    },
+    {
+      "fecha": "2026-11-23",
       "activos": 0,
       "instalaciones": 4
     }
