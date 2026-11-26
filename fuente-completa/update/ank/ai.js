@@ -28,6 +28,17 @@
     return err;
   }
 
+  function normalizarModelo(value) {
+    var model = String(value == null ? '' : value).trim();
+    if (/[\u0000-\u001f\u007f]/.test(model)) {
+      throw fail('El identificador del modelo contiene caracteres de control.', 'ANK_AI_MODEL_INVALID');
+    }
+    if (model.length > 256) {
+      throw fail('El identificador del modelo supera el límite de 256 caracteres.', 'ANK_AI_MODEL_TOO_LONG');
+    }
+    return model;
+  }
+
   function protocolName(value) {
     var p = String(value || PROTOCOLS.openai).trim().toLowerCase();
     if (p === 'openai' || p === 'openai-compatible' || p === 'openai-chat-completions') return PROTOCOLS.openai;
@@ -87,7 +98,7 @@
       }
     } else {
       if (!/:generateContent$/i.test(path)) {
-        var modelName = String(model || '').trim();
+        var modelName = normalizarModelo(model);
         if (!modelName) throw fail('Indica el modelo Gemini para construir el endpoint.', 'ANK_AI_MODEL_REQUIRED');
         if (!/\/models$/i.test(path)) path += '/models';
         path += '/' + encodeURIComponent(modelName) + ':generateContent';
@@ -516,10 +527,11 @@
   function chat(options) {
     options = options || {};
     var apiKey = String(options.apiKey || '').trim();
-    var model = String(options.model || '').trim();
+    var model;
     var protocol;
     var url;
     try {
+      model = normalizarModelo(options.model);
       protocol = protocolName(options.protocol);
       url = endpointUrl(options.endpoint, protocol, model);
     } catch (err) { return Promise.reject(err); }
@@ -584,6 +596,7 @@
     version: VERSION,
     protocols: PROTOCOLS,
     protocolName: protocolName,
+    normalizarModelo: normalizarModelo,
     endpointUrl: endpointUrl,
     chat: chat
   };
@@ -925,7 +938,10 @@
   }
 
   function limpioModelo(s) {
-    return String(s || '').trim().replace(/[^A-Za-z0-9._:\-\/]/g, '').slice(0, 180);
+    if (window.ANKAIEngine && typeof window.ANKAIEngine.normalizarModelo === 'function') {
+      return window.ANKAIEngine.normalizarModelo(s);
+    }
+    return String(s == null ? '' : s).trim().slice(0, 256);
   }
 
   function listo() {
@@ -4165,8 +4181,8 @@
             '<div class="ank-ai-msgs">' +
               '<div class="ank-ai-empty">' +
                 '<b>Asistente de ANK</b>' +
-                'Trabaja sobre los archivos del proyecto y ejecuta comandos en el entorno de la app. ' +
-                'No modifica nada fuera de la carpeta de trabajo.' +
+                'Analiza código y propone cambios en archivos para que puedas revisar el diff antes de aplicarlos. ' +
+                'La terminal manual es un módulo independiente y opcional.' +
               '</div>' +
             '</div>' +
             '<div class="ank-ai-opts">' +
@@ -4211,7 +4227,8 @@
                 '<option value="custom-json">API personalizada (JSON/REST)</option>' +
               '</select><div class="ank-ai-hint">Elige el protocolo oficial o configura una API JSON propia mediante su endpoint, encabezados, cuerpo de la petición y ruta de respuesta.</div></div>' +
               '<div class="ank-ai-field"><label>URL base o endpoint del proveedor</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
-              '<div class="ank-ai-field"><label>ID exacto del modelo</label><input id="ank-ai-modelo" type="text" spellcheck="false" autocomplete="off" placeholder="identificador-exacto-del-modelo" /></div>' +
+              '<div class="ank-ai-field"><label>ID exacto del modelo</label><input id="ank-ai-modelo" type="text" maxlength="256" spellcheck="false" autocomplete="off" placeholder="proveedor/modelo:variante" />' +
+                '<div class="ank-ai-hint">Se conserva el identificador completo, incluidos dos puntos, barras y sufijos como :free.</div></div>' +
               '<div class="ank-ai-custom" style="display:none">' +
                 '<div class="ank-ai-field"><label>Encabezado de autenticación</label><input id="ank-ai-custom-auth-header" type="text" spellcheck="false" placeholder="Authorization, api-key, x-api-key..." />' +
         '<div class="ank-ai-hint">Déjalo vacío junto con la clave API para servicios locales o públicos que no requieren autenticación.</div></div>' +
