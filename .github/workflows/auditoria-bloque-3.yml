@@ -1,0 +1,49 @@
+name: Auditoría bloque 3 · Proveedores API
+
+on:
+  push:
+    branches:
+      - ank/block-3-multiple-api
+  pull_request:
+    branches:
+      - ank/block-3-multiple-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Pruebas y auditoría de integración multi-API
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ''
+
+      - name: Comprobar sintaxis del motor y del panel Android
+        working-directory: fuente-completa
+        run: |
+          node --check ank-ai/engine.js
+          node --check decoded/assets/www/ank/ai.js
+
+      - name: Ejecutar pruebas unitarias multi-API
+        working-directory: fuente-completa
+        run: node --test ank-ai/engine.test.js
+
+      - name: Verificar bundle Android
+        working-directory: fuente-completa
+        run: node tools/build-ai.js --check
+
+      - name: Auditar integración del panel, almacenamiento y protocolos
+        working-directory: fuente-completa
+        run: node tools/auditar-bloque-3.js
+
+      - name: Revisar espacios y errores de parche
+        run: git diff --check
