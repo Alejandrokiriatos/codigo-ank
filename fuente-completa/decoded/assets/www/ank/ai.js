@@ -986,6 +986,9 @@
   // Se mantiene limpioRuta para rutas de archivos, donde ../ debe rechazarse
   // explícitamente en vez de convertirse silenciosamente en otra ruta.
   function limpioProyecto(s) {
+    if (window.ANKAIEngine && typeof window.ANKAIEngine.normalizeProjectPath === 'function') {
+      return window.ANKAIEngine.normalizeProjectPath(s);
+    }
     return limpioRuta(s).split('/').filter(function (segmento) {
       return segmento && segmento !== '.' && segmento !== '..';
     }).join('/');
