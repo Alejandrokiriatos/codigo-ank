@@ -163,6 +163,9 @@
     if (value && typeof value === 'object') {
       var output = {};
       Object.keys(value).forEach(function (key) {
+        if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+          throw fail('La plantilla contiene una propiedad JSON no permitida.', 'ANK_AI_CUSTOM_BODY_INVALID');
+        }
         output[key] = sustituirPlantilla(value[key], variables);
       });
       return output;
@@ -202,9 +205,13 @@
       if (value == null || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean')) {
         throw fail('El valor del encabezado ' + name + ' debe ser texto o número.', 'ANK_AI_CUSTOM_HEADER_INVALID');
       }
-      headers[name] = String(value)
+      var headerValue = String(value)
         .replace(/\{\{API_KEY\}\}/g, String(options.apiKey || ''))
         .replace(/\{\{MODEL\}\}/g, String(options.model || ''));
+      if (/[\r\n]/.test(headerValue)) {
+        throw fail('Los encabezados no pueden contener saltos de línea.', 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
+      headers[name] = headerValue;
     });
     var authName = String(options.customAuthHeader == null ? 'Authorization' : options.customAuthHeader).trim();
     if (authName) {
@@ -213,6 +220,9 @@
         throw fail('Nombre del encabezado de autenticación no válido.', 'ANK_AI_CUSTOM_HEADER_INVALID');
       }
       var prefix = String(options.customAuthPrefix == null ? 'Bearer' : options.customAuthPrefix).trim();
+      if (/[\r\n]/.test(prefix)) {
+        throw fail('El prefijo de autenticación no puede contener saltos de línea.', 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
       headers[authName] = (prefix ? prefix + ' ' : '') + String(options.apiKey || '');
     }
     return headers;
