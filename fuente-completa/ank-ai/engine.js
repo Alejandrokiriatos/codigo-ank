@@ -512,6 +512,42 @@
     });
   }
 
+  function validarComando(command) {
+    var raw = String(command == null ? '' : command).trim();
+    function no(reason) { return { ok: false, command: raw, reason: reason }; }
+    if (!raw) return no('El comando está vacío.');
+    if (raw.length > 240) return no('El comando supera el límite de 240 caracteres.');
+    if (/[\\r\\n\\x00-\\x1f\\x7f]/.test(raw)) return no('Solo se permite un comando de una línea.');
+    // Se excluyen operadores y expansiones del shell. ANK añade por separado
+    // el directorio del proyecto y el marcador de código de salida.
+    if (!/^[A-Za-z0-9_./:@=,+-]+(?:\\s+[A-Za-z0-9_./:@=,+-]+)*$/.test(raw)) {
+      return no('Usa un comando simple, sin tuberías, redirecciones, variables ni operadores de shell.');
+    }
+    var tokens = raw.split(/\\s+/);
+    if (tokens.some(function (token) {
+      return token.charAt(0) === '/' || token.charAt(0) === '~' || /(^|\\/)\\.\\.(\\/|$)/.test(token) || token.indexOf('://') !== -1;
+    })) return no('No se permiten rutas absolutas, directorios superiores ni direcciones de red.');
+    var executable = tokens[0].split('/').pop().toLowerCase();
+    var blocked = {
+      rm: 1, rmdir: 1, del: 1, erase: 1, dd: 1, mkfs: 1, mkfs.ext4: 1,
+      sudo: 1, su: 1, reboot: 1, shutdown: 1, poweroff: 1, halt: 1,
+      kill: 1, killall: 1, pkill: 1, curl: 1, wget: 1, nc: 1, ncat: 1,
+      ssh: 1, scp: 1, sftp: 1, chmod: 1, chown: 1, mount: 1, umount: 1,
+      apk: 1, apt: 1, 'apt-get': 1, yum: 1, dnf: 1, pacman: 1,
+      sh: 1, bash: 1, zsh: 1, fish: 1, busybox: 1, eval: 1, exec: 1,
+      source: 1, env: 1
+    };
+    if (blocked[executable]) return no('El comando "' + executable + '" está bloqueado por seguridad.');
+    if (executable === 'git' && /^(reset|clean|checkout|restore|push|pull|fetch|submodule)$/i.test(tokens[1] || '')) {
+      return no('Esta operación Git puede borrar, reemplazar o enviar cambios y está bloqueada en esta etapa.');
+    }
+    if ((executable === 'node' && /^(-e|--eval|--print|-p)$/.test(tokens[1] || '')) ||
+        ((executable === 'python' || executable === 'python3') && /^(-c|-m?c)$/.test(tokens[1] || ''))) {
+      return no('No se permite ejecutar código inline; usa un archivo del proyecto revisado.');
+    }
+    return { ok: true, command: raw, reason: '' };
+  }
+
   function chat(options) {
     options = options || {};
     var apiKey = String(options.apiKey || '').trim();
@@ -584,6 +620,7 @@
     protocols: PROTOCOLS,
     protocolName: protocolName,
     endpointUrl: endpointUrl,
+    validateCommand: validarComando,
     chat: chat
   };
 });
