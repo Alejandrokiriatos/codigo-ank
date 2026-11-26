@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-4-agent-tools`  
 **Base:** `ank/block-3-multiple-api`  
-**Estado:** primer ciclo de propuestas de comandos implementado en fuente; pendiente CI de esta rama y prueba funcional en Android.
+**Estado:** primer ciclo de propuestas de comandos implementado en fuente. CI de GitHub Actions ha superado la verificación estática y 21 pruebas automatizadas en la primera versión; las pruebas de rutas seguras se añaden en esta revisión. Falta la prueba funcional en Android.
 
 ## Objetivo
 
