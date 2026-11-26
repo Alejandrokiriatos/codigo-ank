@@ -1173,6 +1173,7 @@
     var customBodyEl = q('#ank-ai-custom-body');
     var customResponseEl = q('#ank-ai-custom-response');
     var customAuthHeader = String(customAuthHeaderEl ? customAuthHeaderEl.value : (st.customAuthHeader == null ? 'Authorization' : st.customAuthHeader)).trim();
+    if (protocol === 'custom-json' && !customAuthHeader && !enteredKey) apiKey = '';
     var customAuthPrefix = String(customAuthPrefixEl ? customAuthPrefixEl.value : (st.customAuthPrefix == null ? 'Bearer' : st.customAuthPrefix));
     var customHeaders = String(customHeadersEl ? customHeadersEl.value : (st.customHeaders || '{}')).trim();
     var customBodyTemplate = String(customBodyEl ? customBodyEl.value : (st.customBodyTemplate || CUSTOM_BODY_DEFAULT)).trim();
