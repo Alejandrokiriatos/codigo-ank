@@ -513,6 +513,44 @@
     });
   }
 
+  function validarComando(command) {
+    var raw = String(command == null ? '' : command).trim();
+    function no(reason) { return { ok: false, command: raw, reason: reason }; }
+    if (!raw) return no('El comando está vacío.');
+    if (raw.length > 240) return no('El comando supera el límite de 240 caracteres.');
+    if (/[\\r\\n\\x00-\\x1f\\x7f]/.test(raw)) return no('Solo se permite un comando de una línea.');
+    // Se excluyen operadores y expansiones del shell. ANK añade por separado
+    // el directorio del proyecto y el marcador de código de salida.
+    if (!/^[A-Za-z0-9_./:@=,+-]+(?:\\s+[A-Za-z0-9_./:@=,+-]+)*$/.test(raw)) {
+      return no('Usa un comando simple, sin tuberías, redirecciones, variables ni operadores de shell.');
+    }
+    var tokens = raw.split(/\\s+/);
+    if (tokens.some(function (token) {
+      return token.charAt(0) === '/' || token.charAt(0) === '~' ||
+        /(^|\\/)\\.\\.(\\/|$)/.test(token) || token.indexOf('://') !== -1 ||
+        /^-(delete|exec|execdir)$/i.test(token);
+    })) return no('No se permiten rutas absolutas, directorios superiores, direcciones de red ni opciones de ejecución/borrado.');
+    var executable = tokens[0].split('/').pop().toLowerCase();
+    var blocked = {
+      rm: 1, rmdir: 1, del: 1, erase: 1, dd: 1, mkfs: 1, 'mkfs.ext4': 1,
+      sudo: 1, su: 1, reboot: 1, shutdown: 1, poweroff: 1, halt: 1,
+      kill: 1, killall: 1, pkill: 1, curl: 1, wget: 1, nc: 1, ncat: 1,
+      ssh: 1, scp: 1, sftp: 1, chmod: 1, chown: 1, mount: 1, umount: 1,
+      apk: 1, apt: 1, 'apt-get': 1, yum: 1, dnf: 1, pacman: 1,
+      sh: 1, bash: 1, zsh: 1, fish: 1, busybox: 1, eval: 1, exec: 1,
+      source: 1, env: 1
+    };
+    if (blocked[executable]) return no('El comando "' + executable + '" está bloqueado por seguridad.');
+    if (executable === 'git' && /^(reset|clean|checkout|restore|push|pull|fetch|submodule)$/i.test(tokens[1] || '')) {
+      return no('Esta operación Git puede borrar, reemplazar o enviar cambios y está bloqueada en esta etapa.');
+    }
+    if ((executable === 'node' && /^(-e|--eval|--print|-p)$/.test(tokens[1] || '')) ||
+        ((executable === 'python' || executable === 'python3') && /^(-c|-m?c)$/.test(tokens[1] || ''))) {
+      return no('No se permite ejecutar código inline; usa un archivo del proyecto revisado.');
+    }
+    return { ok: true, command: raw, reason: '' };
+  }
+
   function chat(options) {
     options = options || {};
     var apiKey = String(options.apiKey || '').trim();
@@ -585,6 +623,7 @@
     protocols: PROTOCOLS,
     protocolName: protocolName,
     endpointUrl: endpointUrl,
+    validateCommand: validarComando,
     chat: chat
   };
 });
@@ -621,7 +660,7 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.3.0';
+  var PANEL_VERSION = '2.4.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '26/11/2026';
@@ -641,6 +680,17 @@
     'respondé con un bloque como este, con la ruta relativa al proyecto y el contenido completo:\n' +
     '```ank:archivo ruta/al/archivo.ext\n<contenido completo del archivo>\n```\n' +
     'El usuario verá el diff y decidirá si aplicarlo o descartarlo.\n';
+
+  var PROTOCOLO_COMANDO = '\n\n[Comandos del proyecto con aprobación]\n' +
+    'Si necesitas ejecutar una prueba, inspeccionar el proyecto o compilarlo, no afirmes que lo hiciste: propone un comando en este formato:\n' +
+    '```ank:comando Ejecutar las pruebas\n' +
+    'npm test\n' +
+    '```\n' +
+    '- Escribe un único comando simple en una sola línea, sin tuberías, redirecciones, variables ni operadores del shell.\n' +
+    '- Usa rutas relativas dentro del proyecto y nunca uses rutas absolutas ni .. .\n' +
+    '- No propongas borrar archivos, cambiar permisos, instalar paquetes del sistema, reiniciar servicios ni ejecutar descargas.\n' +
+    '- ANK solo lo ejecutará si el usuario pulsa el botón de aprobación. El resultado volverá a la conversación.\n' +
+    '- Si el usuario no ha aprobado, describe el comando como propuesta, nunca como una acción ya realizada.\n';
 
   /* Instrucciones que se suman al pedido para que la IA sepa cómo se arma
      una mini app de Código ANK y no invente una API distinta. */
@@ -709,6 +759,8 @@
     turnoError: null,
     archivos: {},
     archivosN: 0,
+    comandos: {},
+    comandosN: 0,
     busqueda: '',
     resumiendoAuto: false,
     errores: [],
@@ -1690,6 +1742,8 @@
         frag.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         frag.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'comando') {
+        frag.appendChild(bloqueComando(t.titulo, t.comando));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -1721,6 +1775,8 @@
         d.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         d.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'comando') {
+        d.appendChild(bloqueComando(t.titulo, t.comando));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -2023,8 +2079,15 @@
     for (var i = 0; i < partes.length; i++) {
       if (i % 2 === 1) {
         var bruto = partes[i];
+        var comando = /^ank:comando(?:[ \t]+([^\n]+))?\n?/i.exec(bruto);
         var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
-        if (propuesta) {
+        if (comando) {
+          salida.push({
+            tipo: 'comando',
+            titulo: String(comando[1] || 'Comando solicitado').replace(/\r/g, '').trim(),
+            comando: bruto.slice(comando[0].length).replace(/\n$/, '').trim()
+          });
+        } else if (propuesta) {
           salida.push({
             tipo: 'archivo',
             ruta: propuesta[1].replace(/\r/g, '').trim(),
@@ -2082,6 +2145,129 @@
     while (r < m) { salida.push('+ ' + b[r]); r++; }
     if (recortado) salida.push('… diff recortado');
     return salida;
+  }
+
+  function bloqueComando(titulo, comando) {
+    var id = 'c' + (++st.comandosN);
+    var policy = window.ANKAIEngine && typeof window.ANKAIEngine.validateCommand === 'function'
+      ? window.ANKAIEngine.validateCommand(comando)
+      : { ok: false, reason: 'La política de comandos todavía no está cargada.' };
+    st.comandos[id] = {
+      titulo: String(titulo || 'Comando del proyecto'),
+      comando: String(comando || '').trim(),
+      estado: policy.ok ? 'pendiente' : 'bloqueado',
+      motivo: policy.reason || '',
+      salida: '',
+      codigo: null,
+      descartado: false
+    };
+    var caja = document.createElement('div');
+    caja.className = 'ank-ai-command' + (policy.ok ? '' : ' blocked');
+    caja.setAttribute('data-comando', id);
+    caja.innerHTML =
+      '<div class="ank-ai-command-head">' +
+        '<b class="ank-ai-command-title"></b>' +
+        '<span class="ank-ai-command-status"></span>' +
+      '</div>' +
+      '<pre class="ank-ai-command-code"></pre>' +
+      '<pre class="ank-ai-command-output" hidden></pre>' +
+      '<div class="ank-ai-command-actions">' +
+        '<button type="button" class="ank-ai-act" data-accion="ejecutar-comando" data-valor="' + id + '"' + (policy.ok ? '' : ' disabled') + '>Ejecutar en terminal</button>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="descartar-comando" data-valor="' + id + '">Descartar</button>' +
+      '</div>';
+    q('.ank-ai-command-title', caja).textContent = st.comandos[id].titulo;
+    q('.ank-ai-command-code', caja).textContent = st.comandos[id].comando;
+    q('.ank-ai-command-status', caja).textContent = policy.ok
+      ? 'Requiere tu aprobación'
+      : 'Bloqueado: ' + policy.reason;
+    return caja;
+  }
+
+  function actualizarComandoUI(id) {
+    var item = st.comandos[id];
+    var caja = q('[data-comando="' + id + '"]');
+    if (!item || !caja) return;
+    var status = q('.ank-ai-command-status', caja);
+    var output = q('.ank-ai-command-output', caja);
+    var run = q('[data-accion="ejecutar-comando"]', caja);
+    var discard = q('[data-accion="descartar-comando"]', caja);
+    if (status) {
+      if (item.estado === 'preparando') status.textContent = 'Preparando terminal…';
+      else if (item.estado === 'ejecutando') status.textContent = 'Ejecutando en el proyecto…';
+      else if (item.estado === 'completado') status.textContent = 'Completado · código ' + item.codigo;
+      else if (item.estado === 'error') status.textContent = 'Terminó con error · código ' + item.codigo;
+      else if (item.estado === 'descartado') status.textContent = 'Descartado';
+      else if (item.estado === 'bloqueado') status.textContent = 'Bloqueado: ' + item.motivo;
+      else status.textContent = 'Requiere tu aprobación';
+    }
+    if (run) {
+      run.disabled = item.estado === 'preparando' || item.estado === 'ejecutando' ||
+        item.estado === 'completado' || item.estado === 'descartado' || item.estado === 'bloqueado';
+      run.textContent = item.estado === 'error' ? 'Reintentar' : 'Ejecutar en terminal';
+    }
+    if (discard) discard.disabled = item.estado === 'descartado' || item.estado === 'completado' ||
+      item.estado === 'ejecutando' || item.estado === 'preparando';
+    if (output) {
+      output.hidden = !item.salida;
+      output.textContent = item.salida;
+    }
+    caja.classList.toggle('blocked', item.estado === 'bloqueado');
+    caja.classList.toggle('running', item.estado === 'ejecutando' || item.estado === 'preparando');
+    caja.classList.toggle('done', item.estado === 'completado');
+    caja.classList.toggle('failed', item.estado === 'error');
+    caja.classList.toggle('discarded', item.estado === 'descartado');
+  }
+
+  function descartarComando(id) {
+    var item = st.comandos[id];
+    if (!item || item.estado === 'ejecutando' || item.estado === 'completado') return;
+    item.descartado = true;
+    item.estado = 'descartado';
+    actualizarComandoUI(id);
+    log('i', 'Propuesta de comando descartada: ' + recortar(item.comando, 100));
+  }
+
+  function ejecutarComandoPropuesto(id) {
+    var item = st.comandos[id];
+    if (!item || item.descartado || item.estado === 'ejecutando' || item.estado === 'preparando' ||
+        item.estado === 'completado' || !window.ANKAIEngine) return;
+    var policy = window.ANKAIEngine.validateCommand(item.comando);
+    if (!policy.ok) {
+      item.estado = 'bloqueado';
+      item.motivo = policy.reason;
+      actualizarComandoUI(id);
+      aviso('Comando bloqueado por seguridad: ' + policy.reason);
+      return;
+    }
+    var proyecto = limpioRuta(st.project) || 'ank';
+    // La terminal ve el árbol publicado como /public, no con la ruta privada
+    // absoluta del plugin File. Mantener la misma ruta que st.work.
+    var carpeta = '/public/proyectos/' + proyecto;
+    item.estado = 'preparando';
+    item.salida = '';
+    actualizarComandoUI(id);
+    log('i', 'Comando aprobado por el usuario: ' + item.comando);
+    var preparar = st.prefix ? Promise.resolve() : dirsIniciales();
+    preparar.then(function () {
+      return asegurarSandbox();
+    }).then(function () {
+      item.estado = 'ejecutando';
+      actualizarComandoUI(id);
+      var guion = 'cd ' + comilla(carpeta) + ' && ' + policy.command;
+      return shell(guion, false);
+    }).then(function (result) {
+      item.codigo = result.rc == null ? -1 : result.rc;
+      item.salida = String(result.salida || '(sin salida)').slice(-12000);
+      item.estado = result.rc === 0 ? 'completado' : 'error';
+      actualizarComandoUI(id);
+      log(result.rc === 0 ? 'i' : 'e', 'Comando finalizado con código ' + item.codigo + ': ' + item.comando);
+    }).catch(function (error) {
+      item.estado = 'error';
+      item.codigo = -1;
+      item.salida = String(error && error.message ? error.message : error).slice(0, 4000);
+      actualizarComandoUI(id);
+      log('e', 'No se pudo ejecutar el comando: ' + item.salida);
+    });
   }
 
   function bloqueArchivo(ruta, contenido) {
@@ -3286,7 +3472,7 @@
         st.modo === 'plan'
           ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
           : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
-        PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
+        PROTOCOLO_ARCHIVO, PROTOCOLO_COMANDO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
         memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
       ].join('\n');
       var history = st.msgs.filter(function (m) {
@@ -4447,6 +4633,8 @@
       case 'otro-modelo': reintentar(true); break;
       case 'aplicar-archivo': aplicarArchivo(t.getAttribute('data-valor')); break;
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
+      case 'ejecutar-comando': ejecutarComandoPropuesto(t.getAttribute('data-valor')); break;
+      case 'descartar-comando': descartarComando(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
       case 'diag': compartirDiagnostico(); break;
       case 'novedades': verNovedades(); break;
