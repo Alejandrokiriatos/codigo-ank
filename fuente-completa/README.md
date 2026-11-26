@@ -96,9 +96,34 @@ memoria se hace mediante el plugin de archivos de Cordova, no mediante comandos
 de un agente externo. Las propuestas se muestran con diff y requieren que el
 usuario pulse **Aplicar**.
 
-El motor de API de esta etapa todavía no ejecuta herramientas ni comandos por
-decisión autónoma. La ejecución controlada de herramientas, permisos,
-aprobaciones y rollback se desarrollará en el bloque 4.
+### Herramientas de proyecto con aprobación
+
+El bloque 4 incorpora dos herramientas de solo lectura para que cualquier
+proveedor conectado pueda inspeccionar el proyecto sin depender de funciones
+nativas propietarias:
+
+| Herramienta | Función |
+|---|---|
+| `project.list` | Lista nombres de archivos y carpetas dentro del proyecto actual (máximo 100 entradas por consulta). |
+| `project.read` | Lee un archivo de texto dentro del proyecto actual (máximo 64 KiB; la respuesta se limita a 12.000 caracteres). |
+
+La IA las solicita mediante un bloque `ank:tool` con JSON. Código ANK muestra
+una tarjeta con el nombre y los argumentos; la operación no se ejecuta hasta
+que el usuario pulse **Aprobar lectura**. También puede rechazarla. El límite
+es de cuatro lecturas aprobadas por solicitud del usuario. Los resultados se
+incorporan al contexto del chat para que el modelo continúe con datos reales.
+
+Las rutas son relativas a la carpeta del proyecto. Se rechazan rutas
+absolutas, segmentos `..`, rutas con separadores inversos y archivos
+identificados como binarios. Las herramientas no permiten escribir ni borrar
+archivos, instalar paquetes, ejecutar comandos ni acceder a otros proyectos.
+Para modificar código se siguen usando propuestas `ank:archivo`, con diff y
+aprobación separada en el botón **Aplicar**.
+
+Esta primera fase no incorpora todavía ejecución de terminal, permisos
+granulares por herramienta ni rollback de comandos: se mantienen para una
+fase posterior y no se simulan como disponibles.
+
 
 ### Qué se conserva
 
