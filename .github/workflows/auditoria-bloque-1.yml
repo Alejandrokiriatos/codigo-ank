@@ -76,8 +76,13 @@ jobs:
           const fs = require('fs');
           const manifest = require('./update/version.json');
           const ai = fs.readFileSync('decoded/assets/www/ank/ai.js', 'utf8');
+          const updater = fs.readFileSync('decoded/assets/www/ank/upd.js', 'utf8');
+          const boot = fs.readFileSync('decoded/assets/www/ank/boot-ai.js', 'utf8');
           const match = ai.match(/PANEL_VERSION = '([^']+)'/);
-          if (!match) throw new Error('No se pudo leer PANEL_VERSION');
+          const included = updater.match(/INCLUIDA = '([^']+)'/);
+          if (!match || !included) throw new Error('No se pudo leer la versión incluida del panel/actualizador');
+          if (match[1] !== included[1]) throw new Error('PANEL_VERSION e INCLUIDA deben coincidir');
+          if (!boot.includes('ANK_AI_ENGINE_BUNDLE_BEGIN')) throw new Error('El arranque no valida el panel nuevo');
           const cmp = (a,b) => {
             const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
             for (let i=0;i<Math.max(x.length,y.length);i++) {
