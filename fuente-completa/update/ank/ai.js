@@ -513,6 +513,16 @@
     });
   }
 
+  function normalizarRutaProyecto(value) {
+    var raw = String(value == null ? '' : value)
+      .replace(/[^A-Za-z0-9._\-\/]/g, '')
+      .replace(/^\/+/, '')
+      .replace(/\/{2,}/g, '/');
+    return raw.split('/').filter(function (segmento) {
+      return segmento && segmento !== '.' && segmento !== '..';
+    }).join('/');
+  }
+
   function validarComando(command) {
     var raw = String(command == null ? '' : command).trim();
     function no(reason) { return { ok: false, command: raw, reason: reason }; }
@@ -629,6 +639,7 @@
     protocols: PROTOCOLS,
     protocolName: protocolName,
     endpointUrl: endpointUrl,
+    normalizeProjectPath: normalizarRutaProyecto,
     validateCommand: validarComando,
     chat: chat
   };
@@ -916,7 +927,7 @@
     lineas.push('IA: API conectada=' + (st.apiConfigured ? 'sí' : 'no') + ', terminal=' + st.sandbox);
     lineas.push('Modelo: ' + (st.model || 'sin configurar') + (st.modo === 'plan' ? ' · plan' : ''));
     lineas.push('Endpoint: ' + st.endpoint);
-    lineas.push('Proyecto: ' + (limpioRuta(st.project) || 'ank') + ' · chats=' + st.chats.length);
+    lineas.push('Proyecto: ' + (limpioProyecto(st.project) || 'ank') + ' · chats=' + st.chats.length);
     if (st.errores.length) {
       lineas.push('');
       lineas.push('Errores recientes:');
@@ -980,6 +991,18 @@
 
   function limpioRuta(s) {
     return String(s || '').replace(/[^A-Za-z0-9._\-\/]/g, '').replace(/^\/+/, '').replace(/\/{2,}/g, '/');
+  }
+
+  // Normaliza el nombre del proyecto separando los segmentos peligrosos.
+  // Se mantiene limpioRuta para rutas de archivos, donde ../ debe rechazarse
+  // explícitamente en vez de convertirse silenciosamente en otra ruta.
+  function limpioProyecto(s) {
+    if (window.ANKAIEngine && typeof window.ANKAIEngine.normalizeProjectPath === 'function') {
+      return window.ANKAIEngine.normalizeProjectPath(s);
+    }
+    return limpioRuta(s).split('/').filter(function (segmento) {
+      return segmento && segmento !== '.' && segmento !== '..';
+    }).join('/');
   }
 
   function limpioModelo(s) {
@@ -1623,7 +1646,7 @@
 
   function asegurarMemoria(proyecto) {
     if (!st.prefix) return Promise.resolve();
-    var proy = proyecto || limpioRuta(st.project) || 'ank';
+    var proy = proyecto || limpioProyecto(st.project) || 'ank';
     return conSistema('mkdirs', st.prefix + '/public/proyectos/' + proy)
       .then(function () { return conSistema('mkdirs', st.prefix + '/public/.config/ank'); })
       .then(function () { return leerTexto(rutaMemGlobal()); })
@@ -1645,7 +1668,7 @@
   /* Añade una línea a la bitácora del proyecto. Determinista y barato: no
      gasta tokens, solo deja constancia de lo hablado. */
   function anotarMemoria(proyecto, pedido, respuesta) {
-    var proy = proyecto || limpioRuta(st.project) || 'ank';
+    var proy = proyecto || limpioProyecto(st.project) || 'ank';
     function plano(s, n) {
       return String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
     }
@@ -2120,7 +2143,7 @@
   function rutaAbsolutaArchivo(rel) {
     var r = limpioRuta(rel).replace(/^\/+/, '');
     if (!r || /(^|\/)\.\.(\/|$)/.test(r)) return '';
-    return st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank') + '/' + r;
+    return st.prefix + '/public/proyectos/' + (limpioProyecto(st.project) || 'ank') + '/' + r;
   }
 
   /* Diff por líneas con LCS. Se acota el tamaño para no trabar el teléfono
@@ -2245,7 +2268,7 @@
       aviso('Comando bloqueado por seguridad: ' + policy.reason);
       return;
     }
-    var proyecto = limpioRuta(st.project) || 'ank';
+    var proyecto = limpioProyecto(st.project) || 'ank';
     // La terminal ve el árbol publicado como /public, no con la ruta privada
     // absoluta del plugin File. Mantener la misma ruta que st.work.
     var carpeta = '/public/proyectos/' + proyecto;
@@ -3458,7 +3481,7 @@
       aviso('Configura una API compatible desde la pestaña Entorno.');
       st.tab = 'entorno'; pintar(); return;
     }
-    var proyecto = limpioRuta(st.project) || 'ank';
+    var proyecto = limpioProyecto(st.project) || 'ank';
     var chat = chatActual();
     if (!chat || chat.proyecto !== proyecto) chat = nuevoChat(proyecto);
     if (ta && !(forzado && forzado.texto != null)) { ta.value = ''; ta.style.height = ''; }
@@ -3558,7 +3581,7 @@
       aviso('Este chat todavía no tiene mensajes.');
       return;
     }
-    var proy = limpioRuta(st.project) || 'ank';
+    var proy = limpioProyecto(st.project) || 'ank';
     var d = new Date();
     function dos(n) { return ('0' + n).slice(-2); }
     var marca = d.getFullYear() + dos(d.getMonth() + 1) + dos(d.getDate()) + '-' + dos(d.getHours()) + dos(d.getMinutes());
@@ -3609,7 +3632,7 @@
 
   function resumenAutomatico(proyecto, chat) {
     if (!st.apiConfigured || !window.ANKAIEngine) { st.resumiendoAuto = false; return; }
-    var proy = proyecto || limpioRuta(st.project) || 'ank';
+    var proy = proyecto || limpioProyecto(st.project) || 'ank';
     var history = (chat.msgs || []).slice(-24).map(function (m) {
       return (m.rol === 'user' ? 'Usuario: ' : 'Asistente: ') + String(m.texto || '').replace(/\s+/g, ' ').slice(0, 400);
     }).join('\n');
@@ -3718,7 +3741,7 @@
         d: st.sandbox === 'listo' ? 'Alpine instalado. La terminal sigue disponible para comandos.' : 'El chat API funciona sin Linux. Instálalo solo para usar la terminal.',
         e: st.sandbox, a: st.sandbox === 'listo' ? null : { txt: st.sandbox === 'instalando' ? 'Instalando' : 'Preparar terminal', fn: 'instalar-entorno', dis: st.sandbox === 'instalando' } },
       { n: '03', t: 'Proyecto',
-        d: 'Carpeta de trabajo: <b>/public/proyectos/' + esc(limpioRuta(st.project) || 'ank') + '</b>', e: 'listo', a: null }
+        d: 'Carpeta de trabajo: <b>/public/proyectos/' + esc(limpioProyecto(st.project) || 'ank') + '</b>', e: 'listo', a: null }
     ];
     cont.innerHTML = steps.map(function (p) {
       var cls = p.e === 'listo' ? 'done' : p.e === 'instalando' ? 'run' : p.e === 'error' ? 'fail' : '';
@@ -3752,7 +3775,7 @@
   function pintarChats() {
     var cont = q('.ank-ai-chatlist');
     if (!cont) return;
-    var proyecto = limpioRuta(st.project) || 'ank';
+    var proyecto = limpioProyecto(st.project) || 'ank';
     var todos = chatsDe(proyecto);
     var filtro = String(st.busqueda || '').trim().toLowerCase();
     var lista = todos.filter(function (c) {
@@ -4419,7 +4442,7 @@
                 '<div class="ank-ai-hint">Se guarda en el almacenamiento privado de la app. El cifrado con Android Keystore se incorpora en el bloque de seguridad.</div></div>' +
               '<div class="ank-ai-field ank-ai-appbar"><button class="ank-ai-btn primary" data-accion="guardar-clave">Guardar conexión</button>' +
                 '<button class="ank-ai-btn" data-accion="probar">Probar conexión</button></div>' +
-              '<div class="ank-ai-field"><label>Carpeta de trabajo</label><input id="ank-ai-proj" type="text" spellcheck="false" value="' + esc(limpioRuta(st.project) || 'ank') + '" />' +
+              '<div class="ank-ai-field"><label>Carpeta de trabajo</label><input id="ank-ai-proj" type="text" spellcheck="false" value="' + esc(limpioProyecto(st.project) || 'ank') + '" />' +
                 '<div class="ank-ai-hint">Relativa a /public/proyectos. Se crea al primer mensaje.</div></div>' +
             '</div></section>' +
           '<section class="ank-ai-view" data-view="log">' +
@@ -4524,7 +4547,7 @@
   function borrarChatUI(id) {
     st.chats = st.chats.filter(function (c) { return c.id !== id; });
     if (st.chatId === id) {
-      var lista = chatsDe(limpioRuta(st.project) || 'ank');
+      var lista = chatsDe(limpioProyecto(st.project) || 'ank');
       st.chatId = lista.length ? lista[0].id : '';
       st.msgs = lista.length ? lista[0].msgs : [];
       pintarMensajes();
@@ -4539,7 +4562,7 @@
   }
 
   function abrirMemoria() {
-    var proy = limpioRuta(st.project) || 'ank';
+    var proy = limpioProyecto(st.project) || 'ank';
     var el = q('#ank-ai-mem');
     var ta = q('.ank-ai-mem-text');
     if (!el || !ta) return;
@@ -4554,7 +4577,7 @@
   }
 
   function guardarMemoria() {
-    var proy = limpioRuta(st.project) || 'ank';
+    var proy = limpioProyecto(st.project) || 'ank';
     var ta = q('.ank-ai-mem-text');
     if (!ta) return;
     var ruta = st.prefix + '/public/proyectos/' + proy + '/AGENTS.md';
@@ -4577,7 +4600,7 @@
   function compactarMemoria() {
     if (st.probandoPrueba) return;
     if (!st.apiConfigured || !window.ANKAIEngine) return aviso('Conecta una API antes de resumir la memoria.');
-    var project = limpioRuta(st.project) || 'ank';
+    var project = limpioProyecto(st.project) || 'ank';
     var textarea = q('.ank-ai-mem-text');
     if (!textarea) return;
     st.probandoPrueba = true;
@@ -4655,7 +4678,7 @@
         probarAsistente();
         break;
       case 'nuevo-chat':
-        nuevoChat(limpioRuta(st.project) || 'ank');
+        nuevoChat(limpioProyecto(st.project) || 'ank');
         st.tab = 'chat';
         pintar();
         pintarMensajes();
@@ -4742,7 +4765,7 @@
     }
     if (e.target.id === 'ank-ai-endpoint') { st.endpoint = String(e.target.value || '').trim(); return; }
     if (e.target.id === 'ank-ai-proj') {
-      st.project = limpioRuta(e.target.value) || 'ank';
+      st.project = limpioProyecto(e.target.value) || 'ank';
       guardar('ank.ai.project', st.project);
       var chats = chatsDe(st.project);
       st.chatId = chats.length ? chats[0].id : '';
@@ -4795,11 +4818,11 @@
   function abrirCarpeta() {
     try {
       if (window.acode && typeof window.acode.exec === 'function') {
-        window.acode.exec('open-folder', '/public/proyectos/' + (limpioRuta(st.project) || 'ank'));
+        window.acode.exec('open-folder', '/public/proyectos/' + (limpioProyecto(st.project) || 'ank'));
         return;
       }
     } catch (e) {}
-    aviso('/public/proyectos/' + (limpioRuta(st.project) || 'ank'));
+    aviso('/public/proyectos/' + (limpioProyecto(st.project) || 'ank'));
   }
 
   function abrirPanel() {
