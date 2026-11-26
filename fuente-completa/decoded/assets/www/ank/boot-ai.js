@@ -37,7 +37,10 @@
     if (css && css.indexOf('.ank-ai-sheet') !== -1) inyectarCss(css);
 
     var ai = leer(K_AI);
-    if (ai && ai.length > 20000 && ai.indexOf('ankAIInstalled') !== -1) {
+    // La versión nueva debe llevar el motor ANK embebido. Así no se reutiliza
+    // el panel antiguo que dependía del ejecutable retirado.
+    var motorNuevo = ai && ai.indexOf('ANK_AI_ENGINE_BUNDLE_BEGIN') !== -1;
+    if (motorNuevo && ai.length > 20000 && ai.indexOf('ankAIInstalled') !== -1) {
       try {
         (new Function(ai)).call(window);
         return;
@@ -45,6 +48,8 @@
         try { localStorage.removeItem(K_AI); } catch (err) {}
         console.warn('[ANK] actualización descartada', e);
       }
+    } else if (ai) {
+      try { localStorage.removeItem(K_AI); } catch (err) {}
     }
     cargarIncluido();
   }
