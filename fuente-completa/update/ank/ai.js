@@ -1753,8 +1753,8 @@
     cont.innerHTML = '';
     if (!st.msgs.length) {
       cont.innerHTML = '<div class="ank-ai-empty"><b>Asistente de ANK</b>' +
-        'Trabaja sobre los archivos del proyecto y ejecuta comandos en el entorno de la app. ' +
-        'No modifica nada fuera de la carpeta de trabajo.</div>';
+        'Puede leer archivos con tu aprobación y proponer cambios para que revises el diff antes de aplicarlos. ' +
+        'La terminal es opcional y las herramientas de lectura nunca modifican archivos.</div>';
       return;
     }
     st.msgs.forEach(function (m) {
@@ -2045,6 +2045,7 @@
           var solicitud = null;
           var errorHerramienta = '';
           try {
+            if (herramienta[1].length > 4096) throw new Error('La solicitud supera el límite de 4 KiB.');
             solicitud = JSON.parse(herramienta[1]);
             if (!solicitud || typeof solicitud !== 'object' || Array.isArray(solicitud)) {
               throw new Error('La solicitud debe ser un objeto JSON.');
@@ -2288,8 +2289,8 @@
           tool: checked.name,
           path: checked.arguments.path || '.',
           count: items.length,
-          truncated: items.length > 100,
-          entries: items.slice(0, 100)
+          truncated: items.length > 50,
+          entries: items.slice(0, 50).map(function (item) { return item.slice(0, 160); })
         };
       });
     }
@@ -2301,7 +2302,7 @@
         path: checked.arguments.path,
         size: content.length,
         truncated: clipped,
-        content: clipped ? content.slice(0, 12000) + '\n[contenido recortado]' : content
+        content: clipped ? content.slice(0, 9000) + '\n[contenido recortado]' : content
       };
     });
   }
@@ -2340,10 +2341,11 @@
       try { checked = validarSolicitudHerramienta(request); }
       catch (e) { validationError = e && e.message ? e.message : String(e); }
     }
-    var toolName = checked ? checked.name : String(request && (request.name || request.tool) || 'solicitud');
+    var toolName = recortar(checked ? checked.name : String(request && (request.name || request.tool) || 'solicitud'), 60);
     var argsText = '';
     try { argsText = JSON.stringify(request && (request.arguments || {}) || {}, null, 2); }
     catch (_) { argsText = '{}'; }
+    if (argsText.length > 2048) argsText = argsText.slice(0, 2048) + '\n… argumentos recortados';
     var h = { id: id, request: request, checked: checked, status: validationError ? 'failed' : 'pending', result: '' };
     st.herramientas[id] = h;
 
@@ -3550,7 +3552,7 @@
   }
 
   function enviar(forzado) {
-    if (st.corriendo) { aviso('Todavía está trabajando. Esperá o tocá Detener.'); return; }
+    if (st.corriendo || st.herramientaOcupada) { aviso('Todavía hay una operación en curso. Esperá a que termine.'); return; }
     var ta = q('.ank-ai-input');
     var pedido = forzado && forzado.texto != null ? String(forzado.texto) : (ta ? String(ta.value || '') : '');
     var texto = pedido.trim();
@@ -3622,7 +3624,7 @@
       if (!(forzado && forzado.sinBurbuja)) {
         anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
       }
-      quizasResumir(proyecto, chat);
+      if (!(forzado && forzado.sinBurbuja)) quizasResumir(proyecto, chat);
       log('i', 'Respuesta recibida de la API.'); pintar();
     }).catch(function (e) {
       st.corriendo = false; st.abortController = null;
