@@ -2348,6 +2348,7 @@
       aplicado: false,
       descartado: false,
       revertido: false,
+      revirtiendo: false,
       creado: false,
       respaldo: ''
     };
@@ -2381,7 +2382,9 @@
     if (descartar) descartar.disabled = !!(a.aplicado || a.descartado);
     if (revertir) {
       revertir.hidden = !a.aplicado || !!a.revertido;
-      revertir.disabled = !a.aplicado || !!a.revertido;
+      revertir.disabled = !a.aplicado || !!a.revertido || !!a.revirtiendo;
+      if (a.revirtiendo) revertir.textContent = 'Revirtiendo…';
+      else revertir.textContent = 'Revertir';
     }
     caja.classList.toggle('aplicado', !!a.aplicado && !a.revertido);
     caja.classList.toggle('revertido', !!a.revertido);
@@ -2516,13 +2519,15 @@
 
   function revertirArchivo(id) {
     var a = st.archivos[id];
-    if (!a || !a.aplicado || a.revertido) return;
+    if (!a || !a.aplicado || a.revertido || a.revirtiendo) return;
     var ruta = rutaAbsolutaArchivo(a.ruta);
     var caja = q('[data-archivo="' + id + '"]');
     var est = caja ? q('.ank-ai-file-est', caja) : null;
     if (!ruta) return aviso('No se puede revertir: ruta no válida.');
     if (typeof window.confirm === 'function' &&
         !window.confirm('¿Revertir "' + a.ruta + '" al contenido anterior?')) return;
+    a.revirtiendo = true;
+    actualizarArchivoUI(id);
     if (est) est.textContent = 'revirtiendo…';
 
     leerArchivoDetallado(ruta)
@@ -2545,6 +2550,7 @@
         });
       })
       .then(function () {
+        a.revirtiendo = false;
         a.revertido = true;
         actualizarArchivoUI(id);
         if (est) est.textContent = a.creado ? 'archivo nuevo eliminado' : 'contenido anterior restaurado';
@@ -2552,6 +2558,7 @@
         log('i', 'Archivo revertido: ' + a.ruta + (a.respaldo ? ' · respaldo conservado' : ''));
       })
       .catch(function (error) {
+        a.revirtiendo = false;
         if (est) est.textContent = 'no se pudo revertir';
         actualizarArchivoUI(id);
         aviso('No se pudo revertir el archivo. Revisa el registro.');
