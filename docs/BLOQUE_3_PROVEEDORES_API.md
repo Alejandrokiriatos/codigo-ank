@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-3-multiple-api`  
 **Base:** bloque 2, commit `ca27820463950bcd455e1349b49e47a43a1d16a6`  
-**Estado:** adaptadores y panel de configuración implementados; pendientes las comprobaciones de CI y la validación en Android físico.
+**Estado:** cuatro modos API implementados y comprobación CI superada; falta validar endpoints reales y ejecutar las pruebas en Android físico.
 
 ## Objetivo
 
@@ -33,6 +33,23 @@ Permitir que cada instalación de Código ANK configure su propio proveedor, end
 - Convierte `assistant` a `model`, separa `systemInstruction` y traduce `maxTokens` a `maxOutputTokens`.
 - Extrae texto desde los bloques de `candidates[0].content.parts` y registra el motivo de finalización.
 
+
+### API JSON personalizada
+
+Pensada para proveedores HTTP que no implementan los tres protocolos anteriores, pero aceptan POST y devuelven JSON.
+
+- El endpoint se usa exactamente como se introduce; no se le añade ninguna ruta automática.
+- El encabezado de autenticación y su prefijo son configurables. Si el prefijo queda vacío, ANK envía la clave directamente en el encabezado seleccionado.
+- Se aceptan encabezados adicionales como un objeto JSON. Los valores pueden incluir `{{API_KEY}}` y `{{MODEL}}`.
+- La plantilla del cuerpo se define como JSON y admite `{{MODEL}}`, `{{MESSAGES}}`, `{{SYSTEM}}`, `{{API_KEY}}`, `{{TEMPERATURE}}` y `{{MAX_TOKENS}}`.
+- `{{MESSAGES}}` debe escribirse entre comillas en la plantilla; ANK la sustituye por el array de mensajes, no por texto JSON escapado.
+- La respuesta se extrae mediante una ruta con puntos e índices, por ejemplo `data.answer.text`, `choices.0.message.content` o `output.0.content`.
+- El endpoint puede incluir parámetros de consulta no sensibles; las claves y tokens en la URL se rechazan.
+- Se bloquean encabezados de transporte y saltos de línea para reducir riesgo de inyección.
+
+Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSocket, gRPC, protocolos binarios, autenticación de firma compleja o streaming propietario siguen necesitando un adaptador específico.
+
+
 ## Panel y persistencia
 
 - La pestaña Entorno permite elegir el formato de API.
@@ -40,7 +57,7 @@ Permitir que cada instalación de Código ANK configure su propio proveedor, end
 - La configuración se guarda en `provider.json` en el directorio privado de la aplicación.
 - Se guarda el identificador de protocolo junto con endpoint, modelo y clave.
 - Las configuraciones antiguas que no incluyen `protocol` siguen tratándose como OpenAI Chat Completions.
-- El protocolo elegido se aplica tanto al chat principal como a la prueba de conexión y el resumen automático de memoria.
+- El protocolo y los ajustes personalizados se aplican al chat principal, la prueba de conexión y el resumen automático de memoria.
 - No se realiza descubrimiento automático de modelos: se escribe el ID exacto que el proveedor muestra en su documentación o consola.
 
 ## Transporte, cancelación y errores
@@ -49,11 +66,11 @@ Permitir que cada instalación de Código ANK configure su propio proveedor, end
 - Fuera de Cordova se usa `fetch`; el navegador puede exigir CORS habilitado por el proveedor.
 - Las peticiones nativas admiten timeout y cancelación mediante el ID que devuelve `sendRequest`.
 - Las respuestas no JSON, errores HTTP y respuestas vacías se convierten en errores legibles.
-- OpenAI compatible conserva streaming SSE en `fetch`; Anthropic y Gemini usan JSON completo en esta entrega.
+- OpenAI compatible conserva streaming SSE en `fetch`; Anthropic, Gemini y API personalizada usan JSON completo en esta entrega.
 
 ## Límites conocidos
 
-“Cualquier API” no significa cualquier URL de inferencia: los proveedores deben exponer uno de los tres contratos implementados. Una API propia con un protocolo, firma o mecanismo de autenticación distinto requiere un adaptador adicional. Los servicios OpenAI-compatible que usan `api-key` en vez de `Authorization: Bearer` (por ejemplo, ciertos despliegues Azure) todavía necesitan ajuste específico.
+“Cualquier API” no significa cualquier URL de inferencia: los proveedores deben exponer uno de los tres protocolos nativos o usar el modo HTTP POST JSON configurable. Una API propia con WebSocket, gRPC, protocolo binario, firma compleja o respuestas no JSON requiere un adaptador adicional.
 
 Las claves siguen guardándose en el directorio privado sin cifrado Android Keystore. No se debe presentar esta rama como una versión endurecida. El cifrado seguro y la gestión de secretos se mantienen para el bloque de seguridad.
 
@@ -69,5 +86,6 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 - Autenticación, conversión de roles, cuerpo y extracción de respuesta de Gemini.
 - Error HTTP 401 del transporte nativo.
 - Cancelación y timeout del transporte nativo.
+- Plantilla JSON, autenticación personalizable, variables, ruta de extracción y conservación de parámetros de consulta seguros.
 
 La ejecución de GitHub Actions es la comprobación de referencia del bloque. No sustituye la prueba real con las claves y endpoints de los proveedores, ni la prueba en un teléfono Android con el plugin Cordova instalado.
