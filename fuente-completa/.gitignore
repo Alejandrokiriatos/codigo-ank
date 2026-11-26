@@ -6,8 +6,7 @@
 *.jks
 node_modules/
 
-# Entorno Linux / asistente incluido en el APK (se descarga aparte)
-decoded/assets/opencode/
+# Entorno Linux independiente del asistente IA
 decoded/assets/alpine_assets/
 decoded/assets/dexopt/
 decoded/build/
