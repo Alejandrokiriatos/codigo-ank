@@ -16,22 +16,24 @@ const source = fs.readFileSync(sourcePath, 'utf8').trim();
 const current = fs.readFileSync(targetPath, 'utf8');
 const block = begin + '\n' + source + '\n' + end;
 
-const pattern = new RegExp(escapeRegExp(begin) + '[\\s\\S]*?' + escapeRegExp(end) + '\\s*', 'g');
-const clean = current.replace(pattern, '').replace(/^\\s+/, '');
+let clean = current;
+const blockStart = clean.indexOf(begin);
+if (blockStart !== -1) {
+  const blockEnd = clean.indexOf(end, blockStart);
+  if (blockEnd === -1) throw new Error('El bloque embebido del motor está incompleto.');
+  clean = clean.slice(0, blockStart) + clean.slice(blockEnd + end.length);
+}
+clean = clean.trimStart();
 const expected = block + '\n\n' + clean;
 
 if (process.argv.includes('--check')) {
   if (current === expected) {
-    process.stdout.write('Motor integrado y sincronizado.\\n');
+    process.stdout.write('Motor integrado y sincronizado.\n');
     process.exit(0);
   }
-  process.stderr.write('ai.js no contiene la última versión de ank-ai/engine.js. Ejecuta: node tools/build-ai.js\\n');
+  process.stderr.write('ai.js no contiene la última versión de ank-ai/engine.js. Ejecuta: node tools/build-ai.js\n');
   process.exit(1);
 }
 
 fs.writeFileSync(targetPath, expected, 'utf8');
-process.stdout.write('Motor ANK integrado en decoded/assets/www/ank/ai.js\\n');
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
-}
+process.stdout.write('Motor ANK integrado en decoded/assets/www/ank/ai.js\n');
