@@ -112,6 +112,8 @@ El manifiesto reconstruido indica paquete final `com.ank.codigoank`, `versionCod
 
 **Consecuencia:** hoy no se puede afirmar que exista una compilación Android reproducible desde esta copia. Tampoco se puede garantizar una actualización encima de la instalación existente sin conservar la identidad de firma de la versión distribuida. El keystore y sus contraseñas nunca deben subirse a un repositorio público.
 
+Se añadió un segundo job de CI que intenta reconstruir `decoded/` con Apktool 2.11.1 y genera un APK sin firmar. Ese ensayo puede demostrar si la reconstrucción técnica desde Smali/recursos es viable; no reemplaza el proyecto fuente Gradle ni resuelve la firma release. El resultado queda pendiente hasta que termine la ejecución.
+
 ## 6. Seguridad Android a revisar
 
 En `AndroidManifest.xml` aparecen:
@@ -177,7 +179,7 @@ El soporte universal nunca será literalmente cualquier endpoint arbitrario: cad
 - [x] Corrección del test de versión obsoleto en el bot.
 - [x] Workflow de sintaxis y pruebas automatizadas preparado.
 - [x] Workflow de CI en verde (330 archivos JS/MJS y 24 pruebas del bot).
-- [ ] Proyecto Android original o procedimiento Apktool reproducible verificado.
+- [ ] Proyecto Android original o procedimiento Apktool reproducible verificado (job Apktool añadido; resultado pendiente).
 - [ ] APK base y huella del certificado de firma identificados para preservar instalación y datos.
 - [ ] Prueba real de instalación/arranque en un dispositivo Android.
 
