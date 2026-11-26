@@ -20,11 +20,11 @@ La primera versión reconoce dos nombres: `project.list` y `project.read`. El pa
 
 ### `project.list`
 
-Lee los nombres de los elementos de una carpeta del proyecto actual. La ruta es relativa a la carpeta activa; `.` representa la raíz. Devuelve un máximo de 100 nombres por consulta.
+Lee los nombres de los elementos de una carpeta del proyecto actual. La ruta es relativa a la carpeta activa; `.` representa la raíz. Devuelve un máximo de 50 nombres por consulta.
 
 ### `project.read`
 
-Lee un archivo de texto dentro del proyecto activo. El límite de entrada es 64 KiB y el texto que se devuelve al modelo se recorta a 12.000 caracteres. Los archivos que contienen caracteres NUL se rechazan como probablemente binarios.
+Lee un archivo de texto dentro del proyecto activo. El límite de entrada es 64 KiB y el texto que se devuelve al modelo se recorta a 9.000 caracteres. Los archivos que contienen caracteres NUL se rechazan como probablemente binarios.
 
 ## Flujo de aprobación
 
@@ -43,7 +43,8 @@ Se permiten hasta cuatro acciones aprobadas en una cadena de respuesta iniciada 
 - Solo se acepta el argumento `path`; cualquier otro argumento provoca rechazo.
 - Las rutas absolutas, los segmentos vacíos, `.` intermedios, `..`, barras inversas y caracteres de control se rechazan.
 - Las rutas se resuelven debajo de `/public/proyectos/<proyecto actual>`.
-- Las lecturas tienen límites de bytes y de caracteres.
+- Las solicitudes JSON de herramienta se limitan a 4 KiB y los argumentos de la tarjeta se limitan a 2 KiB para mostrarlos.
+- Las lecturas tienen límites de 64 KiB de entrada y 9.000 caracteres de contenido enviado al modelo.
 - El contenido de solicitudes y resultados se representa con `textContent`, no como HTML ejecutable.
 - No hay escritura, borrado, instalación de paquetes ni ejecución de terminal mediante `ank:tool`.
 - Las modificaciones siguen el flujo `ank:archivo`: diff visible, botones Aplicar/Descartar y aprobación separada.
