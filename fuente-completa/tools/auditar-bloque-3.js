@@ -26,6 +26,7 @@ assert.equal(
 
 assert.match(panel, /function cargarConfigApi\(\)/, 'Falta la restauración de la configuración API.');
 assert.match(panel, /function guardarCredencial\(\)/, 'Falta el guardado de la conexión API.');
+assert.match(panel, /window\\.ANKAIEngine\\.endpointUrl\(st\.endpoint/, 'La configuración restaurada debe validar el endpoint antes de declararse lista.');
 assert.match(panel, /function probarAsistente\(\)/, 'Falta la prueba de conexión.');
 assert.match(panel, /function rutaConfigApi\(\)\s*\{\s*return st\.prefix \+ '\/ank-ai\/provider\.json';?\s*\}/,
   'La configuración API debe guardarse bajo el directorio privado de la aplicación.');
