@@ -104,8 +104,8 @@ nativas propietarias:
 
 | Herramienta | Función |
 |---|---|
-| `project.list` | Lista nombres de archivos y carpetas dentro del proyecto actual (máximo 100 entradas por consulta). |
-| `project.read` | Lee un archivo de texto dentro del proyecto actual (máximo 64 KiB; la respuesta se limita a 12.000 caracteres). |
+| `project.list` | Lista nombres de archivos y carpetas dentro del proyecto actual (máximo 50 entradas por consulta). |
+| `project.read` | Lee un archivo de texto dentro del proyecto actual (máximo 64 KiB; la respuesta se limita a 9.000 caracteres). |
 
 La IA las solicita mediante un bloque `ank:tool` con JSON. Código ANK muestra
 una tarjeta con el nombre y los argumentos; la operación no se ejecuta hasta
