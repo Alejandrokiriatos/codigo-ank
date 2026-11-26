@@ -70,3 +70,35 @@ jobs:
           test -s fuente-completa/decoded/assets/www/ank/boot-ai.js
           test -s fuente-completa/decoded/assets/www/ank/ai.js
           node -e "const v=require('./fuente-completa/update/version.json'); if(!v.web || !v.ai || !v.css || !v.sig) process.exit(1); console.log('Canal del panel:', v.web)"
+
+  apktool-rebuild:
+    name: Reconstrucción técnica del APK con Apktool
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Descargar rama de auditoría
+        uses: actions/checkout@v4
+
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Apktool 2.11.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/iBotPeaches/Apktool/releases/download/v2.11.1/apktool_2.11.1.jar -o "$RUNNER_TEMP/apktool.jar"
+          printf '#!/usr/bin/env bash\nexec java -jar "%s" "$@"\n' "$RUNNER_TEMP/apktool.jar" | sudo tee /usr/local/bin/apktool >/dev/null
+          sudo chmod +x /usr/local/bin/apktool
+          apktool --version
+
+      - name: Reconstruir APK sin firmar
+        shell: bash
+        run: |
+          set -euo pipefail
+          apktool b fuente-completa/decoded -o "$RUNNER_TEMP/CodigoANK-reconstruido-unsigned.apk"
+          test -s "$RUNNER_TEMP/CodigoANK-reconstruido-unsigned.apk"
+          stat -c 'APK reconstruido: %s bytes' "$RUNNER_TEMP/CodigoANK-reconstruido-unsigned.apk"
+          echo "Reconstrucción Apktool completada. Este APK queda sin firma release y no debe instalarse sobre la versión distribuida." >> "$GITHUB_STEP_SUMMARY"
