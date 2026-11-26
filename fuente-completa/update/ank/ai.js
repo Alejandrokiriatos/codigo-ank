@@ -935,7 +935,7 @@
       })
       .then(function (installed) {
         st.sandbox = installed ? 'listo' : 'falta';
-        log('i', st.apiConfigured ? 'Configuración API disponible.' : 'Falta configurar una API.');
+        log('i', st.apiConfigured ? 'Configuración API restaurada desde el almacenamiento privado.' : 'Falta configurar una API.');
         log('i', installed ? 'Terminal Linux disponible.' : 'Terminal Linux no instalada (opcional para chat API).');
       })
       .catch(function (e) { log('w', e && e.message ? e.message : String(e)); })
@@ -4287,16 +4287,7 @@
     setTimeout(function () { enviarEstadistica(); }, 6000);
     setTimeout(function () { leerEstadisticas(false); }, 9000);
     engancharMenu();
-    dirsIniciales()
-      .then(function () { return cargarConfigApi(); })
-      .then(function () {
-        if (st.apiConfigured) log('i', 'Configuración API restaurada desde el almacenamiento privado.');
-        pintar();
-        return asegurarMemoria(st.project);
-      })
-      .catch(function (e) {
-        log('w', 'No se pudo restaurar la configuración local: ' + (e && e.message ? e.message : e));
-      });
+    // La configuración API se restaura en chequearTodo(), después de deviceready.
     mountTimer = setInterval(ciclo, 700);
     ciclo();
     /* Si recién se aplicó una actualización, muestra qué cambió. */
