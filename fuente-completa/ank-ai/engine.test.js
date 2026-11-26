@@ -416,7 +416,7 @@ test('conserva identificadores de modelo usados por proveedores y gateways', () 
 
 test('rechaza identificadores de modelo con controles o longitud excesiva', () => {
   assert.throws(
-    () => Engine.normalizarModelo('modelo\\nAuthorization: Bearer leaked'),
+    () => Engine.normalizarModelo('modelo\nAuthorization: Bearer leaked'),
     (error) => error.code === 'ANK_AI_MODEL_INVALID'
   );
   assert.throws(
