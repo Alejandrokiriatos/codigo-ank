@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-3-multiple-api`  
 **Base:** bloque 2, commit `ca27820463950bcd455e1349b49e47a43a1d16a6`  
-**Estado:** cuatro modos API implementados; las pruebas automatizadas y la reconstrucción diagnóstica están en verificación; sigue pendiente la validación en Android físico.
+**Estado:** cuatro modos API implementados; auditoría estática y 21 pruebas automatizadas superadas; sigue pendiente la validación en Android físico y el endurecimiento del almacenamiento de claves.
 
 ## Objetivo
 
@@ -61,6 +61,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Las configuraciones antiguas que no incluyen `protocol` siguen tratándose como OpenAI Chat Completions.
 - El protocolo y los ajustes personalizados se aplican al chat principal, la prueba de conexión y el resumen automático de memoria.
 - No se realiza descubrimiento automático de modelos: se escribe el ID exacto que el proveedor muestra en su documentación o consola.
+- La normalización conserva sufijos y símbolos válidos del ID (por ejemplo `:free`, `@` y `+`), y rechaza caracteres de control o nombres de más de 256 caracteres.
 
 ## Transporte, cancelación y errores
 
@@ -89,5 +90,15 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 - Error HTTP 401 del transporte nativo.
 - Cancelación y timeout del transporte nativo.
 - Plantilla JSON, autenticación personalizable, variables, ruta de extracción y conservación de parámetros de consulta seguros.
+- Identificadores de modelo con `:`, `@` y `+`, rechazo de caracteres de control y límite de longitud.
 
-La ejecución de GitHub Actions es la comprobación de referencia del bloque. No sustituye la prueba real con las claves y endpoints de los proveedores, ni la prueba en un teléfono Android con el plugin Cordova instalado.
+### Resultado CI del 26/11/2026
+
+La ejecución [45892806329](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45892806329) terminó correctamente:
+
+- 21 pruebas del motor: 21 correctas, 0 fallidas.
+- `node tools/build-ai.js --check`: motor fuente y bundle Android idénticos.
+- `tools/auditar-bloque-3.js`: configuración, persistencia privada, cuatro protocolos y ausencia de OpenCode en el panel activo verificados.
+- La copia interna `update/ank/ai.js` quedó sincronizada con el bundle Android. Esto no reactiva el canal remoto: `upd.js` continúa inerte y el manifiesto antiguo no se publica.
+
+La CI valida el comportamiento simulado y la integración estática. No sustituye la prueba real con claves y endpoints de los proveedores, ni la prueba en un teléfono Android con el plugin Cordova instalado.
