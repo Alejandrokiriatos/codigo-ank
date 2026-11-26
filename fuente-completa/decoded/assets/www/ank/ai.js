@@ -2240,6 +2240,7 @@
       '<pre class="ank-ai-command-output" hidden></pre>' +
       '<div class="ank-ai-command-actions">' +
         '<button type="button" class="ank-ai-act" data-accion="ejecutar-comando" data-valor="' + id + '"' + (policy.ok ? '' : ' disabled') + '>Ejecutar en terminal</button>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="adjuntar-resultado" data-valor="' + id + '" hidden disabled>Enviar resultado a IA</button>' +
         '<button type="button" class="ank-ai-act ghost" data-accion="descartar-comando" data-valor="' + id + '">Descartar</button>' +
       '</div>';
     q('.ank-ai-command-title', caja).textContent = st.comandos[id].titulo;
@@ -2257,6 +2258,7 @@
     var status = q('.ank-ai-command-status', caja);
     var output = q('.ank-ai-command-output', caja);
     var run = q('[data-accion="ejecutar-comando"]', caja);
+    var attach = q('[data-accion="adjuntar-resultado"]', caja);
     var discard = q('[data-accion="descartar-comando"]', caja);
     if (status) {
       if (item.estado === 'preparando') status.textContent = 'Preparando terminal…';
@@ -2272,6 +2274,12 @@
         item.estado === 'completado' || item.estado === 'descartado' || item.estado === 'bloqueado';
       run.textContent = item.estado === 'error' ? 'Reintentar' : 'Ejecutar en terminal';
     }
+    if (attach) {
+      var hasResult = (item.estado === 'completado' || item.estado === 'error') && !!item.salida;
+      attach.hidden = !hasResult;
+      attach.disabled = !hasResult || !!item.compartido;
+      attach.textContent = item.compartido ? 'Resultado enviado a IA' : 'Enviar resultado a IA';
+    }
     if (discard) discard.disabled = item.estado === 'descartado' || item.estado === 'completado' ||
       item.estado === 'ejecutando' || item.estado === 'preparando';
     if (output) {
@@ -2283,6 +2291,15 @@
     caja.classList.toggle('done', item.estado === 'completado');
     caja.classList.toggle('failed', item.estado === 'error');
     caja.classList.toggle('discarded', item.estado === 'descartado');
+  }
+
+  function adjuntarResultadoComando(id) {
+    var item = st.comandos[id];
+    if (!item || item.compartido || (item.estado !== 'completado' && item.estado !== 'error') || !item.salida) return;
+    item.compartido = true;
+    actualizarComandoUI(id);
+    log('i', 'El usuario autorizó enviar el resultado del comando a la API.');
+    aviso('El resultado se incluirá en el próximo mensaje al asistente.');
   }
 
   function descartarComando(id) {
@@ -3657,6 +3674,19 @@
       }).slice(-40).map(function (m) {
         return { role: m.rol === 'user' ? 'user' : 'assistant', content: String(m.texto || '').slice(0, 30000) };
       });
+      // La salida de una herramienta no se transmite automáticamente al proveedor.
+      // Solo se adjunta cuando el usuario pulsa el botón de la tarjeta.
+      Object.keys(st.comandos).forEach(function (id) {
+        var item = st.comandos[id];
+        if (!item || !item.compartido) return;
+        history.push({
+          role: 'assistant',
+          content: '[Resultado de una herramienta ejecutada con aprobación del usuario]\\nComando: ' +
+            item.comando + '\\nEstado: ' + item.estado + '\\nCódigo de salida: ' + item.codigo +
+            '\\nSalida:\\n' + String(item.salida || '').slice(0, 6000)
+        });
+      });
+      history = history.slice(-48);
       log('i', 'Enviando solicitud a la API: ' + st.model);
       return window.ANKAIEngine.chat({
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
@@ -4812,6 +4842,7 @@
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
       case 'rollback-archivo': revertirArchivo(t.getAttribute('data-valor')); break;
       case 'ejecutar-comando': ejecutarComandoPropuesto(t.getAttribute('data-valor')); break;
+      case 'adjuntar-resultado': adjuntarResultadoComando(t.getAttribute('data-valor')); break;
       case 'descartar-comando': descartarComando(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
       case 'diag': compartirDiagnostico(); break;
