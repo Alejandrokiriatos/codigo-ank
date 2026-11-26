@@ -495,7 +495,8 @@
 }
 
 .ank-ai-field input,
-.ank-ai-field select {
+.ank-ai-field select,
+.ank-ai-field textarea {
   width: 100%;
   box-sizing: border-box;
   background: #0c1315 !important;
@@ -510,9 +511,30 @@
   appearance: none;
 }
 
+.ank-ai-field textarea {
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+
 .ank-ai-field input:focus,
-.ank-ai-field select:focus {
+.ank-ai-field select:focus,
+.ank-ai-field textarea:focus {
   border-color: #e0a458 !important;
+}
+
+.ank-ai-custom {
+  margin: 14px 0 2px;
+  padding: 10px 12px 14px;
+  border: 1px solid #26363a;
+  border-left: 2px solid #e0a458;
+  background: #10191b;
+}
+
+.ank-ai-custom .ank-ai-field:first-child {
+  margin-top: 0;
 }
 
 .ank-ai-hint {
