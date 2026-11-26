@@ -1,6 +1,5 @@
-/* Código ANK — asistente local sobre OpenCode (sandbox Alpine).
-   Panel propio, sin dependencias externas: usa Terminal/Executor del plugin
-   de terminal ya incluido en la app. */
+/* Código ANK — asistente independiente conectado a proveedores API.
+   Terminal/Executor permanece como herramienta opcional separada. */
 
 (function () {
   'use strict';
@@ -12,23 +11,13 @@
    * constantes
    * ------------------------------------------------------------------ */
 
-  var ASSET_TGZ = 'opencode/opencode-arm64.tar.gz';
-  var MODEL_DEFAULT = 'opencode/deepseek-v4.1-flash-free';
-  var MODELOS_SUGERIDOS = [
-    'opencode/deepseek-v4.1-flash-free',
-    'opencode/glm-5.3-flash-free',
-    'opencode/mimo-v2.6-flash-free',
-    'opencode/nemotron-3.5-lightning-free',
-    'opencode/flint-40b-free',
-    'opencode/big-pickle'
-  ];
   var LOG_MAX = 400;
-  var VARIANTES_BASE = ['low', 'medium', 'high', 'max'];
+  var API_ENDPOINT_DEFAULT = 'https://api.openai.com/v1';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '1.8.3';
+  var PANEL_VERSION = '2.0.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
-  var PANEL_FECHA = '29/10/2026';
+  var PANEL_FECHA = '26/11/2026';
 
   var ERRORES_MAX = 12;
 
@@ -84,16 +73,15 @@
     pub: '',
     work: '/public/proyectos',
     project: leer('ank.ai.project', 'ank'),
-    model: leer('ank.ai.model', MODEL_DEFAULT),
-    modo: leer('ank.ai.modo', 'build'),          // build | plan
-    variant: leer('ank.ai.variant', ''),         // '' = automático
-    variantes: {},                               // modelo -> [variantes]
-    sandbox: 'desconocido', // desconocido | falta | listo | error
-    binario: 'desconocido', // desconocido | falta | listo | error
-    credencial: 'desconocido', // desconocido | falta | listo | error
-    modelos: [],
+    model: leer('ank.ai.model', ''),
+    endpoint: leer('ank.ai.endpoint', API_ENDPOINT_DEFAULT),
+    apiKey: '',
+    apiConfigured: false,
+    modo: leer('ank.ai.modo', 'build'),
+    sandbox: 'desconocido',
+    credencial: 'falta',
     corriendo: false,
-    proc: null,
+    abortController: null,
     continuar: false,
     tab: 'chat',
     log: [],
@@ -104,18 +92,18 @@
     memoriaProyecto: '',
     probando: false,
     probandoPrueba: false,
-    ultimo: null,          // último pedido, para reintentar
-    turnoError: null,      // burbuja con el error del último turno
-    archivos: {},          // propuestas de archivo pendientes de aplicar
+    ultimo: null,
+    turnoError: null,
+    archivos: {},
     archivosN: 0,
     busqueda: '',
     resumiendoAuto: false,
-    errores: [],           // últimos errores, para el diagnóstico
+    errores: [],
     ultimaRevision: 0,
-    apps: [],              // mini apps descubiertas
+    apps: [],
     appsCargando: false,
-    appActual: null,       // app abierta en el runner
-    stats: null,           // resumen de usuarios leído del repositorio
+    appActual: null,
+    stats: null,
     statsError: ''
   };
 
@@ -254,8 +242,9 @@
     lineas.push('Panel: ' + PANEL_VERSION + ' (' + PANEL_FECHA + ')' + (u && u.version ? ' · publicado ' + u.version() : ''));
     if (app) lineas.push('App: ' + app);
     lineas.push('Equipo: ' + (navigator.userAgent || 'desconocido'));
-    lineas.push('Entorno: sandbox=' + st.sandbox + ', asistente=' + st.binario + ', cuenta=' + st.credencial);
-    lineas.push('Modelo: ' + st.model + (st.modo === 'plan' ? ' · plan' : '') + (st.variant ? ' · ' + st.variant : ''));
+    lineas.push('IA: API conectada=' + (st.apiConfigured ? 'sí' : 'no') + ', terminal=' + st.sandbox);
+    lineas.push('Modelo: ' + (st.model || 'sin configurar') + (st.modo === 'plan' ? ' · plan' : ''));
+    lineas.push('Endpoint: ' + st.endpoint);
     lineas.push('Proyecto: ' + (limpioRuta(st.project) || 'ank') + ' · chats=' + st.chats.length);
     if (st.errores.length) {
       lineas.push('');
@@ -323,22 +312,18 @@
   }
 
   function limpioModelo(s) {
-    return String(s || '').replace(/[^A-Za-z0-9._\-\/]/g, '');
+    return String(s || '').trim().replace(/[^A-Za-z0-9._:\-\/]/g, '').slice(0, 180);
   }
 
   function listo() {
-    return st.sandbox === 'listo' && st.binario === 'listo' && st.credencial === 'listo';
+    return !!st.apiConfigured;
   }
 
   function env() {
     return [
       'export HOME=/public',
       'export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
-      'export TERM=xterm-256color',
-      'export OPENCODE_DISABLE_AUTOUPDATE=1',
-      'export OPENCODE_DISABLE_LSP_DOWNLOAD=1',
-      'export OPENCODE_DISABLE_CLAUDE_CODE=1',
-      'export OPENCODE_DISABLE_PRUNE=1'
+      'export TERM=xterm-256color'
     ].join('; ') + '; ';
   }
 
@@ -370,8 +355,8 @@
       st.work = '/public/proyectos';
       return Promise.all([
         conSistema('mkdirs', dir + '/public/.ank').catch(function () {}),
-        conSistema('mkdirs', dir + '/public/.local/share/opencode').catch(function () {}),
-        conSistema('mkdirs', dir + '/public/.config/opencode').catch(function () {}),
+        conSistema('mkdirs', dir + '/ank-ai').catch(function () {}),
+        conSistema('mkdirs', dir + '/public/.config/ank').catch(function () {}),
         conSistema('mkdirs', dir + '/public/proyectos').catch(function () {})
       ]);
     });
@@ -514,166 +499,111 @@
    * comprobaciones
    * ------------------------------------------------------------------ */
 
-  function chequearTodo(profundo) {
+  function rutaConfigApi() { return st.prefix + '/ank-ai/provider.json'; }
+
+  function clienteHttpNativo() {
+    var c = window.cordova;
+    if (!c) return null;
+    if (c.plugin && c.plugin.http && typeof c.plugin.http.sendRequest === 'function') return c.plugin.http;
+    if (c.plugins && c.plugins.http && typeof c.plugins.http.sendRequest === 'function') return c.plugins.http;
+    return null;
+  }
+
+  function cargarConfigApi() {
+    if (!st.prefix) return Promise.resolve(false);
+    return leerTexto(rutaConfigApi()).then(function (raw) {
+      if (!raw.trim()) throw new Error('sin configuración');
+      var data = JSON.parse(raw);
+      st.endpoint = String(data.endpoint || API_ENDPOINT_DEFAULT);
+      st.model = String(data.model || '');
+      st.apiKey = String(data.apiKey || '');
+      st.apiConfigured = !!(st.endpoint && st.model && st.apiKey);
+      st.credencial = st.apiConfigured ? 'listo' : 'falta';
+      try {
+        localStorage.setItem('ank.ai.model', st.model);
+        localStorage.setItem('ank.ai.endpoint', st.endpoint);
+      } catch (e) {}
+      return st.apiConfigured;
+    }).catch(function () {
+      st.apiKey = '';
+      st.apiConfigured = false;
+      st.credencial = 'falta';
+      return false;
+    });
+  }
+
+  function guardarCredencial() {
+    var endpoint = String((q('#ank-ai-endpoint') && q('#ank-ai-endpoint').value) || st.endpoint || API_ENDPOINT_DEFAULT).trim();
+    var model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
+    var enteredKey = String((q('#ank-ai-key') && q('#ank-ai-key').value) || '').trim();
+    var apiKey = enteredKey || st.apiKey;
+    if (!window.ANKAIEngine) return aviso('No se ha cargado el motor API de ANK.');
+    if (!apiKey) return aviso('Introduce la clave API.');
+    if (!model) return aviso('Introduce el identificador exacto del modelo.');
+    try { window.ANKAIEngine.endpointUrl(endpoint); }
+    catch (e) { return aviso(e.message || 'La dirección API no es válida.'); }
+    var data = { version: 1, protocol: 'openai-chat-completions', endpoint: endpoint, model: model, apiKey: apiKey, temperature: 0.2 };
+    return dirsIniciales().then(function () {
+      return escribir(rutaConfigApi(), JSON.stringify(data));
+    }).then(function () {
+      st.endpoint = endpoint; st.model = model; st.apiKey = apiKey;
+      st.apiConfigured = true; st.credencial = 'listo';
+      try {
+        localStorage.setItem('ank.ai.model', model);
+        localStorage.setItem('ank.ai.endpoint', endpoint);
+      } catch (e) {}
+      if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+      log('i', 'Configuración API guardada en el almacenamiento privado de ANK.');
+      aviso('Conexión API configurada.');
+      pintar();
+      return true;
+    }).catch(function (e) {
+      log('e', 'No se pudo guardar la configuración API: ' + (e && e.message ? e.message : e));
+      aviso('No se pudo guardar la configuración API.');
+      return false;
+    });
+  }
+
+  function probarAsistente() {
+    if (!st.apiConfigured || !window.ANKAIEngine) return aviso('Guarda primero la conexión API.');
+    if (st.probandoPrueba) return;
+    st.probandoPrueba = true;
+    log('i', 'Probando la conexión API…');
+    aviso('Probando conexión…');
+    window.ANKAIEngine.chat({
+      endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      messages: [
+        { role: 'system', content: 'Responde únicamente OK.' },
+        { role: 'user', content: 'Prueba de conexión de Código ANK. Responde OK.' }
+      ],
+      maxTokens: 24, timeoutMs: 45000, http: clienteHttpNativo()
+    }).then(function (result) {
+      log('i', 'API respondió correctamente: ' + recortar(result.content, 80));
+      aviso('Conexión API correcta.');
+    }).catch(function (e) {
+      log('e', 'Prueba API: ' + (e && e.message ? e.message : e));
+      aviso('La API no respondió correctamente. Revisa el registro.');
+    }).then(function () { st.probandoPrueba = false; pintar(); });
+  }
+
+  function chequearTodo() {
     if (st.probando) return Promise.resolve();
     st.probando = true;
     pintar();
     return dirsIniciales()
+      .then(function () { return cargarConfigApi(); })
       .then(function () {
-        return Term() ? Term().isInstalled() : false;
+        var T = Term();
+        return T ? Promise.resolve(T.isInstalled()).catch(function () { return false; }) : false;
       })
-      .then(function (ok) {
-        st.sandbox = ok ? 'listo' : 'falta';
-        log('i', ok ? 'Entorno Alpine disponible.' : 'Entorno Alpine no instalado.');
-        if (!ok) {
-          st.binario = 'falta';
-          st.credencial = 'falta';
-          return null;
-        }
-        if (!profundo) return null;
-        return asegurarSandbox()
-          .then(function () {
-            return shell('command -v opencode >/dev/null 2>&1 && opencode --version 2>&1 || echo "NO_INSTALADO"', true);
-          })
-          .then(function (r) {
-            var salida = (r.salida || '').trim();
-            var primera = salida.split('\n')[0] || '';
-            var roto = !salida || salida === 'NO_INSTALADO' || /error loading|no such file|not found|cannot/i.test(salida);
-            st.binario = roto ? (primera === 'NO_INSTALADO' || !primera ? 'falta' : 'error') : 'listo';
-            if (roto) {
-              log('e', primera === 'NO_INSTALADO' ? 'Binario del asistente ausente.' : 'Asistente: ' + primera);
-              st.credencial = 'falta';
-              return null;
-            }
-            st.version = primera;
-            log('i', 'Binario del asistente ' + primera + '.');
-            return shell('opencode auth list 2>&1 < /dev/null', true).then(function (a) {
-              var salida = a.salida || '';
-              var tiene = /api key|oauth|opencode|anthropic|openai|openrouter|google|deepseek|groq/i.test(salida) &&
-                !/no credentials|not authenticated|0 providers/i.test(salida);
-              st.credencial = tiene ? 'listo' : 'falta';
-              log('i', tiene ? 'Credenciales presentes.' : 'Sin credenciales configuradas.');
-              if (!tiene) return null;
-              return cargarModelos(true);
-            });
-          });
+      .then(function (installed) {
+        st.sandbox = installed ? 'listo' : 'falta';
+        log('i', st.apiConfigured ? 'Configuración API disponible.' : 'Falta configurar una API.');
+        log('i', installed ? 'Terminal Linux disponible.' : 'Terminal Linux no instalada (opcional para chat API).');
       })
-      .catch(function (e) {
-        log('w', e && e.message ? e.message : String(e));
-        if (st.sandbox !== 'listo') st.sandbox = 'error';
-      })
-      .then(function () {
-        st.probando = false;
-        pintar();
-      });
+      .catch(function (e) { log('w', e && e.message ? e.message : String(e)); })
+      .then(function () { st.probando = false; pintar(); });
   }
-
-  function parsearSalidaModelos(texto) {
-    var lineas = String(texto || '').split('\n');
-    var modelos = [];
-    var variantes = {};
-    var actual = null;
-    var buffer = null;
-
-    for (var i = 0; i < lineas.length; i++) {
-      var l = lineas[i].replace(/\r/g, '');
-      var t = l.trim();
-
-      if (buffer !== null) {
-        buffer.push(l);
-        if (t === '}' || t === '},') {
-          try {
-            var info = JSON.parse(buffer.join('\n').replace(/,\s*$/, ''));
-            var v = info && info.variants;
-            var lista = [];
-            if (Array.isArray(v)) {
-              lista = v.map(function (x) {
-                return typeof x === 'string' ? x : (x && (x.id || x.name)) || '';
-              });
-            } else if (v && typeof v === 'object') {
-              lista = Object.keys(v);
-            }
-            if (actual && lista.length) variantes[actual] = lista.filter(Boolean);
-          } catch (e) {}
-          buffer = null;
-        }
-        continue;
-      }
-
-      if (/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(t)) {
-        actual = t;
-        if (modelos.indexOf(t) === -1) modelos.push(t);
-        continue;
-      }
-
-      if (t === '{' && actual) buffer = [l];
-    }
-
-    return { modelos: modelos, variantes: variantes };
-  }
-
-  function cargarModelos(silencioso) {
-    return shell('opencode models --verbose 2>/dev/null < /dev/null', true).then(function (r) {
-      var datos = parsearSalidaModelos(r.salida);
-      var lista = datos.modelos;
-      if (lista.length) {
-        st.modelos = lista;
-        st.variantes = datos.variantes;
-        if (lista.indexOf(st.model) === -1) {
-          var libre = lista.filter(function (m) { return /free|pickle/i.test(m); })[0];
-          if (libre) {
-            st.model = libre;
-            guardar('ank.ai.model', libre);
-          }
-        }
-      } else if (!silencioso) {
-        log('w', 'No se pudieron listar modelos; se usan los sugeridos.');
-      }
-      return lista;
-    }).catch(function () {});
-  }
-
-  /* Variantes (esfuerzo) que acepta el modelo elegido. */
-  function variantesDe(modelo) {
-    return (st.variantes && st.variantes[modelo]) || VARIANTES_BASE;
-  }
-
-  function esGratis(modelo) {
-    return /free|pickle/i.test(modelo);
-  }
-
-  function opcionesModelos(actual) {
-    var lista = st.modelos.length ? st.modelos.slice() : MODELOS_SUGERIDOS.slice();
-    if (lista.indexOf(actual) === -1) lista = [actual].concat(lista);
-
-    var gratis = lista.filter(esGratis);
-    var propias = lista.filter(function (m) { return !esGratis(m); });
-
-    function opciones(arr) {
-      return arr.map(function (m) {
-        return '<option value="' + esc(m) + '"' + (m === actual ? ' selected' : '') + '>' + esc(m) + '</option>';
-      }).join('');
-    }
-
-    var html = '';
-    if (gratis.length) html += '<optgroup label="Gratis">' + opciones(gratis) + '</optgroup>';
-    if (propias.length) html += '<optgroup label="Tu API">' + opciones(propias) + '</optgroup>';
-    return html;
-  }
-
-  function opcionesEsfuerzo(modelo) {
-    var vs = variantesDe(modelo);
-    if (st.variant && vs.indexOf(st.variant) === -1) vs = [st.variant].concat(vs);
-    var html = '<option value="">Auto</option>';
-    html += vs.map(function (v) {
-      return '<option value="' + esc(v) + '"' + (v === st.variant ? ' selected' : '') + '>' + esc(v) + '</option>';
-    }).join('');
-    return html;
-  }
-
-  /* ------------------------------------------------------------------ *
-   * instalación
-   * ------------------------------------------------------------------ */
 
   function instalarEntorno() {
     var T = Term();
@@ -715,162 +645,8 @@
       });
   }
 
-  function instalarAsistente() {
-    if (st.binario === 'listo' || st.binario === 'instalando') return;
-    if (st.sandbox !== 'listo') return aviso('Primero prepará el entorno.');
-    st.binario = 'instalando';
-    pintar();
-    abrirConsola();
-    var destino = st.prefix + '/public/.ank/opencode.tar.gz';
-    var tick = null;
-    var pararTick = function () {
-      if (tick) { clearInterval(tick); tick = null; }
-    };
-    consolaEscribir('Comprobando espacio…');
-
-    shell("df -k /public | tail -n 1 | awk '{print $4}'", true)
-      .then(function (r) {
-        var libre = parseInt((r.salida || '0').trim(), 10) || 0;
-        consolaEscribir('Espacio libre: ' + Math.round(libre / 1024) + ' MB');
-        if (libre < 320 * 1024) throw new Error('Espacio insuficiente: se necesitan ~320 MB libres en el almacenamiento de la app.');
-        consolaEscribir('Copiando paquete…');
-        return conSistema('extractAsset', ASSET_TGZ, destino);
-      })
-      .then(function () {
-        consolaEscribir('Descomprimiendo (217 MB)…');
-        tick = setInterval(function () {
-          shell('du -sh /public/.ank/opencode 2>/dev/null | cut -f1', true).then(function (d) {
-            if (d.salida) consolaEscribir('... ' + d.salida);
-          }).catch(function () {});
-        }, 5000);
-        return shell(
-          'mkdir -p /public/.ank/opencode && rm -rf /public/.ank/opencode/* && ' +
-          'tar -xzf /public/.ank/opencode.tar.gz -C /public/.ank/opencode && ' +
-          'chmod +x /public/.ank/opencode/package/bin/opencode && ' +
-          'ln -sf /public/.ank/opencode/package/bin/opencode /usr/local/bin/opencode && echo OK',
-          true
-        );
-      })
-      .then(function (r) {
-        pararTick();
-        if ((r.salida || '').indexOf('OK') === -1) throw new Error('La extracción no terminó bien: ' + r.salida);
-        consolaEscribir('Verificando binario…');
-        return shell('opencode --version 2>&1', true);
-      })
-      .then(function (r) {
-        var v = (r.salida || '').trim().split('\n').filter(Boolean)[0] || '';
-        if (!/\d+\.\d+/.test(v) || /error loading|no such file|not found|cannot/i.test(v)) {
-          throw new Error('El binario no arranca: ' + (v || 'sin salida'));
-        }
-        consolaEscribir('Versión: ' + v);
-        log('i', 'OpenCode instalado: ' + v);
-        st.binario = 'listo';
-        st.version = v;
-        return shell('rm -f /public/.ank/opencode.tar.gz', true);
-      })
-      .then(function () {
-        return chequearTodo(true);
-      })
-      .catch(function (e) {
-        pararTick();
-        st.binario = 'error';
-        var m = e && e.message ? e.message : String(e);
-        consolaEscribir('ERROR: ' + m);
-        log('e', m);
-      })
-      .then(function () {
-        pintar();
-      });
-  }
-
-  /* Prueba corta de punta a punta: sirve para saber si el asistente arranca,
-     si ve el mensaje y si recibe respuesta del modelo. Todo con límite de
-     tiempo para que nunca deje el panel colgado. */
-  function probarAsistente() {
-    if (st.probandoPrueba) return;
-    st.probandoPrueba = true;
-    abrirConsola();
-    consolaEscribir('Probando el asistente, puede tardar hasta un minuto.');
-    log('i', 'Prueba del asistente iniciada.');
-
-    var proyecto = limpioRuta(st.project) || 'ank';
-    var ws = st.work + '/' + proyecto;
-    var modelo = limpioModelo(st.model) || MODEL_DEFAULT;
-
-    function paso(titulo, comando, segundos) {
-      var guion = 'timeout ' + segundos + ' sh -c ' + comilla(comando);
-      consolaEscribir('$ ' + titulo);
-      return shell(guion, true).then(function (r) {
-        var texto = (r.salida || '').trim();
-        consolaEscribir(texto ? texto : '(sin salida)');
-        if (r.rc === 124 || /timed out/i.test(texto)) {
-          log('w', titulo + ': sin respuesta en ' + segundos + ' s.');
-        }
-        return r;
-      });
-    }
-
-    asegurarSandbox()
-      .then(function () {
-        return paso('version', 'opencode --version < /dev/null 2>&1', 30);
-      })
-      .then(function () {
-        return paso('prompt', 'ls -l /public/.ank/prompt.txt 2>&1', 15);
-      })
-      .then(function () {
-        return paso('red', 'wget -q -T 8 -O /dev/null https://models.dev/api.json && echo RED_OK || echo RED_FALLA', 20);
-      })
-      .then(function () {
-        return paso(
-          'respuesta',
-          'cd ' + shq(ws) + ' && mkdir -p . && opencode run --auto --model ' + shq(modelo) +
-            ' --title prueba "Responde solo OK" < /dev/null 2>&1',
-          90
-        );
-      })
-      .then(function () {
-        consolaEscribir('Prueba terminada.');
-        log('i', 'Prueba del asistente terminada.');
-      })
-      .catch(function (e) {
-        var m = e && e.message ? e.message : String(e);
-        consolaEscribir('ERROR: ' + m);
-        log('e', 'Prueba: ' + m);
-      })
-      .then(function () {
-        st.probandoPrueba = false;
-      });
-  }
-
-  function guardarCredencial(proveedor, clave) {
-    var p = String(proveedor || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
-    var k = String(clave || '').trim();
-    if (!p) return aviso('Elegí un proveedor.');
-    if (k.length < 8) return aviso('La clave parece incompleta.');
-    var ruta = st.prefix + '/public/.local/share/opencode/auth.json';
-    return conSistema('mkdirs', st.prefix + '/public/.local/share/opencode')
-      .then(function () {
-        return escribir(ruta, JSON.stringify(makeAuth(p, k), null, 2));
-      })
-      .then(function () {
-        return shell('chmod 600 /public/.local/share/opencode/auth.json 2>/dev/null; echo OK', true);
-      })
-      .then(function () {
-        log('i', 'Credencial guardada para ' + p);
-        aviso('Credencial guardada.');
-        return chequearTodo(true);
-      })
-      .catch(function (e) {
-        log('e', 'No se pudo guardar la credencial: ' + (e && e.message ? e.message : e));
-        aviso('No se pudo guardar la credencial.');
-      });
-  }
-
-  function makeAuth(proveedor, clave) {
-    var o = {};
-    o[proveedor] = { type: 'api', key: clave };
-    return o;
-  }
+  /* Se elimina la instalación del agente externo.
+     El plugin Terminal/Executor y Alpine permanecen como módulo independiente. */
 
   /* ------------------------------------------------------------------ *
    * consola de configuración
@@ -1007,29 +783,7 @@
     guardarChats();
   }
 
-  /* Devuelve el identificador de sesión de OpenCode de un chat. Se busca por
-     título (ANK:<id>) la primera vez y se guarda para no repetir la consulta. */
-  function resolverSesion(chat) {
-    if (!chat) return Promise.resolve('');
-    if (chat.sesion) return Promise.resolve(chat.sesion);
-    return shell('opencode session list -n 100 --format json 2>/dev/null < /dev/null', true)
-      .then(function (r) {
-        var txt = String(r.salida || '');
-        var ini = txt.indexOf('[');
-        if (ini === -1) return '';
-        var lista = JSON.parse(txt.slice(ini));
-        var marca = 'ANK:' + chat.id;
-        for (var i = 0; i < lista.length; i++) {
-          if (lista[i] && lista[i].title === marca && lista[i].id) {
-            chat.sesion = lista[i].id;
-            guardarChats();
-            return chat.sesion;
-          }
-        }
-        return '';
-      })
-      .catch(function () { return ''; });
-  }
+  /* ANK mantiene el historial localmente; no utiliza sesiones de agentes externos. */
 
   /* ------------------------------------------------------------------ *
    * memoria del proyecto
@@ -1040,13 +794,27 @@
   }
 
   function rutaMemGlobal() {
-    return st.prefix + '/public/.config/opencode/AGENTS.md';
+    return st.prefix + '/public/.config/ank/AGENTS.md';
   }
 
   function leerTexto(ruta) {
-    return shell('cat ' + shq(ruta) + ' 2>/dev/null', true)
-      .then(function (r) { return String(r.salida || ''); })
-      .catch(function () { return ''; });
+    return new Promise(function (resolve, reject) {
+      var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+      if (typeof resolver !== 'function') return reject(new Error('El lector de archivos de la app no está disponible.'));
+      var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+      resolver(uri, function (entry) {
+        entry.file(function (file) {
+          if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
+          var reader = new window.FileReader();
+          reader.onload = function () { resolve(String(reader.result || '')); };
+          reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
+          reader.readAsText(file);
+        }, reject);
+      }, reject);
+    }).catch(function (e) {
+      log('w', 'Lectura de archivo: ' + (e && e.message ? e.message : e));
+      return '';
+    });
   }
 
   function hoy() {
@@ -1128,7 +896,7 @@
     if (!st.prefix) return Promise.resolve();
     var proy = proyecto || limpioRuta(st.project) || 'ank';
     return conSistema('mkdirs', st.prefix + '/public/proyectos/' + proy)
-      .then(function () { return conSistema('mkdirs', st.prefix + '/public/.config/opencode'); })
+      .then(function () { return conSistema('mkdirs', st.prefix + '/public/.config/ank'); })
       .then(function () { return leerTexto(rutaMemGlobal()); })
       .then(function (txt) {
         if (txt.trim()) return null;
@@ -2818,159 +2586,98 @@
   }
 
   function enviar(forzado) {
-    if (st.corriendo) {
-      aviso('Todavía está trabajando. Esperá o tocá Detener.');
-      return;
-    }
+    if (st.corriendo) { aviso('Todavía está trabajando. Esperá o tocá Detener.'); return; }
     var ta = q('.ank-ai-input');
     var pedido = forzado && forzado.texto != null ? String(forzado.texto) : (ta ? String(ta.value || '') : '');
     var texto = pedido.trim();
     if (!texto) return;
-    if (!listo()) {
-      aviso('Falta preparar el entorno o conectar la cuenta.');
-      st.tab = 'entorno';
-      pintar();
-      return;
+    if (!listo() || !window.ANKAIEngine) {
+      aviso('Configura una API compatible desde la pestaña Entorno.');
+      st.tab = 'entorno'; pintar(); return;
     }
-
     var proyecto = limpioRuta(st.project) || 'ank';
-    var ws = st.work + '/' + proyecto;
-    var modelo = limpioModelo(st.model) || MODEL_DEFAULT;
     var chat = chatActual();
     if (!chat || chat.proyecto !== proyecto) chat = nuevoChat(proyecto);
-
-    if (ta && !(forzado && forzado.texto != null)) {
-      ta.value = '';
-      ta.style.height = '';
-    }
-    if (!(forzado && forzado.sinBurbuja)) {
-      nuevoMensaje('user', texto);
-      burbuja(st.msgs[st.msgs.length - 1]);
-    }
-    abrirTurno();
-    tocarChat();
-
-    var rutaPrompt = st.prefix + '/public/.ank/prompt.txt';
-    var runner = Ex().BackgroundExecutor || Ex();
-    var variante = String(st.variant || '').trim();
-    st.ultimo = {
-      texto: texto,
-      proyecto: proyecto,
-      chatId: chat.id,
-      modelo: modelo,
-      modo: st.modo,
-      variant: variante
-    };
+    if (ta && !(forzado && forzado.texto != null)) { ta.value = ''; ta.style.height = ''; }
+    if (!(forzado && forzado.sinBurbuja)) { nuevoMensaje('user', texto); burbuja(st.msgs[st.msgs.length - 1]); }
+    abrirTurno(); tocarChat();
+    st.ultimo = { texto: texto, proyecto: proyecto, chatId: chat.id, modelo: st.model, modo: st.modo };
     st.corriendo = true;
-    st.crudo = '';
+    st.abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
     pintar();
 
-    function alSalir(codigo) {
-      st.corriendo = false;
-      st.proc = null;
-      var fallo = String(codigo).trim() !== '0';
-      cerrarTurno(fallo);
-      if (fallo) log('w', 'opencode terminó con código ' + codigo);
-      tocarChat();
-      var bot = st.msgs[st.msgs.length - 1];
-      anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : '');
-      quizasResumir(proyecto, chat);
-      if (!chat.sesion) {
-        resolverSesion(chat).then(function () { pintarChats(); });
-      }
-      pintar();
-    }
-
-    asegurarMemoria(proyecto)
-      .then(function () { return resolverSesion(chat); })
-      .then(function (sid) {
-        var cmd = 'mkdir -p ' + shq(ws) + ' && cd ' + shq(ws) +
-          ' && opencode run --auto --agent ' + shq(st.modo === 'plan' ? 'plan' : 'build') +
-          ' --model ' + shq(modelo) +
-          (variante ? ' --variant ' + shq(variante) : '') +
-          (sid ? ' --session ' + shq(sid) : ' --title ' + shq('ANK:' + chat.id)) +
-          ' "$(cat /public/.ank/prompt.txt)"' +
-          /* Sin TTY, opencode lee stdin hasta EOF antes de arrancar: con el tubo
-             del ejecutor abierto se queda esperando para siempre. */
-          ' < /dev/null 2>&1';
-        return escribir(rutaPrompt, texto + PROTOCOLO_ARCHIVO + PROTOCOLO_APP + PROTOCOLO_CONTEXTO).then(function () {
-          log('i', 'Ejecutando opencode en ' + ws);
-          return runner.start(acotar(env() + cmd), function (tipo, datos) {
-            if (tipo === 'exit') {
-              alSalir(datos);
-              return;
-            }
-            try {
-              procesarSalida(tipo, datos);
-            } catch (e) {
-              log('e', 'render: ' + e.message);
-            }
-          }, true);
-        });
-      })
-      .then(function (uuid) {
-        st.proc = uuid;
-      })
-      .catch(function (e) {
-        st.corriendo = false;
-        st.proc = null;
-        var m = e && e.message ? e.message : String(e);
-        log('e', m);
-        escribirBot('No se pudo ejecutar el asistente: ' + m);
-        cerrarTurno(true);
-        tocarChat();
-        pintar();
+    asegurarMemoria(proyecto).then(function () {
+      return leerTexto(rutaMemProyecto(proyecto));
+    }).then(function (memory) {
+      var systemPrompt = [
+        'Eres el asistente de programación integrado en Código ANK.',
+        'Responde en español, sé preciso y nunca inventes resultados de ejecución.',
+        st.modo === 'plan'
+          ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
+          : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
+        PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
+        memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
+      ].join('\n');
+      var history = st.msgs.filter(function (m) {
+        return m && m !== (cur && cur.msg) && String(m.texto || '').trim();
+      }).slice(-40).map(function (m) {
+        return { role: m.rol === 'user' ? 'user' : 'assistant', content: String(m.texto || '').slice(0, 30000) };
       });
-  }
-
-  function detener() {
-    if (!st.proc) return;
-    var runner = Ex().BackgroundExecutor || Ex();
-    Promise.resolve(runner.stop(st.proc)).catch(function () {}).then(function () {
-      st.corriendo = false;
-      st.proc = null;
-      cerrarTurno(false);
-      pintar();
+      log('i', 'Enviando solicitud a la API: ' + st.model);
+      return window.ANKAIEngine.chat({
+        endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+        messages: [{ role: 'system', content: systemPrompt }].concat(history),
+        temperature: 0.2, timeoutMs: 120000,
+        signal: st.abortController ? st.abortController.signal : undefined,
+        http: clienteHttpNativo(),
+        onDelta: function (part) {
+          try { escribirBot(part); } catch (e) { log('e', 'Render: ' + (e.message || e)); }
+        }
+      });
+    }).then(function (result) {
+      st.corriendo = false; st.abortController = null;
+      cerrarTurno(false); tocarChat();
+      var bot = st.msgs[st.msgs.length - 1];
+      anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
+      quizasResumir(proyecto, chat);
+      log('i', 'Respuesta recibida de la API.'); pintar();
+    }).catch(function (e) {
+      st.corriendo = false; st.abortController = null;
+      if (e && e.code === 'ANK_AI_ABORTED') {
+        cerrarTurno(false); log('i', 'Solicitud cancelada.');
+      } else {
+        var message = e && e.message ? e.message : String(e);
+        log('e', message); escribirBot('\n\nError de API: ' + message); cerrarTurno(true);
+      }
+      tocarChat(); pintar();
     });
   }
 
-  /* Repite el último pedido. Con `otro` cambia a otro modelo disponible. */
+  function detener() {
+    if (!st.corriendo) return;
+    if (st.abortController) {
+      try { st.abortController.abort(); } catch (e) {}
+    } else {
+      st.corriendo = false; cerrarTurno(false); tocarChat(); pintar();
+    }
+  }
+
   function reintentar(otro) {
     if (st.corriendo) return;
-    var u = st.ultimo;
-    if (!u || !u.texto) {
-      aviso('No hay un pedido reciente para reintentar.');
-      return;
-    }
-    if (otro) {
-      var lista = (st.modelos.length ? st.modelos : MODELOS_SUGERIDOS).slice();
-      var actual = lista.indexOf(st.model);
-      var siguiente = lista.length > 1 ? lista[(actual + 1 + lista.length) % lista.length] : lista[0];
-      st.model = limpioModelo(siguiente) || MODEL_DEFAULT;
-      guardar('ank.ai.model', st.model);
-      if (st.variant && variantesDe(st.model).indexOf(st.variant) === -1) {
-        st.variant = '';
-        guardar('ank.ai.variant', '');
-      }
-      aviso('Probando con ' + st.model);
-    }
-    st.project = u.proyecto || st.project;
+    var last = st.ultimo;
+    if (!last || !last.texto) return aviso('No hay un pedido reciente para reintentar.');
+    if (otro) { aviso('Cambia el modelo en Entorno y vuelve a intentarlo.'); st.tab = 'entorno'; pintar(); return; }
+    st.project = last.proyecto || st.project;
     guardar('ank.ai.project', st.project);
     for (var i = 0; i < st.chats.length; i++) {
-      if (st.chats[i].id === u.chatId) {
-        st.chatId = u.chatId;
-        st.msgs = st.chats[i].msgs;
-        break;
-      }
+      if (st.chats[i].id === last.chatId) { st.chatId = last.chatId; st.msgs = st.chats[i].msgs; break; }
     }
     if (st.turnoError) {
-      var barra = q('.ank-ai-retry', st.turnoError);
-      if (barra && barra.parentNode) barra.parentNode.removeChild(barra);
+      var retry = q('.ank-ai-retry', st.turnoError);
+      if (retry && retry.parentNode) retry.parentNode.removeChild(retry);
       st.turnoError = null;
     }
-    st.tab = 'chat';
-    pintar();
-    enviar({ texto: u.texto, sinBurbuja: true });
+    st.tab = 'chat'; pintar(); enviar({ texto: last.texto, sinBurbuja: true });
   }
 
   /* ------------------------------------------------------------------ *
@@ -3033,54 +2740,34 @@
   }
 
   function resumenAutomatico(proyecto, chat) {
-    st.resumiendoAuto = true;
+    if (!st.apiConfigured || !window.ANKAIEngine) { st.resumiendoAuto = false; return; }
     var proy = proyecto || limpioRuta(st.project) || 'ank';
-    var msgs = (chat.msgs || []).slice(-24);
-    var guion = msgs.map(function (m) {
-      return (m.rol === 'user' ? 'Usuario: ' : 'Asistente: ') +
-        String(m.texto || '').replace(/\s+/g, ' ').slice(0, 400);
+    var history = (chat.msgs || []).slice(-24).map(function (m) {
+      return (m.rol === 'user' ? 'Usuario: ' : 'Asistente: ') + String(m.texto || '').replace(/\s+/g, ' ').slice(0, 400);
     }).join('\n');
-    var pedido = 'Resumí esta conversación de desarrollo en 1 a 3 viñetas de una línea cada una. ' +
-      'Cada viñeta empieza con "- ". Solo hechos: qué se pidió, qué se hizo y qué quedó pendiente. ' +
-      'Sin introducción, sin bloques de código, en español.\n\n' + guion;
-    var rutaPrompt = st.prefix + '/public/.ank/resumen.txt';
-    var ws = st.work + '/' + proy;
-    var modelo = limpioModelo(st.model) || MODEL_DEFAULT;
-    escribir(rutaPrompt, pedido)
-      .then(function () {
-        var guionCmd = 'cd ' + shq(ws) + ' && opencode run --auto --agent plan --model ' + shq(modelo) +
-          ' "$(cat /public/.ank/resumen.txt)" < /dev/null 2>/dev/null';
-        return shell('timeout 90 sh -c ' + comilla(guionCmd), true);
-      })
-      .then(function (r) {
-        var txt = String(r.salida || '')
-          .replace(/^```[a-z]*\s*/i, '')
-          .replace(/```\s*$/, '')
-          .trim();
-        var puntos = txt.split('\n')
-          .map(function (l) { return l.replace(/^[-*]\s*/, '').replace(/\s+/g, ' ').trim(); })
-          .filter(function (l) { return l.length > 3; })
-          .slice(0, 3);
-        if (!puntos.length) throw new Error('resumen vacío');
-        return leerTexto(rutaMemProyecto(proy)).then(function (mem) {
-          if (!mem.trim()) mem = plantillaProyecto(proy);
-          if (mem.indexOf('## Bitácora') === -1) mem += '\n## Bitácora\n';
-          var partes = mem.split('## Bitácora');
-          var cuerpo = (partes[1] || '').split('\n');
-          puntos.forEach(function (l) {
-            cuerpo.push('- ' + hoy() + ' · resumen · ' + l.slice(0, 200));
-          });
-          var previas = cuerpo.filter(function (l) { return l.trim().indexOf('- ') === 0; });
-          partes[1] = '\n' + previas.slice(-MEM_MAX).join('\n') + '\n';
-          return escribir(rutaMemProyecto(proy), partes.join('## Bitácora'));
-        });
-      })
-      .then(function () {
-        log('i', 'Memoria resumida automáticamente (' + proy + ').');
-      })
-      .catch(function (e) {
-        log('w', 'Resumen automático: ' + (e && e.message ? e.message : e));
-      })
+    window.ANKAIEngine.chat({
+      endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      messages: [
+        { role: 'system', content: 'Resume solo hechos técnicos confirmados, sin inventar.' },
+        { role: 'user', content: 'Resume esta conversación en 1 a 3 viñetas, en español.\n\n' + history }
+      ],
+      maxTokens: 500, timeoutMs: 60000, http: clienteHttpNativo()
+    }).then(function (result) {
+      var points = String(result.content || '').split('\n')
+        .map(function (line) { return line.replace(/^[-*]\s*/, '').replace(/\s+/g, ' ').trim(); })
+        .filter(function (line) { return line.length > 3; }).slice(0, 3);
+      if (!points.length) throw new Error('resumen vacío');
+      return leerTexto(rutaMemProyecto(proy)).then(function (mem) {
+        if (!mem.trim()) mem = plantillaProyecto(proy);
+        if (mem.indexOf('## Bitácora') === -1) mem += '\n## Bitácora\n';
+        var parts = mem.split('## Bitácora');
+        var lines = (parts[1] || '').split('\n');
+        points.forEach(function (line) { lines.push('- ' + hoy() + ' · resumen · ' + line.slice(0, 200)); });
+        parts[1] = '\n' + lines.filter(function (line) { return line.trim().indexOf('- ') === 0; }).slice(-MEM_MAX).join('\n') + '\n';
+        return escribir(rutaMemProyecto(proy), parts.join('## Bitácora'));
+      });
+    }).then(function () { log('i', 'Memoria resumida con API (' + proy + ').'); })
+      .catch(function (e) { log('w', 'Resumen automático: ' + (e && e.message ? e.message : e)); })
       .then(function () { st.resumiendoAuto = false; });
   }
 
@@ -3089,20 +2776,11 @@
    * ------------------------------------------------------------------ */
 
   function pintarEstado() {
-    var s = q('.ank-ai-status');
-    if (!s) return;
-    var txt;
-    var detalle = st.model + (st.modo === 'plan' ? ' · plan' : '') + (st.variant ? ' · ' + st.variant : '');
-    if (st.corriendo) txt = 'trabajando · ' + detalle;
-    else if (!listo()) {
-      if (st.sandbox === 'falta') txt = 'falta el entorno';
-      else if (st.sandbox === 'instalando') txt = 'instalando entorno';
-      else if (st.binario === 'falta') txt = 'falta el asistente';
-      else if (st.binario === 'instalando') txt = 'instalando asistente';
-      else if (st.credencial === 'falta') txt = 'falta la cuenta';
-      else txt = 'revisar entorno';
-    } else txt = 'listo · ' + detalle;
-    s.innerHTML = '<span class="ank-ai-dot ' + (st.corriendo ? 'busy' : listo() ? 'ok' : st.sandbox === 'error' || st.binario === 'error' ? 'err' : '') + '"></span><span>' + esc(txt) + '</span>';
+    var status = q('.ank-ai-status');
+    if (!status) return;
+    var detail = st.model || 'sin modelo';
+    var label = st.corriendo ? 'conectando · ' + detail : st.apiConfigured ? 'API lista · ' + detail : 'configura tu API';
+    status.innerHTML = '<span class="ank-ai-dot ' + (st.corriendo ? 'busy' : st.apiConfigured ? 'ok' : '') + '"></span><span>' + esc(label) + '</span>';
   }
 
   function pintarBotonEnviar() {
@@ -3122,83 +2800,40 @@
   }
 
   function pintarModelos() {
-    var sel = q('#ank-ai-modelo');
-    if (sel) sel.innerHTML = opcionesModelos(st.model);
-
-    var chat = q('#ank-ai-chat-modelo');
-    if (chat) chat.innerHTML = opcionesModelos(st.model);
-
-    var esf = q('#ank-ai-esfuerzo');
-    if (esf) esf.innerHTML = opcionesEsfuerzo(st.model);
-
-    var modo = q('.ank-ai-modo');
-    if (modo) {
+    var model = q('#ank-ai-modelo');
+    if (model && model.value !== st.model) model.value = st.model;
+    var endpoint = q('#ank-ai-endpoint');
+    if (endpoint && endpoint.value !== st.endpoint) endpoint.value = st.endpoint;
+    var label = q('#ank-ai-chat-modelo');
+    if (label) label.textContent = st.model || 'Sin modelo';
+    var mode = q('.ank-ai-modo');
+    if (mode) {
       var plan = st.modo === 'plan';
-      modo.textContent = plan ? 'Plan' : 'Construir';
-      modo.classList.toggle('plan', plan);
-      modo.setAttribute('title', plan
-        ? 'Modo Plan: solo lee y propone, no edita archivos'
-        : 'Modo Construir: puede crear y editar archivos');
+      mode.textContent = plan ? 'Plan' : 'Construir';
+      mode.classList.toggle('plan', plan);
+      mode.setAttribute('title', plan ? 'Analiza y propone' : 'Propone archivos para revisar');
     }
   }
 
   function pintarPasos() {
     var cont = q('.ank-ai-steps');
     if (!cont) return;
-
-    var pasos = [
-      {
-        n: '01',
-        t: 'Entorno Linux',
-        d: st.sandbox === 'listo'
-          ? 'Alpine listo. Es el espacio donde corre el asistente.'
-          : st.sandbox === 'instalando'
-            ? 'Descomprimiendo el entorno incluido en la app…'
-            : st.sandbox === 'error'
-              ? '<b>Falló.</b> Revisá el registro y reintentá.'
-              : 'Ya viene incluido: se descomprime la primera vez (~20 MB). No usa internet.',
-        e: st.sandbox,
-        a: st.sandbox === 'listo' ? null : { txt: st.sandbox === 'instalando' ? 'Instalando' : 'Preparar', fn: 'instalar-entorno', dis: st.sandbox === 'instalando' }
-      },
-      {
-        n: '02',
-        t: 'Asistente',
-        d: st.binario === 'listo'
-          ? 'OpenCode ' + esc(st.version || '') + ' instalado.'
-          : st.binario === 'instalando'
-            ? 'Descomprimiendo el binario…'
-            : st.binario === 'error'
-              ? '<b>Falló.</b> Revisá el registro.'
-              : 'Ya viene incluido en la app: se descomprime la primera vez (~217 MB).',
-        e: st.binario,
-        a: st.binario === 'listo' ? null : { txt: st.binario === 'instalando' ? 'Instalando' : 'Instalar', fn: 'instalar-asistente', dis: st.binario === 'instalando' || st.sandbox !== 'listo' }
-      },
-      {
-        n: '03',
-        t: 'Cuenta',
-        d: st.credencial === 'listo'
-          ? 'Credencial guardada. Modelos disponibles: ' + (st.modelos.length || 0) + '.'
-          : 'Pegá una clave de OpenCode (opencode.ai/auth) o de otro proveedor.',
-        e: st.credencial,
-        a: null
-      },
-      {
-        n: '04',
-        t: 'Proyecto',
-        d: 'Carpeta de trabajo dentro de la app: <b>/public/proyectos/' + esc(limpioRuta(st.project) || 'ank') + '</b>',
-        e: listo() ? 'listo' : 'falta',
-        a: null
-      }
+    var steps = [
+      { n: '01', t: 'Conexión API',
+        d: st.apiConfigured ? 'API conectada. Modelo: <b>' + esc(st.model) + '</b>.' : 'Configura endpoint, clave y modelo. No se instala ningún agente externo.',
+        e: st.apiConfigured ? 'listo' : 'falta', a: null },
+      { n: '02', t: 'Terminal (opcional)',
+        d: st.sandbox === 'listo' ? 'Alpine instalado. La terminal sigue disponible para comandos.' : 'El chat API funciona sin Linux. Instálalo solo para usar la terminal.',
+        e: st.sandbox, a: st.sandbox === 'listo' ? null : { txt: st.sandbox === 'instalando' ? 'Instalando' : 'Preparar terminal', fn: 'instalar-entorno', dis: st.sandbox === 'instalando' } },
+      { n: '03', t: 'Proyecto',
+        d: 'Carpeta de trabajo: <b>/public/proyectos/' + esc(limpioRuta(st.project) || 'ank') + '</b>', e: 'listo', a: null }
     ];
-
-    cont.innerHTML = pasos.map(function (p) {
+    cont.innerHTML = steps.map(function (p) {
       var cls = p.e === 'listo' ? 'done' : p.e === 'instalando' ? 'run' : p.e === 'error' ? 'fail' : '';
-      var btn = p.a ? '<button class="ank-ai-btn' + (p.e === 'falta' ? ' primary' : '') + '" data-accion="' + p.a.fn + '"' + (p.a.dis ? ' disabled' : '') + '>' + esc(p.a.txt) + '</button>' : '';
-      return '<div class="ank-ai-step ' + cls + '">' +
-        '<div class="ank-ai-n">' + p.n + '</div>' +
+      var btn = p.a ? '<button class="ank-ai-btn primary" data-accion="' + p.a.fn + '"' + (p.a.dis ? ' disabled' : '') + '>' + esc(p.a.txt) + '</button>' : '';
+      return '<div class="ank-ai-step ' + cls + '"><div class="ank-ai-n">' + p.n + '</div>' +
         '<div><div class="ank-ai-sname">' + p.t + '</div><div class="ank-ai-sdesc">' + p.d + '</div></div>' +
-        '<div class="ank-ai-sact">' + btn + '</div>' +
-        '</div>';
+        '<div class="ank-ai-sact">' + btn + '</div></div>';
     }).join('');
   }
 
@@ -3836,8 +3471,7 @@
             '</div>' +
             '<div class="ank-ai-opts">' +
               '<button type="button" class="ank-ai-chip ank-ai-modo" data-accion="modo" title="Modo de trabajo">Construir</button>' +
-              '<select class="ank-ai-chip ank-ai-sel" id="ank-ai-chat-modelo" aria-label="Modelo"></select>' +
-              '<select class="ank-ai-chip ank-ai-sel" id="ank-ai-esfuerzo" aria-label="Esfuerzo de razonamiento"></select>' +
+              '<span class="ank-ai-chip" id="ank-ai-chat-modelo" aria-label="Modelo">Sin modelo</span>' +
             '</div>' +
             '<div class="ank-ai-compose">' +
               '<textarea class="ank-ai-input" rows="1" placeholder="Pedí algo: creá un archivo, explicá el código, refactorizá…"></textarea>' +
@@ -3868,48 +3502,19 @@
 
           '<section class="ank-ai-view" data-view="entorno">' +
             '<div class="ank-ai-setup">' +
-              '<p class="ank-ai-lead">Cuatro pasos, una sola vez. Todo queda dentro del almacenamiento de la app.</p>' +
+              '<p class="ank-ai-lead">Conecta ANK a una API compatible con OpenAI Chat Completions. El terminal Linux es independiente y opcional.</p>' +
               '<div class="ank-ai-steps"></div>' +
-
-              '<div class="ank-ai-field ank-ai-hint-cred">' +
-                '<label>Proveedor</label>' +
-                '<select id="ank-ai-prov">' +
-                  '<option value="opencode">OpenCode (modelos gratis)</option>' +
-                  '<option value="openrouter">OpenRouter</option>' +
-                  '<option value="anthropic">Anthropic</option>' +
-                  '<option value="openai">OpenAI</option>' +
-                  '<option value="deepseek">DeepSeek</option>' +
-                  '<option value="groq">Groq</option>' +
-                  '<option value="google">Google</option>' +
-                '</select>' +
-                '<div class="ank-ai-hint">La clave se guarda en el almacenamiento privado de la app, no en la tarjeta.</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field ank-ai-hint-cred">' +
-                '<label>Clave</label>' +
-                '<input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />' +
-                '<div class="ank-ai-hint">Para los modelos gratis: <a href="https://opencode.ai/auth" target="_blank" rel="noopener" data-accion="abrir-auth">opencode.ai/auth</a> → crear clave → pegarla acá.</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field ank-ai-hint-cred">' +
-                '<button class="ank-ai-btn primary" data-accion="guardar-clave" style="width:100%">Guardar credencial</button>' +
-              '</div>' +
-
-              '<div class="ank-ai-field">' +
-                '<label>Modelo</label>' +
-                '<select id="ank-ai-modelo" data-accion="modelo"></select>' +
-                '<div class="ank-ai-hint">Los modelos «free» no tienen costo y pueden tener límites de uso.</div>' +
-              '</div>' +
-
-              '<div class="ank-ai-field">' +
-                '<label>Carpeta de trabajo</label>' +
-                '<input id="ank-ai-proj" type="text" spellcheck="false" value="' + esc(limpioRuta(st.project) || 'ank') + '" />' +
-                '<div class="ank-ai-hint">Relativa a /public/proyectos. Se crea sola al primer mensaje.</div>' +
-              '</div>' +
-
-            '</div>' +
-          '</section>' +
-
+              '<div class="ank-ai-field"><label>Protocolo</label><input type="text" value="Chat Completions compatible con OpenAI" readonly />' +
+                '<div class="ank-ai-hint">Los adaptadores nativos para otros protocolos se añadirán en el bloque 3.</div></div>' +
+              '<div class="ank-ai-field"><label>Endpoint base</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
+              '<div class="ank-ai-field"><label>Modelo</label><input id="ank-ai-modelo" type="text" spellcheck="false" autocomplete="off" placeholder="identificador-exacto-del-modelo" /></div>' +
+              '<div class="ank-ai-field"><label>Clave API</label><input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Pega tu clave API" />' +
+                '<div class="ank-ai-hint">Se guarda en el almacenamiento privado de la app. El cifrado con Android Keystore se incorpora en el bloque de seguridad.</div></div>' +
+              '<div class="ank-ai-field ank-ai-appbar"><button class="ank-ai-btn primary" data-accion="guardar-clave">Guardar conexión</button>' +
+                '<button class="ank-ai-btn" data-accion="probar">Probar conexión</button></div>' +
+              '<div class="ank-ai-field"><label>Carpeta de trabajo</label><input id="ank-ai-proj" type="text" spellcheck="false" value="' + esc(limpioRuta(st.project) || 'ank') + '" />' +
+                '<div class="ank-ai-hint">Relativa a /public/proyectos. Se crea al primer mensaje.</div></div>' +
+            '</div></section>' +
           '<section class="ank-ai-view" data-view="log">' +
             '<div class="ank-ai-logbar">' +
               '<button class="ank-ai-btn" data-accion="diag" title="Compartir versiones, entorno y errores recientes">Diagnóstico</button>' +
@@ -4036,8 +3641,7 @@
     var r = q('.ank-ai-mem-ruta', el);
     if (r) r.textContent = proy + '/AGENTS.md';
     var ruta = st.prefix + '/public/proyectos/' + proy + '/AGENTS.md';
-    asegurarSandbox()
-      .then(function () { return leerTexto(ruta); })
+    leerTexto(ruta)
       .then(function (txt) { ta.value = txt && txt.trim() ? txt : plantillaProyecto(proy); })
       .catch(function () { ta.value = plantillaProyecto(proy); });
   }
@@ -4065,42 +3669,32 @@
      muestra en el editor; el usuario decide si guardarlo. */
   function compactarMemoria() {
     if (st.probandoPrueba) return;
-    var proy = limpioRuta(st.project) || 'ank';
-    var ta = q('.ank-ai-mem-text');
-    if (!ta) return;
+    if (!st.apiConfigured || !window.ANKAIEngine) return aviso('Conecta una API antes de resumir la memoria.');
+    var project = limpioRuta(st.project) || 'ank';
+    var textarea = q('.ank-ai-mem-text');
+    if (!textarea) return;
     st.probandoPrueba = true;
-    ta.value = 'Resumiendo con el asistente…';
-    var ws = st.work + '/' + proy;
-    var modelo = limpioModelo(st.model) || MODEL_DEFAULT;
-    var pedido = 'Reescribí el archivo AGENTS.md de este proyecto en menos de 60 líneas. ' +
-      'Conservá el objetivo, el estado actual, las decisiones y lo más reciente de la bitácora. ' +
-      'No inventes datos que no estén en el archivo. Respondé solo con el contenido del archivo, ' +
-      'sin explicaciones ni bloques de código.';
-    var guion = 'cd ' + shq(ws) + ' && ' +
-      'opencode run --auto --agent plan --model ' + shq(modelo) + ' ' + shq(pedido) +
-      ' < /dev/null 2>/dev/null';
-    shell('timeout 150 sh -c ' + comilla(guion), true)
-      .then(function (r) {
-        var txt = String(r.salida || '')
-          .replace(/^```[a-z]*\s*/i, '')
-          .replace(/```\s*$/, '')
-          .trim();
-        if (txt.length < 40 || txt.indexOf('#') === -1) {
-          throw new Error('respuesta no utilizable');
-        }
-        ta.value = txt;
-        aviso('Revisá el resumen y guardá.');
-      })
-      .catch(function (e) {
-        leerTexto(st.prefix + '/public/proyectos/' + proy + '/AGENTS.md').then(function (txt) {
-          ta.value = txt || plantillaProyecto(proy);
-        });
-        aviso('No se pudo resumir; se mantiene la memoria actual.');
-        log('w', 'Resumen de memoria: ' + (e && e.message ? e.message : e));
-      })
-      .then(function () {
-        st.probandoPrueba = false;
+    textarea.value = 'Resumiendo con IA…';
+    leerTexto(rutaMemProyecto(project)).then(function (memory) {
+      var prompt = 'Reescribe este AGENTS.md en menos de 60 líneas. Conserva objetivo, estado, decisiones y bitácora reciente. No inventes datos. Devuelve solo Markdown.\n\n' + (memory || plantillaProyecto(project));
+      return window.ANKAIEngine.chat({
+        endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+        messages: [
+          { role: 'system', content: 'Editas memorias técnicas. Conserva decisiones y hechos, no inventes.' },
+          { role: 'user', content: prompt }
+        ],
+        maxTokens: 1800, timeoutMs: 90000, http: clienteHttpNativo()
       });
+    }).then(function (result) {
+      var txt = String(result.content || '').replace(/^\x60\x60\x60[a-z]*\s*/i, '').replace(/\x60\x60\x60\s*$/, '').trim();
+      if (txt.length < 40 || txt.indexOf('#') === -1) throw new Error('respuesta no utilizable');
+      textarea.value = txt;
+      aviso('Revisa el resumen y guarda.');
+    }).catch(function (e) {
+      aviso('No se pudo resumir; se conserva la memoria actual.');
+      log('w', 'Resumen de memoria: ' + (e && e.message ? e.message : e));
+      leerTexto(rutaMemProyecto(project)).then(function (txt) { textarea.value = txt || plantillaProyecto(project); });
+    }).then(function () { st.probandoPrueba = false; });
   }
 
   function manejarClic(e) {
@@ -4137,12 +3731,11 @@
       case 'diag': compartirDiagnostico(); break;
       case 'novedades': verNovedades(); break;
       case 'instalar-entorno': instalarEntorno(); break;
-      case 'instalar-asistente': instalarAsistente(); break;
       case 'guardar-clave':
-        guardarCredencial(q('#ank-ai-prov') && q('#ank-ai-prov').value, q('#ank-ai-key') && q('#ank-ai-key').value);
+        guardarCredencial();
         break;
       case 'revisar':
-        chequearTodo(true);
+        chequearTodo();
         break;
       case 'probar':
         probarAsistente();
@@ -4184,9 +3777,6 @@
         st.log = [];
         pintarLog();
         break;
-      case 'abrir-auth':
-        abrirUrl('https://opencode.ai/auth');
-        break;
       case 'abrir-carpeta':
         abrirCarpeta();
         break;
@@ -4216,30 +3806,21 @@
       alternarEstadistica(!e.target.checked);
       return;
     }
-    if (e.target.id === 'ank-ai-modelo' || e.target.id === 'ank-ai-chat-modelo') {
-      st.model = limpioModelo(e.target.value) || MODEL_DEFAULT;
+    if (e.target.id === 'ank-ai-modelo') {
+      st.model = limpioModelo(e.target.value);
       guardar('ank.ai.model', st.model);
-      if (st.variant && variantesDe(st.model).indexOf(st.variant) === -1) {
-        st.variant = '';
-        guardar('ank.ai.variant', '');
-      }
-      pintar();
+      var label = q('#ank-ai-chat-modelo');
+      if (label) label.textContent = st.model || 'Sin modelo';
+      return;
     }
-    if (e.target.id === 'ank-ai-esfuerzo') {
-      st.variant = String(e.target.value || '').trim();
-      guardar('ank.ai.variant', st.variant);
-      pintar();
-    }
+    if (e.target.id === 'ank-ai-endpoint') { st.endpoint = String(e.target.value || '').trim(); return; }
     if (e.target.id === 'ank-ai-proj') {
       st.project = limpioRuta(e.target.value) || 'ank';
       guardar('ank.ai.project', st.project);
-      var lista = chatsDe(st.project);
-      st.chatId = lista.length ? lista[0].id : '';
-      st.msgs = lista.length ? lista[0].msgs : [];
-      guardarChats();
-      asegurarMemoria(st.project);
-      pintar();
-      pintarMensajes();
+      var chats = chatsDe(st.project);
+      st.chatId = chats.length ? chats[0].id : '';
+      st.msgs = chats.length ? chats[0].msgs : [];
+      guardarChats(); asegurarMemoria(st.project); pintar(); pintarMensajes();
     }
   }
 
@@ -4392,10 +3973,10 @@
     if (window.cordova) {
       document.addEventListener('deviceready', function () {
         setTimeout(ciclo, 200);
-        chequearTodo(false);
+        chequearTodo();
       }, false);
     }
-    setTimeout(function () { chequearTodo(false); }, 4000);
+    setTimeout(function () { chequearTodo(); }, 4000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
