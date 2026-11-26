@@ -621,7 +621,7 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.3.0';
+  var PANEL_VERSION = '3.0.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '26/11/2026';
@@ -644,6 +644,14 @@
 
   /* Instrucciones que se suman al pedido para que la IA sepa cómo se arma
      una mini app de Código ANK y no invente una API distinta. */
+  var PROTOCOLO_HERRAMIENTAS = '\n\n[Herramientas seguras de proyecto]\n' +
+    'Puedes solicitar lecturas mediante un bloque JSON ank:tool; ANK mostrará una tarjeta y esperará la aprobación expresa del usuario.\n' +
+    'Herramientas disponibles (solo lectura): project.list y project.read. Ambas operan exclusivamente dentro de la carpeta del proyecto actual.\n' +
+    'Formato: bloque de código etiquetado ank:tool; la línea siguiente contiene un único objeto JSON.\\n' +
+    'Ejemplo de lista: {"name":"project.list","arguments":{"path":"."}}. Ejemplo de lectura: {"name":"project.read","arguments":{"path":"src/main.js"}}.\\n' +
+    'Nunca afirmes que una herramienta se ejecutó hasta que ANK te devuelva un resultado. Si el usuario rechaza la tarjeta, no repitas la misma solicitud.\n' +
+    'No hay herramientas de terminal ni de escritura automática en esta fase. Para crear o modificar archivos, usa bloques ank:archivo; el usuario debe revisar el diff y pulsar Aplicar.\n';
+
   var PROTOCOLO_APP = '\n\n[Mini apps de Código ANK]\n' +
     'Si el pedido es crear o modificar una app para el teléfono, generá una mini app:\n' +
     '- Va en una carpeta propia dentro del proyecto, con ankapp.json, index.html, style.css y app.js.\n' +
@@ -709,6 +717,10 @@
     turnoError: null,
     archivos: {},
     archivosN: 0,
+    herramientas: {},
+    herramientasN: 0,
+    herramientasUsadas: 0,
+    herramientaOcupada: false,
     busqueda: '',
     resumiendoAuto: false,
     errores: [],
@@ -1690,6 +1702,8 @@
         frag.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         frag.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'herramienta') {
+        frag.appendChild(bloqueHerramienta(t.solicitud, t.error));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -1721,6 +1735,8 @@
         d.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         d.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'herramienta') {
+        d.appendChild(bloqueHerramienta(t.solicitud, t.error));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -1742,6 +1758,7 @@
       return;
     }
     st.msgs.forEach(function (m) {
+      if (m.rol === 'tool') return;
       if (m.rol === 'bot' && !String(m.texto || '').trim() && !(m.acciones && m.acciones.length)) return;
       pintarBurbuja(m);
     });
@@ -2018,24 +2035,39 @@
      Un bloque con el lenguaje `ank:archivo <ruta>` se convierte en una
      propuesta de archivo aplicable (con diff contra el archivo local). */
   function mdLite(texto) {
-    var partes = String(texto).split(/```/);
+    var partes = String(texto).split(/\x60{3}/);
     var salida = [];
     for (var i = 0; i < partes.length; i++) {
       if (i % 2 === 1) {
         var bruto = partes[i];
-        var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
-        if (propuesta) {
-          salida.push({
-            tipo: 'archivo',
-            ruta: propuesta[1].replace(/\r/g, '').trim(),
-            texto: bruto.slice(propuesta[0].length).replace(/\n$/, '')
-          });
+        var herramienta = /^ank:tool[ \t]*\r?\n([\s\S]*)$/i.exec(bruto.replace(/^\r?\n/, '').trim());
+        if (herramienta) {
+          var solicitud = null;
+          var errorHerramienta = '';
+          try {
+            solicitud = JSON.parse(herramienta[1]);
+            if (!solicitud || typeof solicitud !== 'object' || Array.isArray(solicitud)) {
+              throw new Error('La solicitud debe ser un objeto JSON.');
+            }
+          } catch (error) {
+            errorHerramienta = error && error.message ? error.message : 'JSON no válido.';
+          }
+          salida.push({ tipo: 'herramienta', solicitud: solicitud, error: errorHerramienta });
         } else {
-          salida.push({ tipo: 'codigo', texto: bruto.replace(/^[A-Za-z0-9+#_-]*\n/, '').replace(/\n$/, '') });
+          var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
+          if (propuesta) {
+            salida.push({
+              tipo: 'archivo',
+              ruta: propuesta[1].replace(/\r/g, '').trim(),
+              texto: bruto.slice(propuesta[0].length).replace(/\n$/, '')
+            });
+          } else {
+            salida.push({ tipo: 'codigo', texto: bruto.replace(/^[A-Za-z0-9+#_-]*\n/, '').replace(/\n$/, '') });
+          }
         }
       } else {
         var html = esc(partes[i])
-          .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+          .replace(/\x60([^\x60\n]+)\x60/g, '<code>$1</code>')
           .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
           .replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>');
         salida.push({ tipo: 'texto', html: html });
@@ -2159,6 +2191,267 @@
       pre.textContent = lineas.slice(0, tope).join('\n') +
         (lineas.length > tope ? '\n… (' + (lineas.length - tope) + ' líneas más)' : '');
     }
+  }
+
+
+  /* ------------------------------------------------------------------ *
+   * herramientas del proyecto: solo lectura y aprobación explícita
+   * ------------------------------------------------------------------ */
+
+  function rutaHerramientaProyecto(rel, permitirRaiz) {
+    var project = limpioRuta(st.project) || 'ank';
+    var projectParts = project.split('/');
+    if (!project || project.charAt(0) === '/' ||
+        projectParts.some(function (part) { return !part || part === '.' || part === '..'; })) {
+      throw new Error('La carpeta del proyecto actual no es válida.');
+    }
+    var base = st.prefix + '/public/proyectos/' + projectParts.join('/');
+    var raw = String(rel == null ? '' : rel).trim();
+    if (permitirRaiz && (!raw || raw === '.')) return base;
+    if (!raw || raw.length > 240 || raw.charAt(0) === '/' || raw.indexOf('\\') !== -1 ||
+        /[\u0000-\u001f\u007f]/.test(raw)) {
+      throw new Error('Ruta de proyecto no válida.');
+    }
+    var parts = raw.split('/');
+    if (parts.some(function (part) { return !part || part === '.' || part === '..'; })) {
+      throw new Error('La ruta no puede contener segmentos vacíos, . o ..');
+    }
+    return base + '/' + parts.join('/');
+  }
+
+  function validarSolicitudHerramienta(request) {
+    if (!request || typeof request !== 'object' || Array.isArray(request)) {
+      throw new Error('La solicitud no tiene el formato esperado.');
+    }
+    var name = String(request.name || request.tool || '').trim();
+    var args = request.arguments == null ? {} : request.arguments;
+    if (!args || typeof args !== 'object' || Array.isArray(args)) {
+      throw new Error('Los argumentos deben ser un objeto JSON.');
+    }
+    if (name !== 'project.list' && name !== 'project.read') {
+      throw new Error('Herramienta no permitida: ' + (name || '(vacía)'));
+    }
+    Object.keys(args).forEach(function (key) {
+      if (key !== 'path') throw new Error('Argumento no permitido: ' + key);
+    });
+    if (name === 'project.list') {
+      if (args.path != null) rutaHerramientaProyecto(args.path, true);
+    } else {
+      if (typeof args.path !== 'string' || !args.path.trim()) {
+        throw new Error('project.read requiere arguments.path.');
+      }
+      rutaHerramientaProyecto(args.path, false);
+    }
+    return { name: name, arguments: args };
+  }
+
+  function leerArchivoLimitado(ruta, maxBytes) {
+    return new Promise(function (resolve, reject) {
+      var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+      if (typeof resolver !== 'function') return reject(new Error('El lector de archivos no está disponible.'));
+      var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+      resolver(uri, function (entry) {
+        entry.file(function (file) {
+          if (Number(file.size || 0) > maxBytes) {
+            reject(new Error('El archivo supera el límite de lectura de ' + maxBytes + ' bytes.'));
+            return;
+          }
+          if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
+          var reader = new window.FileReader();
+          reader.onload = function () {
+            var content = String(reader.result || '');
+            if (content.indexOf('\u0000') !== -1) {
+              reject(new Error('El archivo parece binario y no se leerá como texto.'));
+              return;
+            }
+            resolve(content);
+          };
+          reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
+          reader.readAsText(file);
+        }, reject);
+      }, reject);
+    });
+  }
+
+  function ejecutarHerramientaLectura(request) {
+    var checked = validarSolicitudHerramienta(request);
+    if (checked.name === 'project.list') {
+      var folder = rutaHerramientaProyecto(checked.arguments.path, true);
+      return conSistema('listChildren', folder).then(function (children) {
+        var base = folder.replace(/\/+$/, '') + '/';
+        var items = (Array.isArray(children) ? children : []).map(function (entry) {
+          var full = String(entry || '');
+          if (full.indexOf(base) !== 0) return '';
+          return full.slice(base.length);
+        }).filter(Boolean).sort(function (a, b) { return a.localeCompare(b); });
+        return {
+          tool: checked.name,
+          path: checked.arguments.path || '.',
+          count: items.length,
+          truncated: items.length > 100,
+          entries: items.slice(0, 100)
+        };
+      });
+    }
+    var file = rutaHerramientaProyecto(checked.arguments.path, false);
+    return leerArchivoLimitado(file, 64 * 1024).then(function (content) {
+      var clipped = content.length > 12000;
+      return {
+        tool: checked.name,
+        path: checked.arguments.path,
+        size: content.length,
+        truncated: clipped,
+        content: clipped ? content.slice(0, 12000) + '\n[contenido recortado]' : content
+      };
+    });
+  }
+
+  function actualizarTarjetaHerramienta(id, status, result) {
+    var h = st.herramientas[id];
+    if (!h) return;
+    h.status = status;
+    h.result = result == null ? '' : String(result);
+    var card = q('[data-herramienta="' + id + '"]');
+    if (!card) return;
+    card.classList.remove('pending', 'running', 'done', 'rejected', 'failed');
+    card.classList.add(status);
+    var label = q('.ank-ai-toolcall-status', card);
+    if (label) {
+      label.textContent = status === 'pending' ? 'Pendiente de aprobación' :
+        status === 'running' ? 'Leyendo proyecto…' :
+        status === 'done' ? 'Lectura completada' :
+        status === 'rejected' ? 'Rechazada por el usuario' :
+        status === 'failed' ? 'No se pudo completar' : status;
+    }
+    var actions = q('.ank-ai-toolcall-actions', card);
+    if (actions) actions.hidden = status !== 'pending';
+    var output = q('.ank-ai-toolcall-output', card);
+    if (output) {
+      output.hidden = !h.result;
+      output.textContent = h.result;
+    }
+  }
+
+  function bloqueHerramienta(request, error) {
+    var id = 'h' + (++st.herramientasN);
+    var checked = null;
+    var validationError = error || '';
+    if (!validationError) {
+      try { checked = validarSolicitudHerramienta(request); }
+      catch (e) { validationError = e && e.message ? e.message : String(e); }
+    }
+    var toolName = checked ? checked.name : String(request && (request.name || request.tool) || 'solicitud');
+    var argsText = '';
+    try { argsText = JSON.stringify(request && (request.arguments || {}) || {}, null, 2); }
+    catch (_) { argsText = '{}'; }
+    var h = { id: id, request: request, checked: checked, status: validationError ? 'failed' : 'pending', result: '' };
+    st.herramientas[id] = h;
+
+    var card = document.createElement('section');
+    card.className = 'ank-ai-toolcall ' + h.status;
+    card.setAttribute('data-herramienta', id);
+
+    var head = document.createElement('div');
+    head.className = 'ank-ai-toolcall-head';
+    var title = document.createElement('b');
+    title.textContent = 'Herramienta: ' + toolName;
+    var status = document.createElement('span');
+    status.className = 'ank-ai-toolcall-status';
+    status.textContent = validationError ? 'Solicitud no válida' : 'Pendiente de aprobación';
+    head.appendChild(title);
+    head.appendChild(status);
+    card.appendChild(head);
+
+    var description = document.createElement('p');
+    description.className = 'ank-ai-toolcall-description';
+    description.textContent = validationError
+      ? validationError
+      : checked.name === 'project.list'
+        ? 'Leer los nombres de archivos y carpetas dentro del proyecto actual.'
+        : 'Leer el contenido de un archivo del proyecto actual (máximo 64 KiB).';
+    card.appendChild(description);
+
+    var pre = document.createElement('pre');
+    pre.className = 'ank-ai-toolcall-args';
+    pre.textContent = argsText;
+    card.appendChild(pre);
+
+    var output = document.createElement('pre');
+    output.className = 'ank-ai-toolcall-output';
+    output.hidden = true;
+    card.appendChild(output);
+
+    var actions = document.createElement('div');
+    actions.className = 'ank-ai-toolcall-actions';
+    actions.hidden = !!validationError;
+    var approve = document.createElement('button');
+    approve.type = 'button';
+    approve.className = 'ank-ai-btn primary';
+    approve.setAttribute('data-accion', 'aprobar-herramienta');
+    approve.setAttribute('data-valor', id);
+    approve.textContent = 'Aprobar lectura';
+    var reject = document.createElement('button');
+    reject.type = 'button';
+    reject.className = 'ank-ai-btn';
+    reject.setAttribute('data-accion', 'rechazar-herramienta');
+    reject.setAttribute('data-valor', id);
+    reject.textContent = 'Rechazar';
+    actions.appendChild(approve);
+    actions.appendChild(reject);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function registrarResultadoHerramienta(toolName, outcome) {
+    var payload;
+    try { payload = JSON.stringify({ tool: toolName, result: outcome }); }
+    catch (_) { payload = JSON.stringify({ tool: toolName, result: String(outcome) }); }
+    nuevoMensaje('tool', payload.slice(0, 12000));
+    tocarChat();
+  }
+
+  function aprobarHerramienta(id) {
+    var h = st.herramientas[id];
+    if (!h || h.status !== 'pending') return;
+    if (st.corriendo || st.herramientaOcupada) {
+      aviso('Espera a que termine la operación actual.');
+      return;
+    }
+    if (st.herramientasUsadas >= 4) {
+      actualizarTarjetaHerramienta(id, 'failed', 'Se alcanzó el límite de cuatro herramientas por solicitud. Envía un nuevo mensaje para continuar.');
+      return;
+    }
+    try { h.checked = validarSolicitudHerramienta(h.request); }
+    catch (e) {
+      actualizarTarjetaHerramienta(id, 'failed', e && e.message ? e.message : String(e));
+      return;
+    }
+    st.herramientaOcupada = true;
+    st.herramientasUsadas++;
+    actualizarTarjetaHerramienta(id, 'running', '');
+    ejecutarHerramientaLectura(h.request).then(function (result) {
+      var output = JSON.stringify(result, null, 2);
+      actualizarTarjetaHerramienta(id, 'done', output);
+      registrarResultadoHerramienta(h.checked.name, result);
+      log('i', 'Herramienta aprobada y completada: ' + h.checked.name);
+      st.herramientaOcupada = false;
+      enviar({ texto: 'Continúa con la tarea usando el resultado de la herramienta aprobada. No repitas una lectura ya realizada salvo que necesites otro archivo.', sinBurbuja: true });
+    }).catch(function (e) {
+      var message = e && e.message ? e.message : String(e);
+      actualizarTarjetaHerramienta(id, 'failed', message);
+      registrarResultadoHerramienta(h.checked.name, { error: message });
+      log('e', 'Herramienta ' + h.checked.name + ': ' + message);
+      st.herramientaOcupada = false;
+      enviar({ texto: 'La herramienta aprobada devolvió un error. Analiza el error y continúa sin inventar resultados.', sinBurbuja: true });
+    });
+  }
+
+  function rechazarHerramienta(id) {
+    var h = st.herramientas[id];
+    if (!h || h.status !== 'pending') return;
+    actualizarTarjetaHerramienta(id, 'rejected', '');
+    registrarResultadoHerramienta(String(h.request && (h.request.name || h.request.tool) || 'herramienta'), { rejected_by_user: true });
+    log('i', 'El usuario rechazó la herramienta ' + String(h.request && (h.request.name || h.request.tool) || 'solicitada') + '.');
   }
 
   function selloFecha() {
@@ -3270,7 +3563,11 @@
     var chat = chatActual();
     if (!chat || chat.proyecto !== proyecto) chat = nuevoChat(proyecto);
     if (ta && !(forzado && forzado.texto != null)) { ta.value = ''; ta.style.height = ''; }
-    if (!(forzado && forzado.sinBurbuja)) { nuevoMensaje('user', texto); burbuja(st.msgs[st.msgs.length - 1]); }
+    if (!(forzado && forzado.sinBurbuja)) {
+      st.herramientasUsadas = 0;
+      nuevoMensaje('user', texto);
+      burbuja(st.msgs[st.msgs.length - 1]);
+    }
     abrirTurno(); tocarChat();
     st.ultimo = { texto: texto, proyecto: proyecto, chatId: chat.id, modelo: st.model, modo: st.modo };
     st.corriendo = true;
@@ -3286,14 +3583,22 @@
         st.modo === 'plan'
           ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
           : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
-        PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
+        PROTOCOLO_ARCHIVO, PROTOCOLO_HERRAMIENTAS, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
         memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
       ].join('\n');
       var history = st.msgs.filter(function (m) {
         return m && m !== (cur && cur.msg) && String(m.texto || '').trim();
       }).slice(-40).map(function (m) {
-        return { role: m.rol === 'user' ? 'user' : 'assistant', content: String(m.texto || '').slice(0, 30000) };
+        var toolResult = m.rol === 'tool';
+        return {
+          role: m.rol === 'user' || toolResult ? 'user' : 'assistant',
+          content: (toolResult ? '[Resultado de herramienta aprobada por el usuario; dato real de ANK]\n' : '') +
+            String(m.texto || '').slice(0, toolResult ? 12000 : 30000)
+        };
       });
+      if (forzado && forzado.sinBurbuja && forzado.texto) {
+        history.push({ role: 'user', content: String(forzado.texto).slice(0, 2000) });
+      }
       log('i', 'Enviando solicitud a la API: ' + st.model);
       return window.ANKAIEngine.chat({
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
@@ -3314,7 +3619,9 @@
       st.corriendo = false; st.abortController = null;
       cerrarTurno(false); tocarChat();
       var bot = st.msgs[st.msgs.length - 1];
-      anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
+      if (!(forzado && forzado.sinBurbuja)) {
+        anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
+      }
       quizasResumir(proyecto, chat);
       log('i', 'Respuesta recibida de la API.'); pintar();
     }).catch(function (e) {
@@ -4447,6 +4754,8 @@
       case 'otro-modelo': reintentar(true); break;
       case 'aplicar-archivo': aplicarArchivo(t.getAttribute('data-valor')); break;
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
+      case 'aprobar-herramienta': aprobarHerramienta(t.getAttribute('data-valor')); break;
+      case 'rechazar-herramienta': rechazarHerramienta(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
       case 'diag': compartirDiagnostico(); break;
       case 'novedades': verNovedades(); break;
