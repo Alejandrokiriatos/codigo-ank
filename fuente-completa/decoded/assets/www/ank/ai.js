@@ -642,6 +642,17 @@
     '```ank:archivo ruta/al/archivo.ext\n<contenido completo del archivo>\n```\n' +
     'El usuario verá el diff y decidirá si aplicarlo o descartarlo.\n';
 
+  var PROTOCOLO_COMANDO = '\n\n[Comandos del proyecto con aprobación]\n' +
+    'Si necesitas ejecutar una prueba, inspeccionar el proyecto o compilarlo, no afirmes que lo hiciste: propone un comando en este formato:\n' +
+    '```ank:comando Ejecutar las pruebas\n' +
+    'npm test\n' +
+    '```\n' +
+    '- Escribe un único comando simple en una sola línea, sin tuberías, redirecciones, variables ni operadores del shell.\n' +
+    '- Usa rutas relativas dentro del proyecto y nunca uses rutas absolutas ni .. .\n' +
+    '- No propongas borrar archivos, cambiar permisos, instalar paquetes del sistema, reiniciar servicios ni ejecutar descargas.\n' +
+    '- ANK solo lo ejecutará si el usuario pulsa el botón de aprobación. El resultado volverá a la conversación.\n' +
+    '- Si el usuario no ha aprobado, describe el comando como propuesta, nunca como una acción ya realizada.\n';
+
   /* Instrucciones que se suman al pedido para que la IA sepa cómo se arma
      una mini app de Código ANK y no invente una API distinta. */
   var PROTOCOLO_APP = '\n\n[Mini apps de Código ANK]\n' +
@@ -709,6 +720,8 @@
     turnoError: null,
     archivos: {},
     archivosN: 0,
+    comandos: {},
+    comandosN: 0,
     busqueda: '',
     resumiendoAuto: false,
     errores: [],
@@ -3286,7 +3299,7 @@
         st.modo === 'plan'
           ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
           : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
-        PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
+        PROTOCOLO_ARCHIVO, PROTOCOLO_COMANDO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
         memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
       ].join('\n');
       var history = st.msgs.filter(function (m) {
