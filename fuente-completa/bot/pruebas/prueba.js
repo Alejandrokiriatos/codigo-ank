@@ -1,3 +1,4 @@
+// Test de contrato: la versión anunciada se toma del manifiesto versionado del canal.
 /* Prueba de extremo a extremo del bot contra la API falsa.
    Ejecuta las mismas órdenes que usará el asistente. */
 
