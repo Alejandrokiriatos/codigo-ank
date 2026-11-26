@@ -469,10 +469,18 @@
   function endpointPredeterminado(protocol) {
     if (protocol === 'anthropic-messages') return 'https://api.anthropic.com/v1';
     if (protocol === 'gemini-generate-content') return 'https://generativelanguage.googleapis.com/v1beta';
+    if (protocol === 'custom-json') return '';
     return API_ENDPOINT_DEFAULT;
   }
+
+  var CUSTOM_BODY_DEFAULT = '{\n' +
+    '  "model": "{{MODEL}}",\n' +
+    '  "messages": "{{MESSAGES}}",\n' +
+    '  "temperature": "{{TEMPERATURE}}",\n' +
+    '  "max_tokens": "{{MAX_TOKENS}}"\n' +
+    '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.1.0';
+  var PANEL_VERSION = '2.2.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '26/11/2026';
@@ -534,6 +542,11 @@
     model: '',
     endpoint: API_ENDPOINT_DEFAULT,
     protocol: API_PROTOCOL_DEFAULT,
+    customAuthHeader: 'Authorization',
+    customAuthPrefix: 'Bearer',
+    customHeaders: '{}',
+    customBodyTemplate: CUSTOM_BODY_DEFAULT,
+    customResponsePath: 'choices.0.message.content',
     apiKey: '',
     apiConfigured: false,
     modo: leer('ank.ai.modo', 'build'),
@@ -977,6 +990,11 @@
       st.endpoint = String(data.endpoint || endpointPredeterminado(st.protocol));
       st.model = String(data.model || '');
       st.apiKey = String(data.apiKey || '');
+      st.customAuthHeader = String(data.customAuthHeader == null ? 'Authorization' : data.customAuthHeader);
+      st.customAuthPrefix = String(data.customAuthPrefix == null ? 'Bearer' : data.customAuthPrefix);
+      st.customHeaders = String(data.customHeaders || '{}');
+      st.customBodyTemplate = String(data.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+      st.customResponsePath = String(data.customResponsePath || 'choices.0.message.content');
       st.apiConfigured = !!(st.endpoint && st.model && st.apiKey);
       st.credencial = st.apiConfigured ? 'listo' : 'falta';
       return st.apiConfigured;
@@ -987,6 +1005,11 @@
       st.model = '';
       st.protocol = API_PROTOCOL_DEFAULT;
       st.endpoint = API_ENDPOINT_DEFAULT;
+      st.customAuthHeader = 'Authorization';
+      st.customAuthPrefix = 'Bearer';
+      st.customHeaders = '{}';
+      st.customBodyTemplate = CUSTOM_BODY_DEFAULT;
+      st.customResponsePath = 'choices.0.message.content';
       return false;
     });
   }
@@ -1003,16 +1026,49 @@
     var model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
     var enteredKey = String((q('#ank-ai-key') && q('#ank-ai-key').value) || '').trim();
     var apiKey = enteredKey || st.apiKey;
+    var customAuthHeader = String((q('#ank-ai-custom-auth-header') && q('#ank-ai-custom-auth-header').value) || st.customAuthHeader || 'Authorization').trim();
+    var customAuthPrefix = String((q('#ank-ai-custom-auth-prefix') && q('#ank-ai-custom-auth-prefix').value) || '');
+    var customHeaders = String((q('#ank-ai-custom-headers') && q('#ank-ai-custom-headers').value) || st.customHeaders || '{}').trim();
+    var customBodyTemplate = String((q('#ank-ai-custom-body') && q('#ank-ai-custom-body').value) || st.customBodyTemplate || CUSTOM_BODY_DEFAULT).trim();
+    var customResponsePath = String((q('#ank-ai-custom-response') && q('#ank-ai-custom-response').value) || st.customResponsePath || 'choices.0.message.content').trim();
+    if (!endpoint) return aviso('Introduce la URL completa del endpoint API.');
+    if (protocol === 'custom-json') {
+      try {
+        var headersObject = JSON.parse(customHeaders || '{}');
+        if (!headersObject || typeof headersObject !== 'object' || Array.isArray(headersObject)) throw new Error();
+      } catch (_) { return aviso('Los encabezados adicionales deben ser un objeto JSON válido.'); }
+      try {
+        var bodyObject = JSON.parse(customBodyTemplate);
+        if (!bodyObject || typeof bodyObject !== 'object' || Array.isArray(bodyObject)) throw new Error();
+      } catch (_) { return aviso('La plantilla del cuerpo debe ser un objeto JSON válido.'); }
+    }
     if (!window.ANKAIEngine) return aviso('No se ha cargado el motor API de ANK.');
     if (!apiKey) return aviso('Introduce la clave API.');
     if (!model) return aviso('Introduce el identificador exacto del modelo.');
     try { window.ANKAIEngine.endpointUrl(endpoint, protocol, model); }
     catch (e) { return aviso(e.message || 'La dirección API no es válida.'); }
-    var data = { version: 2, protocol: protocol, endpoint: endpoint, model: model, apiKey: apiKey, temperature: 0.2 };
+    var data = {
+      version: 3,
+      protocol: protocol,
+      endpoint: endpoint,
+      model: model,
+      apiKey: apiKey,
+      temperature: 0.2,
+      customAuthHeader: customAuthHeader,
+      customAuthPrefix: customAuthPrefix,
+      customHeaders: customHeaders,
+      customBodyTemplate: customBodyTemplate,
+      customResponsePath: customResponsePath
+    };
     return dirsIniciales().then(function () {
       return escribir(rutaConfigApi(), JSON.stringify(data));
     }).then(function () {
       st.endpoint = endpoint; st.protocol = protocol; st.model = model; st.apiKey = apiKey;
+      st.customAuthHeader = customAuthHeader;
+      st.customAuthPrefix = customAuthPrefix;
+      st.customHeaders = customHeaders;
+      st.customBodyTemplate = customBodyTemplate;
+      st.customResponsePath = customResponsePath;
       st.apiConfigured = true; st.credencial = 'listo';
       if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
       log('i', 'Configuración API guardada en el almacenamiento privado de ANK.');
@@ -1034,6 +1090,11 @@
     aviso('Probando conexión…');
     window.ANKAIEngine.chat({
       protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      customAuthHeader: st.customAuthHeader,
+      customAuthPrefix: st.customAuthPrefix,
+      customHeaders: st.customHeaders,
+      customBodyTemplate: st.customBodyTemplate,
+      customResponsePath: st.customResponsePath,
       messages: [
         { role: 'system', content: 'Responde únicamente OK.' },
         { role: 'user', content: 'Prueba de conexión de Código ANK. Responde OK.' }
@@ -3088,6 +3149,11 @@
       log('i', 'Enviando solicitud a la API: ' + st.model);
       return window.ANKAIEngine.chat({
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      customAuthHeader: st.customAuthHeader,
+      customAuthPrefix: st.customAuthPrefix,
+      customHeaders: st.customHeaders,
+      customBodyTemplate: st.customBodyTemplate,
+      customResponsePath: st.customResponsePath,
         messages: [{ role: 'system', content: systemPrompt }].concat(history),
         temperature: 0.2, timeoutMs: 120000,
         signal: st.abortController ? st.abortController.signal : undefined,
@@ -3209,6 +3275,11 @@
     }).join('\n');
     window.ANKAIEngine.chat({
       protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      customAuthHeader: st.customAuthHeader,
+      customAuthPrefix: st.customAuthPrefix,
+      customHeaders: st.customHeaders,
+      customBodyTemplate: st.customBodyTemplate,
+      customResponsePath: st.customResponsePath,
       messages: [
         { role: 'system', content: 'Resume solo hechos técnicos confirmados, sin inventar.' },
         { role: 'user', content: 'Resume esta conversación en 1 a 3 viñetas, en español.\n\n' + history }
@@ -3236,6 +3307,22 @@
   /* ------------------------------------------------------------------ *
    * render
    * ------------------------------------------------------------------ */
+
+  function pintarCamposPersonalizados() {
+    var box = q('.ank-ai-custom');
+    if (box) box.style.display = st.protocol === 'custom-json' ? 'block' : 'none';
+    var values = [
+      ['#ank-ai-custom-auth-header', st.customAuthHeader],
+      ['#ank-ai-custom-auth-prefix', st.customAuthPrefix],
+      ['#ank-ai-custom-headers', st.customHeaders],
+      ['#ank-ai-custom-body', st.customBodyTemplate],
+      ['#ank-ai-custom-response', st.customResponsePath]
+    ];
+    values.forEach(function (item) {
+      var el = q(item[0]);
+      if (el && el.value !== item[1]) el.value = item[1] == null ? '' : item[1];
+    });
+  }
 
   function pintarEstado() {
     var status = q('.ank-ai-status');
@@ -3268,6 +3355,7 @@
     if (endpoint && endpoint.value !== st.endpoint) endpoint.value = st.endpoint;
     var protocol = q('#ank-ai-protocolo');
     if (protocol && protocol.value !== st.protocol) protocol.value = st.protocol;
+    pintarCamposPersonalizados();
     var label = q('#ank-ai-chat-modelo');
     if (label) label.textContent = st.model || 'Sin modelo';
     var mode = q('.ank-ai-modo');
@@ -3966,15 +4054,26 @@
 
           '<section class="ank-ai-view" data-view="entorno">' +
             '<div class="ank-ai-setup">' +
-              '<p class="ank-ai-lead">Conecta ANK directamente con tu proveedor. Admite APIs compatibles con OpenAI, Anthropic Messages y Google Gemini. El terminal Linux es independiente y opcional.</p>' +
+              '<p class="ank-ai-lead">Conecta ANK directamente con tu proveedor. Admite OpenAI compatible, Anthropic Messages, Google Gemini y APIs JSON personalizadas. El terminal Linux es independiente y opcional.</p>' +
               '<div class="ank-ai-steps"></div>' +
               '<div class="ank-ai-field"><label>Formato de API</label><select id="ank-ai-protocolo">' +
                 '<option value="openai-chat-completions">OpenAI compatible (OpenAI, OpenRouter, DeepSeek, Groq, Mistral y otros)</option>' +
                 '<option value="anthropic-messages">Anthropic Messages</option>' +
                 '<option value="gemini-generate-content">Google Gemini</option>' +
-              '</select><div class="ank-ai-hint">Selecciona el formato que ofrece tu proveedor. Para otros servicios, usa OpenAI compatible si documentan Chat Completions.</div></div>' +
-              '<div class="ank-ai-field"><label>URL base del proveedor</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
+                '<option value="custom-json">API personalizada (JSON/REST)</option>' +
+              '</select><div class="ank-ai-hint">Elige el protocolo oficial o configura una API JSON propia mediante su endpoint, encabezados, cuerpo de la petición y ruta de respuesta.</div></div>' +
+              '<div class="ank-ai-field"><label>URL base o endpoint del proveedor</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
               '<div class="ank-ai-field"><label>ID exacto del modelo</label><input id="ank-ai-modelo" type="text" spellcheck="false" autocomplete="off" placeholder="identificador-exacto-del-modelo" /></div>' +
+              '<div class="ank-ai-custom" style="display:none">' +
+                '<div class="ank-ai-field"><label>Encabezado de autenticación</label><input id="ank-ai-custom-auth-header" type="text" spellcheck="false" placeholder="Authorization, api-key, x-api-key..." /></div>' +
+                '<div class="ank-ai-field"><label>Prefijo de autenticación</label><input id="ank-ai-custom-auth-prefix" type="text" spellcheck="false" placeholder="Bearer (vacío = clave directa)" /></div>' +
+                '<div class="ank-ai-field"><label>Encabezados adicionales (JSON)</label><textarea id="ank-ai-custom-headers" spellcheck="false" rows="3" placeholder="{}"></textarea>' +
+                  '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}} en valores de encabezado. No pongas secretos en la URL.</div></div>' +
+                '<div class="ank-ai-field"><label>Plantilla del cuerpo JSON</label><textarea id="ank-ai-custom-body" spellcheck="false" rows="7"></textarea>' +
+                  '<div class="ank-ai-hint">Variables disponibles: {{MODEL}}, {{MESSAGES}}, {{SYSTEM}}, {{API_KEY}}, {{TEMPERATURE}} y {{MAX_TOKENS}}. Escribe {{MESSAGES}} entre comillas para insertar el historial como valor JSON.</div></div>' +
+                '<div class="ank-ai-field"><label>Ruta del texto de respuesta</label><input id="ank-ai-custom-response" type="text" spellcheck="false" placeholder="choices.0.message.content" />' +
+                  '<div class="ank-ai-hint">Ruta JSON con puntos e índices de array. Ejemplo: data.response.text o output.0.content.</div></div>' +
+              '</div>' +
               '<div class="ank-ai-field"><label>Clave API</label><input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Pega tu clave API" />' +
                 '<div class="ank-ai-hint">Se guarda en el almacenamiento privado de la app. El cifrado con Android Keystore se incorpora en el bloque de seguridad.</div></div>' +
               '<div class="ank-ai-field ank-ai-appbar"><button class="ank-ai-btn primary" data-accion="guardar-clave">Guardar conexión</button>' +
@@ -4146,6 +4245,11 @@
       var prompt = 'Reescribe este AGENTS.md en menos de 60 líneas. Conserva objetivo, estado, decisiones y bitácora reciente. No inventes datos. Devuelve solo Markdown.\n\n' + (memory || plantillaProyecto(project));
       return window.ANKAIEngine.chat({
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      customAuthHeader: st.customAuthHeader,
+      customAuthPrefix: st.customAuthPrefix,
+      customHeaders: st.customHeaders,
+      customBodyTemplate: st.customBodyTemplate,
+      customResponsePath: st.customResponsePath,
         messages: [
           { role: 'system', content: 'Editas memorias técnicas. Conserva decisiones y hechos, no inventes.' },
           { role: 'user', content: prompt }
@@ -4290,6 +4394,7 @@
       if (!st.endpoint || st.endpoint === anteriorDefault) st.endpoint = nuevoDefault;
       st.protocol = siguiente;
       if (endpointActual && (!endpointActual.value || endpointActual.value === anteriorDefault)) endpointActual.value = nuevoDefault;
+      pintarCamposPersonalizados();
       return;
     }
     if (e.target.id === 'ank-ai-endpoint') { st.endpoint = String(e.target.value || '').trim(); return; }
