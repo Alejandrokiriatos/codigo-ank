@@ -2339,7 +2339,18 @@
 
   function bloqueArchivo(ruta, contenido) {
     var id = 'a' + (++st.archivosN);
-    st.archivos[id] = { ruta: ruta, contenido: contenido, existe: false, actual: '', aplicado: false, descartado: false };
+    st.archivos[id] = {
+      ruta: ruta,
+      contenido: contenido,
+      existe: false,
+      actual: '',
+      errorLectura: '',
+      aplicado: false,
+      descartado: false,
+      revertido: false,
+      creado: false,
+      respaldo: ''
+    };
     var caja = document.createElement('div');
     caja.className = 'ank-ai-file';
     caja.setAttribute('data-archivo', id);
@@ -2350,12 +2361,31 @@
       '</div>' +
       '<pre class="ank-ai-file-diff" hidden></pre>' +
       '<div class="ank-ai-file-acc">' +
-        '<button type="button" class="ank-ai-act" data-accion="aplicar-archivo" data-valor="' + id + '">Aplicar</button>' +
+        '<button type="button" class="ank-ai-act" data-accion="aplicar-archivo" data-valor="' + id + '" disabled>Aplicar</button>' +
         '<button type="button" class="ank-ai-act ghost" data-accion="descartar-archivo" data-valor="' + id + '">Descartar</button>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="rollback-archivo" data-valor="' + id + '" hidden disabled>Revertir</button>' +
       '</div>';
     q('.ank-ai-file-ruta', caja).textContent = ruta;
     leerParaDiff(id, caja);
     return caja;
+  }
+
+  function actualizarArchivoUI(id) {
+    var a = st.archivos[id];
+    var caja = q('[data-archivo="' + id + '"]');
+    if (!a || !caja) return;
+    var aplicar = q('[data-accion="aplicar-archivo"]', caja);
+    var descartar = q('[data-accion="descartar-archivo"]', caja);
+    var revertir = q('[data-accion="rollback-archivo"]', caja);
+    if (aplicar) aplicar.disabled = !!(a.aplicado || a.descartado || a.errorLectura || a.sinCambios);
+    if (descartar) descartar.disabled = !!(a.aplicado || a.descartado);
+    if (revertir) {
+      revertir.hidden = !a.aplicado || !!a.revertido;
+      revertir.disabled = !a.aplicado || !!a.revertido;
+    }
+    caja.classList.toggle('aplicado', !!a.aplicado && !a.revertido);
+    caja.classList.toggle('revertido', !!a.revertido);
+    caja.classList.toggle('descartado', !!a.descartado);
   }
 
   function leerParaDiff(id, caja) {
@@ -2363,15 +2393,17 @@
     if (!a) return;
     var ruta = rutaAbsolutaArchivo(a.ruta);
     if (!ruta) { pintarDiff(id, caja); return; }
-    leerTexto(ruta)
-      .then(function (txt) {
-        a.actual = String(txt || '');
-        a.existe = !!a.actual;
+    leerArchivoDetallado(ruta)
+      .then(function (resultado) {
+        a.actual = resultado.contenido;
+        a.existe = resultado.existe;
+        a.errorLectura = '';
         pintarDiff(id, caja);
       })
-      .catch(function () {
+      .catch(function (error) {
         a.actual = '';
         a.existe = false;
+        a.errorLectura = error && error.message ? error.message : 'No se pudo leer el archivo.';
         pintarDiff(id, caja);
       });
   }
@@ -2381,16 +2413,25 @@
     if (!a || !caja) return;
     var est = q('.ank-ai-file-est', caja);
     var pre = q('.ank-ai-file-diff', caja);
+    var aplicar = q('[data-accion="aplicar-archivo"]', caja);
     if (!rutaAbsolutaArchivo(a.ruta)) {
       if (est) est.textContent = 'ruta no válida';
       caja.classList.add('mal');
+      if (aplicar) aplicar.disabled = true;
       if (pre) { pre.hidden = false; pre.textContent = a.contenido; }
+      return;
+    }
+    if (a.errorLectura) {
+      if (est) est.textContent = 'error al leer: ' + a.errorLectura;
+      caja.classList.add('mal');
+      if (aplicar) aplicar.disabled = true;
       return;
     }
     if (!a.existe) {
       if (est) est.textContent = 'archivo nuevo';
       caja.classList.add('nuevo');
       if (pre) { pre.hidden = false; pre.textContent = a.contenido; }
+      if (aplicar) aplicar.disabled = false;
       return;
     }
     var lineas = diffLineas(a.actual, a.contenido);
@@ -2400,12 +2441,13 @@
       else if (l.charAt(0) === '-') restas++;
     });
     if (!sumas && !restas) {
+      a.sinCambios = true;
       if (est) est.textContent = 'sin cambios';
-      var b = q('[data-accion="aplicar-archivo"]', caja);
-      if (b) b.disabled = true;
+      if (aplicar) aplicar.disabled = true;
       return;
     }
     if (est) est.textContent = '+' + sumas + ' −' + restas;
+    if (aplicar) aplicar.disabled = false;
     if (pre) {
       pre.hidden = false;
       var tope = 300;
