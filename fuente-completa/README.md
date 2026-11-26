@@ -40,20 +40,34 @@ complete la auditoría final.
 El panel de Código ANK mantiene sus pestañas de Chat, Chats, Apps, Entorno y
 Registro, pero el motor ya no depende de un ejecutable Linux externo.
 
-### Conexión actual
+### Conexión multi-proveedor
 
-El bloque 2 incorpora un primer transporte de API compatible con
-**OpenAI Chat Completions**:
+El bloque 3 amplía la conexión directa e incorpora tres formatos de API:
 
-1. Introduce la URL base del proveedor (por ejemplo, `https://api.openai.com/v1`).
-2. Escribe el identificador exacto del modelo que ofrece esa cuenta.
-3. Pega la clave API y pulsa **Guardar conexión**.
-4. Pulsa **Probar conexión** y revisa el resultado en Registro.
+| Formato | Endpoint base de ejemplo | Autenticación |
+|---|---|---|
+| OpenAI Chat Completions compatible | `https://api.openai.com/v1` | `Authorization: Bearer` |
+| Anthropic Messages | `https://api.anthropic.com/v1` | `x-api-key` + `anthropic-version` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `x-goog-api-key` |
 
-El transporte nativo de Cordova se usa en Android para evitar depender de CORS
-del WebView; fuera de Cordova se utiliza `fetch`. En este bloque solo está
-implementado el formato compatible con Chat Completions. Los adaptadores
-específicos para otros protocolos se incorporan en el bloque 3.
+El formato OpenAI compatible permite conectar otros proveedores que publiquen
+esa misma interfaz (por ejemplo, OpenRouter, DeepSeek, Groq, Mistral y
+servicios compatibles), introduciendo su endpoint y el ID exacto del modelo.
+No significa que todas las APIs arbitrarias sean intercambiables: si el
+proveedor utiliza un protocolo diferente, necesita un adaptador propio.
+
+1. Selecciona el formato que documenta tu proveedor.
+2. Introduce su URL base.
+3. Escribe el ID exacto del modelo.
+4. Pega la clave API y pulsa **Guardar conexión**.
+5. Pulsa **Probar conexión** y revisa el resultado en Registro.
+
+Las configuraciones anteriores sin campo `protocol` siguen leyéndose como
+OpenAI Chat Completions para conservar compatibilidad con las conexiones
+guardadas en la versión 2.0.0. Android utiliza el transporte HTTP nativo de
+Cordova; fuera de Cordova se utiliza `fetch`. OpenAI compatible ofrece
+streaming cuando la respuesta y el entorno lo permiten; Anthropic y Gemini
+utilizan respuesta JSON completa en esta primera versión.
 
 La clave queda en un archivo bajo el directorio interno privado de la app y se
 carga a memoria al arrancar. En esta fase no está cifrada con Android Keystore:
