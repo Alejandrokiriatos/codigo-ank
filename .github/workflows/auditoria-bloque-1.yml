@@ -67,13 +67,33 @@ jobs:
           set -euo pipefail
           node --test ank-ai/engine.test.js
           node tools/build-ai.js --check
-          if grep -RniE 'opencode|OpenCode' decoded/assets/www/ank; then
-            echo "Se encontró una dependencia OpenCode en el panel de Android."
+          cmp -s decoded/assets/www/ank/ai.js update/ank/ai.js
+          if grep -RniE 'opencode|OpenCode' decoded/assets/www/ank update/ank; then
+            echo "Se encontró código antiguo en el panel o su copia de publicación."
             exit 1
           fi
+          node - <<'NODE'
+          const fs = require('fs');
+          const manifest = require('./update/version.json');
+          const ai = fs.readFileSync('decoded/assets/www/ank/ai.js', 'utf8');
+          const match = ai.match(/PANEL_VERSION = '([^']+)'/);
+          if (!match) throw new Error('No se pudo leer PANEL_VERSION');
+          const cmp = (a,b) => {
+            const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+            for (let i=0;i<Math.max(x.length,y.length);i++) {
+              const p=x[i]||0, q=y[i]||0;
+              if (p!==q) return p-q;
+            }
+            return 0;
+          };
+          if (cmp(manifest.web, match[1]) >= 0) {
+            throw new Error('El manifiesto remoto debe seguir por debajo de la versión incluida hasta re-firmar el paquete en el bloque de seguridad.');
+          }
+          console.log('Canal de actualización cerrado de forma segura:', manifest.web, '<', match[1]);
+          NODE
           test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Terminal.js
           test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Executor.js
-          echo "Motor API verificado; terminal/Executor siguen presentes." >> "$GITHUB_STEP_SUMMARY"
+          echo "Motor API verificado; bundle de publicación sincronizado; canal remoto bloqueado hasta re-firma; terminal/Executor conservados." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verificar que el canal de actualización y el código fuente estén presentes
         shell: bash
