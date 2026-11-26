@@ -18,7 +18,8 @@
   var PROTOCOLS = {
     openai: 'openai-chat-completions',
     anthropic: 'anthropic-messages',
-    gemini: 'gemini-generate-content'
+    gemini: 'gemini-generate-content',
+    custom: 'custom-json'
   };
 
   function fail(message, code) {
@@ -32,6 +33,7 @@
     if (p === 'openai' || p === 'openai-compatible' || p === 'openai-chat-completions') return PROTOCOLS.openai;
     if (p === 'anthropic' || p === 'anthropic-messages') return PROTOCOLS.anthropic;
     if (p === 'gemini' || p === 'google' || p === 'gemini-generate-content') return PROTOCOLS.gemini;
+    if (p === 'custom' || p === 'custom-json' || p === 'rest-json') return PROTOCOLS.custom;
     throw fail('Protocolo API no compatible: ' + p, 'ANK_AI_PROTOCOL_UNSUPPORTED');
   }
 
@@ -47,7 +49,11 @@
     }
     if (!url.hostname) throw fail('La dirección de la API no tiene un servidor válido.', 'ANK_AI_ENDPOINT_INVALID');
     url.hash = '';
-    url.search = '';
+    // Se conservan parámetros no sensibles que algunos gateways requieren.
+    // Las claves API no deben viajar en query strings.
+    if (/(^|[?&])(key|api[_-]?key|token|access[_-]?token|authorization)=/i.test(url.search)) {
+      throw fail('No pongas claves API ni tokens en la URL. Usa el encabezado de autenticación.', 'ANK_AI_ENDPOINT_SECRET');
+    }
     return url;
   }
 
@@ -55,7 +61,10 @@
     var p = protocolName(protocol);
     var url = validarUrl(endpoint);
     var path = url.pathname.replace(/\/+$/, '');
-    if (p === PROTOCOLS.openai) {
+    if (p === PROTOCOLS.custom) {
+      // En modo personalizado el endpoint se usa exactamente como lo escribió el usuario.
+      if (!path) path = '/';
+    } else if (p === PROTOCOLS.openai) {
       if (!/\/chat\/completions$/i.test(path)) path += '/chat/completions';
     } else if (p === PROTOCOLS.anthropic) {
       if (!/\/messages$/i.test(path)) {
@@ -136,6 +145,79 @@
     });
   }
 
+  function leerObjetoJSON(value, label) {
+    if (value == null || value === '') return {};
+    var parsed = value;
+    if (typeof value === 'string') {
+      try { parsed = JSON.parse(value); }
+      catch (_) { throw fail(label + ' debe contener JSON válido.', 'ANK_AI_CUSTOM_JSON_INVALID'); }
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw fail(label + ' debe ser un objeto JSON.', 'ANK_AI_CUSTOM_JSON_INVALID');
+    }
+    return parsed;
+  }
+
+  function sustituirPlantilla(value, variables) {
+    if (Array.isArray(value)) return value.map(function (item) { return sustituirPlantilla(item, variables); });
+    if (value && typeof value === 'object') {
+      var output = {};
+      Object.keys(value).forEach(function (key) {
+        output[key] = sustituirPlantilla(value[key], variables);
+      });
+      return output;
+    }
+    if (typeof value !== 'string') return value;
+    var exact = value.match(/^\{\{([A-Z_]+)\}\}$/);
+    if (exact && Object.prototype.hasOwnProperty.call(variables, exact[1])) return variables[exact[1]];
+    return value.replace(/\{\{([A-Z_]+)\}\}/g, function (match, name) {
+      return Object.prototype.hasOwnProperty.call(variables, name) ? String(variables[name]) : match;
+    });
+  }
+
+  function leerRuta(obj, path) {
+    var parts = String(path || '').split('.').filter(Boolean);
+    var value = obj;
+    for (var i = 0; i < parts.length; i++) {
+      var key = parts[i];
+      if (key === '__proto__' || key === 'prototype' || key === 'constructor') return undefined;
+      if (value == null) return undefined;
+      value = value[key];
+    }
+    return value;
+  }
+
+  function headersPersonalizados(options) {
+    var custom = leerObjetoJSON(options.customHeaders, 'Los encabezados adicionales');
+    var headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    Object.keys(custom).forEach(function (name) {
+      if (!/^[A-Za-z0-9!#$%&*+.^_~-]+$/.test(name) ||
+          /^(host|content-length|connection|cookie|set-cookie|transfer-encoding)$/i.test(name)) {
+        throw fail('Encabezado no permitido: ' + name, 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
+      var value = custom[name];
+      if (value == null || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean')) {
+        throw fail('El valor del encabezado ' + name + ' debe ser texto o número.', 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
+      headers[name] = String(value)
+        .replace(/\{\{API_KEY\}\}/g, String(options.apiKey || ''))
+        .replace(/\{\{MODEL\}\}/g, String(options.model || ''));
+    });
+    var authName = String(options.customAuthHeader == null ? 'Authorization' : options.customAuthHeader).trim();
+    if (authName) {
+      if (!/^[A-Za-z0-9!#$%&*+.^_~-]+$/.test(authName) ||
+          /^(host|content-length|connection|cookie|set-cookie|transfer-encoding)$/i.test(authName)) {
+        throw fail('Nombre del encabezado de autenticación no válido.', 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
+      var prefix = String(options.customAuthPrefix == null ? 'Bearer' : options.customAuthPrefix).trim();
+      headers[authName] = (prefix ? prefix + ' ' : '') + String(options.apiKey || '');
+    }
+    return headers;
+  }
+
   function crearSolicitud(options, protocol) {
     var messages = normalizarMensajes(options.messages);
     var system = messages.filter(function (m) { return m.role === 'system'; })
@@ -145,6 +227,30 @@
       ? Math.max(0, Math.min(2, Number(options.temperature))) : 0.2;
     var maxTokens = options.maxTokens != null && isFinite(Number(options.maxTokens))
       ? Math.max(1, Math.min(32768, Math.floor(Number(options.maxTokens)))) : null;
+
+    if (protocol === PROTOCOLS.custom) {
+      var templateText = String(options.customBodyTemplate || '').trim();
+      if (!templateText) {
+        templateText = '{"model":"{{MODEL}}","messages":"{{MESSAGES}}","temperature":"{{TEMPERATURE}}","max_tokens":"{{MAX_TOKENS}}"}';
+      }
+      var template;
+      try { template = JSON.parse(templateText); }
+      catch (_) { throw fail('La plantilla del cuerpo debe ser JSON válido.', 'ANK_AI_CUSTOM_BODY_INVALID'); }
+      var variables = {
+        MODEL: String(options.model || ''),
+        MESSAGES: messages,
+        SYSTEM: system,
+        API_KEY: String(options.apiKey || ''),
+        TEMPERATURE: temperature,
+        MAX_TOKENS: maxTokens || 4096
+      };
+      var customBody = sustituirPlantilla(template, variables);
+      return {
+        body: customBody,
+        headers: headersPersonalizados(options),
+        stream: false
+      };
+    }
 
     if (protocol === PROTOCOLS.anthropic) {
       return {
@@ -207,11 +313,21 @@
     };
   }
 
-  function respuestaNormalizada(data, protocol) {
+  function respuestaNormalizada(data, protocol, options) {
     var content = '';
     var usage = null;
     var finishReason = null;
-    if (protocol === PROTOCOLS.anthropic) {
+    if (protocol === PROTOCOLS.custom) {
+      var responsePath = String(options && options.customResponsePath || 'choices.0.message.content').trim();
+      var extracted = leerRuta(data, responsePath);
+      if (typeof extracted === 'string' || Array.isArray(extracted)) content = textoContenido(extracted);
+      else if (extracted != null && typeof extracted === 'object') {
+        if (typeof extracted.text === 'string') content = extracted.text;
+        else content = JSON.stringify(extracted);
+      }
+      usage = data && (data.usage || data.usageMetadata) || null;
+      finishReason = data && (data.finish_reason || data.stop_reason) || null;
+    } else if (protocol === PROTOCOLS.anthropic) {
       content = textoContenido(data && data.content);
       usage = data && data.usage || null;
       finishReason = data && data.stop_reason || null;
@@ -287,14 +403,14 @@
     return leer();
   }
 
-  function parsearRespuestaNativa(response, protocol) {
+  function parsearRespuestaNativa(response, protocol, options) {
     var raw = response && response.data != null ? response.data : response;
     var data = raw;
     if (typeof raw === 'string') {
       try { data = JSON.parse(raw); }
       catch (_) { throw fail('La API devolvió una respuesta que no es JSON válido.', 'ANK_AI_INVALID_JSON'); }
     }
-    return respuestaNormalizada(data || {}, protocol);
+    return respuestaNormalizada(data || {}, protocol, options);
   }
 
   function chatNativo(http, options, url, request, timeoutMs, protocol) {
@@ -353,7 +469,7 @@
             return;
           }
           try {
-            var result = parsearRespuestaNativa(response, protocol);
+            var result = parsearRespuestaNativa(response, protocol, options);
             if (result.content && options.onDelta) options.onDelta(result.content);
             settleSuccess(result);
           } catch (error) { settleError(error); }
@@ -411,7 +527,7 @@
           }
           if (protocol === PROTOCOLS.openai && request.stream) return parsearSSE(response, options.onDelta, control.signal);
           return response.json().then(function (data) {
-            var result = respuestaNormalizada(data, protocol);
+            var result = respuestaNormalizada(data, protocol, options);
             if (result.content && options.onDelta) options.onDelta(result.content);
             return result;
           });
