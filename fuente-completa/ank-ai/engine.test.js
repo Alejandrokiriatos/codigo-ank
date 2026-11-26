@@ -428,6 +428,12 @@ test('política de comandos bloquea operaciones destructivas, red y escape del p
     'cat /etc/passwd',
     'cat ../secreto.txt',
     'find . -delete',
+    'find . -exec rm -rf {} ;',
+    'unlink archivo.txt',
+    'truncate -s 0 archivo.txt',
+    'git branch -D main',
+    'git stash clear',
+    'git config --global user.email name@example.com',
     'npm test\nrm -rf .'
   ];
   for (const command of blocked) {
