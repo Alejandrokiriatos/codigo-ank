@@ -66,6 +66,7 @@ Ejecución de GitHub Actions:
 - `tools/build-ai.js --check`: motor fuente y bundle Android sincronizados.
 - `cmp`: copia de publicación `update/ank/ai.js` idéntica al panel incluido.
 - Búsqueda automatizada: sin referencias OpenCode en el panel activo ni en su copia de publicación.
+- Comprobación: el registro Cordova declara `cordova.plugin.http`, su interfaz pública expone `sendRequest` y `abort`, y el panel usa ese transporte en Android.
 - Comprobación: Terminal.js y Executor.js siguen presentes.
 - Manifiesto remoto: 1.8.3 < versión incluida 2.0.0; el workflow confirma el bloqueo del canal antiguo.
 - Apktool: reconstrucción diagnóstica completada.
