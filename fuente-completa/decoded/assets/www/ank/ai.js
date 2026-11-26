@@ -37,12 +37,26 @@
     throw fail('Protocolo API no compatible: ' + p, 'ANK_AI_PROTOCOL_UNSUPPORTED');
   }
 
+  function esHostLocal(host) {
+    var value = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
+    if (value === 'localhost' || value.endsWith('.localhost') || value.endsWith('.local') || value === '::1') return true;
+    if (value.indexOf(':') !== -1) return /^(fc|fd|fe8|fe9|fea|feb)/i.test(value);
+    var parts = value.split('.');
+    if (parts.length !== 4 || parts.some(function (part) { return !/^\d{1,3}$/.test(part) || Number(part) > 255; })) return false;
+    var a = Number(parts[0]), b = Number(parts[1]);
+    return a === 10 || a === 127 || (a === 192 && b === 168) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
+  }
+
   function validarUrl(raw) {
     var url;
     try { url = new URL(String(raw || '').trim()); }
     catch (_) { throw fail('La dirección de la API no es válida.', 'ANK_AI_ENDPOINT_INVALID'); }
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       throw fail('La API debe utilizar HTTPS o HTTP para un servidor local.', 'ANK_AI_ENDPOINT_PROTOCOL');
+    }
+    if (url.protocol === 'http:' && !esHostLocal(url.hostname)) {
+      throw fail('Las APIs públicas deben utilizar HTTPS. HTTP solo se permite para servicios locales o de red privada.', 'ANK_AI_ENDPOINT_INSECURE');
     }
     if (url.username || url.password) {
       throw fail('No incluyas credenciales dentro de la dirección de la API.', 'ANK_AI_ENDPOINT_CREDENTIALS');
@@ -503,15 +517,16 @@
     options = options || {};
     var apiKey = String(options.apiKey || '').trim();
     var model = String(options.model || '').trim();
-    if (!apiKey) return Promise.reject(fail('Falta la clave API.', 'ANK_AI_KEY_REQUIRED'));
-    if (!model) return Promise.reject(fail('Indica el nombre del modelo.', 'ANK_AI_MODEL_REQUIRED'));
-
     var protocol;
     var url;
     try {
       protocol = protocolName(options.protocol);
       url = endpointUrl(options.endpoint, protocol, model);
     } catch (err) { return Promise.reject(err); }
+    var noAuthCustom = protocol === PROTOCOLS.custom &&
+      !String(options.customAuthHeader == null ? 'Authorization' : options.customAuthHeader).trim();
+    if (!apiKey && !noAuthCustom) return Promise.reject(fail('Falta la clave API.', 'ANK_AI_KEY_REQUIRED'));
+    if (!model) return Promise.reject(fail('Indica el nombre del modelo.', 'ANK_AI_MODEL_REQUIRED'));
 
     var nativeHttp = options.http && typeof options.http.sendRequest === 'function' ? options.http : null;
     if (!nativeHttp && typeof fetch !== 'function') {
