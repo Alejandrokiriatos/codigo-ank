@@ -58,7 +58,7 @@ El manifiesto remoto `update/version.json` permanece intencionalmente en 1.8.3 y
 
 Ejecución de GitHub Actions:
 
-- **Run:** [45825747987](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45825747987)
+- **Run:** [45826057943](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45825747987)
 - **Resultado:** ambos trabajos completados correctamente.
 - Sintaxis JavaScript/MJS: **333 archivos correctos**.
 - Pruebas del motor API: **8 correctas, 0 fallidas**.
