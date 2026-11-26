@@ -448,3 +448,13 @@ test('política de comandos limita el tamaño y exige una sola línea', () => {
   assert.equal(Engine.validateCommand('   ').ok, false);
   assert.equal(Engine.validateCommand('npm test\nnode test.js').ok, false);
 });
+
+
+test('normaliza nombres de proyecto y elimina segmentos de escape', () => {
+  assert.equal(Engine.normalizeProjectPath('mi-proyecto'), 'mi-proyecto');
+  assert.equal(Engine.normalizeProjectPath('clientes/tienda-1'), 'clientes/tienda-1');
+  assert.equal(Engine.normalizeProjectPath('../privado'), 'privado');
+  assert.equal(Engine.normalizeProjectPath('clientes/../../privado'), 'clientes/privado');
+  assert.equal(Engine.normalizeProjectPath('/absoluto/proyecto'), 'absoluto/proyecto');
+  assert.equal(Engine.normalizeProjectPath('././proyecto'), 'proyecto');
+});
