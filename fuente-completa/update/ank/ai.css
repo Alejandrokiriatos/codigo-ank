@@ -1880,3 +1880,78 @@
   max-height: 320px;
   overflow: auto;
 }
+
+
+/* ---------- solicitudes de herramientas con aprobación ---------- */
+.ank-ai-toolcall {
+  margin: 12px 0;
+  padding: 11px 12px;
+  border: 1px solid #344448;
+  border-left: 3px solid #e0a458;
+  border-radius: 4px;
+  background: #10191b;
+  color: #e7e0d2;
+}
+.ank-ai-toolcall-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.ank-ai-toolcall-status {
+  color: #e0a458;
+  font-size: 10px;
+}
+.ank-ai-toolcall.done {
+  border-left-color: #6fa88c;
+}
+.ank-ai-toolcall.done .ank-ai-toolcall-status {
+  color: #8bc6a5;
+}
+.ank-ai-toolcall.rejected,
+.ank-ai-toolcall.failed {
+  border-left-color: #bd7467;
+}
+.ank-ai-toolcall.rejected .ank-ai-toolcall-status,
+.ank-ai-toolcall.failed .ank-ai-toolcall-status {
+  color: #d78a7b;
+}
+.ank-ai-toolcall-description {
+  margin: 7px 0;
+  color: #a9aaa0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ank-ai-toolcall-args,
+.ank-ai-toolcall-output {
+  max-height: 210px;
+  overflow: auto;
+  margin: 7px 0;
+  padding: 8px;
+  border: 1px solid #26373a;
+  border-radius: 3px;
+  background: #0a1113;
+  color: #c8d0c7;
+  font: 10.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ank-ai-toolcall-output {
+  border-color: #315343;
+  color: #b7d7c3;
+}
+.ank-ai-toolcall-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+.ank-ai-toolcall-actions[hidden],
+.ank-ai-toolcall-output[hidden] {
+  display: none !important;
+}
+.ank-ai-toolcall-actions .ank-ai-btn {
+  min-height: 36px;
+}
