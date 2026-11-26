@@ -80,6 +80,7 @@ Además, la consulta compara la versión publicada contra la versión guardada. 
 - `publicar-actualizacion.py` requiere `tools/update-key.txt`; ese archivo no viene en la fuente versionada y está excluido por `.gitignore`. Sin el secreto externo, la publicación falla.
 - `publicar-github.ps1` clona dentro de `.repo-publicacion` cuando no encuentra `.git`. Esa carpeta ya está incluida con archivos y no contiene metadata Git; clonar dentro de un directorio no vacío no es un procedimiento fiable. Se debe clonar en una ruta temporal limpia o usar un checkout Git real.
 - La clave HMAC actual está expuesta en el cliente y debe considerarse retirada. No se debe reutilizar para firmar futuras entregas.
+- El README de compilación incluye las contraseñas del keystore como texto literal (`codigoank`) en el ejemplo de `apksigner`. Aunque el archivo de firma no esté en Git, el procedimiento debe migrarse a variables de entorno/secretos locales y no publicar claves ni contraseñas.
 
 ## 4. Arquitectura actual del asistente
 
@@ -109,6 +110,8 @@ El árbol importado contiene `decoded/AndroidManifest.xml`, `apktool.yml`, recur
 - Un keystore de firma versionado (los archivos `*.keystore` están excluidos).
 
 El manifiesto reconstruido indica paquete final `com.ank.codigoank`, `versionCode 1027`, `versionName 1.7.0`, `minSdk 26`, `targetSdk 28` y `compileSdkVersion 36` reflejado por Apktool. El nombre `acode.apk` en `apktool.yml` es metadata, no demuestra que el APK original esté incluido.
+
+El README original del proyecto identifica la base como **Acode F-Droid 1.13.2 (versionCode 1008)** y enumera `acode.apk`, `apktool.jar`, `ank.keystore` y `CodigoANK.apk` en su estructura local. Esos archivos no están en el archivo comprimido importado ni en el árbol Git, porque `.gitignore` excluye APKs, JARs y keystores. F-Droid publica el código fuente correspondiente a esa versión y garantiza que el APK listado se construyó desde ese paquete de fuentes. La recuperación correcta es partir de esa versión exacta, no sustituirla a ciegas por la última versión de Acode.
 
 **Consecuencia:** el proyecto Android original de Gradle no está incluido, pero sí se pudo comprobar que la reconstrucción técnica de la capa descompilada es posible. No se puede garantizar una actualización encima de la instalación existente sin conservar la identidad de firma de la versión distribuida. El keystore y sus contraseñas nunca deben subirse a un repositorio público.
 
