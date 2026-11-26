@@ -2414,6 +2414,10 @@
   function pintarDiff(id, caja) {
     var a = st.archivos[id];
     if (!a || !caja) return;
+    if (a.descartado || a.aplicado || a.revertido) {
+      actualizarArchivoUI(id);
+      return;
+    }
     var est = q('.ank-ai-file-est', caja);
     var pre = q('.ank-ai-file-diff', caja);
     var aplicar = q('[data-accion="aplicar-archivo"]', caja);
@@ -2478,7 +2482,7 @@
     }
     if (est) est.textContent = 'comprobando archivo…';
     var carpeta = ruta.replace(/\/[^\/]+$/, '');
-    var respaldo = ruta + '.' + selloFecha() + '.bak';
+    var respaldo = ruta + '.' + selloFecha() + '.' + id + '.bak';
     conSistema('mkdirs', carpeta)
       .catch(function () {})
       .then(function () { return leerArchivoDetallado(ruta); })
@@ -2546,6 +2550,7 @@
         if (!a.respaldo) throw new Error('No se encontró la ruta de la copia de seguridad.');
         return leerArchivoDetallado(a.respaldo).then(function (backup) {
           if (!backup.existe) throw new Error('La copia de seguridad no existe.');
+          if (backup.contenido !== a.actual) throw new Error('La copia de seguridad no coincide con el contenido original guardado en el diff.');
           return escribir(ruta, backup.contenido);
         });
       })
