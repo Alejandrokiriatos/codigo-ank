@@ -116,6 +116,29 @@ jobs:
           if (!css.includes('.ank-ai-field textarea') || !css.includes('.ank-ai-custom')) {
             throw new Error('Faltan estilos para los ajustes de API personalizada');
           }
+          const toolChecks = [
+            'var PROTOCOLO_HERRAMIENTAS',
+            'function validarSolicitudHerramienta(',
+            'function ejecutarHerramientaLectura(',
+            'function aprobarHerramienta(',
+            'function rechazarHerramienta(',
+            'project.list',
+            'project.read',
+            '64 * 1024',
+            'data-accion', 'aprobar-herramienta',
+            'data-accion', 'rechazar-herramienta',
+            'herramientasUsadas >= 4'
+          ];
+          for (const fragment of toolChecks) {
+            if (!panel.includes(fragment)) throw new Error('Falta el control de herramientas aprobadas: ' + fragment);
+          }
+          if (!css.includes('.ank-ai-toolcall') || !css.includes('.ank-ai-toolcall-actions')) {
+            throw new Error('Faltan estilos para la tarjeta de aprobación de herramientas');
+          }
+          if (!panel.includes("m.rol === 'tool' ? 'user' : 'assistant'") &&
+              !panel.includes("m.rol === 'user' || toolResult ? 'user' : 'assistant'")) {
+            throw new Error('Los resultados de herramientas no se incluyen en el historial del modelo');
+          }
           const configCheck = panel.indexOf('function chequearTodo()');
           const configLoad = panel.indexOf('return cargarConfigApi();', configCheck);
           const readyGate = panel.indexOf("document.addEventListener('deviceready'", panel.indexOf('function iniciar()'));
