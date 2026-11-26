@@ -525,11 +525,13 @@
     }
     var tokens = raw.split(/\\s+/);
     if (tokens.some(function (token) {
-      return token.charAt(0) === '/' || token.charAt(0) === '~' || /(^|\\/)\\.\\.(\\/|$)/.test(token) || token.indexOf('://') !== -1;
-    })) return no('No se permiten rutas absolutas, directorios superiores ni direcciones de red.');
+      return token.charAt(0) === '/' || token.charAt(0) === '~' ||
+        /(^|\\/)\\.\\.(\\/|$)/.test(token) || token.indexOf('://') !== -1 ||
+        /^-(delete|exec|execdir)$/i.test(token);
+    })) return no('No se permiten rutas absolutas, directorios superiores, direcciones de red ni opciones de ejecución/borrado.');
     var executable = tokens[0].split('/').pop().toLowerCase();
     var blocked = {
-      rm: 1, rmdir: 1, del: 1, erase: 1, dd: 1, mkfs: 1, mkfs.ext4: 1,
+      rm: 1, rmdir: 1, del: 1, erase: 1, dd: 1, mkfs: 1, 'mkfs.ext4': 1,
       sudo: 1, su: 1, reboot: 1, shutdown: 1, poweroff: 1, halt: 1,
       kill: 1, killall: 1, pkill: 1, curl: 1, wget: 1, nc: 1, ncat: 1,
       ssh: 1, scp: 1, sftp: 1, chmod: 1, chown: 1, mount: 1, umount: 1,
