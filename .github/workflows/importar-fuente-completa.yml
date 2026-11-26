@@ -1,0 +1,70 @@
+name: Importar fuente completa
+
+on:
+  push:
+    paths:
+      - ".github/workflows/importar-fuente-completa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: importar-fuente-completa
+  cancel-in-progress: false
+
+jobs:
+  extraer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Instalar extractor 7z
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full
+
+      - name: Descomprimir dentro del repositorio
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST="$RUNNER_TEMP/ank-extraido"
+          mkdir -p "$DEST"
+          7z x codigo-ank-fuente.7z "-o$DEST" -y
+
+          SRC="$DEST/codigo-ank-fuente"
+          if [ ! -f "$SRC/README.md" ]; then
+            SRC="$(find "$DEST" -mindepth 1 -maxdepth 3 -type f -name README.md -printf '%h\n' | head -n 1)"
+          fi
+          if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
+            echo "No se encontró la carpeta raíz del código descomprimido."
+            exit 1
+          fi
+
+          mkdir -p fuente-completa
+          rsync -a --delete --exclude='.git/' "$SRC/" fuente-completa/
+
+          ARCHIVOS="$(find fuente-completa -type f | wc -l | tr -d ' ')"
+          BYTES="$(du -sb fuente-completa | cut -f1)"
+          echo "Archivos extraídos: $ARCHIVOS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Bytes extraídos: $BYTES" >> "$GITHUB_STEP_SUMMARY"
+          echo "Carpeta destino: fuente-completa/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Se excluyó únicamente .git/ anidado para no incrustar otro repositorio."
+
+      - name: Guardar la fuente en GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fuente-completa
+          if git diff --cached --quiet; then
+            echo "La fuente ya está actualizada."
+            exit 0
+          fi
+          git commit -m "Añadir fuente completa descomprimida"
+          git push origin HEAD:main
