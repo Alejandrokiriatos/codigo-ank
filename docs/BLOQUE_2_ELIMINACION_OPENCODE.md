@@ -26,7 +26,7 @@ Se añadieron:
 - `ank-ai/engine.test.js`: pruebas automatizadas del motor.
 - `tools/build-ai.js`: integra el motor fuente en el bundle que carga Android y comprueba que ambos estén sincronizados.
 
-El primer adaptador implementado utiliza el protocolo **OpenAI Chat Completions compatible**. Acepta endpoint, identificador de modelo y clave API configurables. Incluye normalización de endpoint, envío de mensajes, lectura de respuestas SSE cuando el entorno permite streaming, manejo de errores y cancelación.
+El primer adaptador implementado utiliza el protocolo **OpenAI Chat Completions compatible**. Acepta endpoint, identificador de modelo y clave API configurables. Incluye normalización de endpoint, envío de mensajes, lectura de respuestas SSE cuando el entorno permite streaming, manejo de errores y cancelación. Se corrigió además la propagación de `AbortSignal` hasta `cordova.plugin.http.abort()`, para que cancelar desde la interfaz detenga también la petición nativa.
 
 En Android se usa el transporte HTTP nativo del plugin Cordova `cordova-plugin-advanced-http`, evitando depender de CORS del WebView. Cuando el motor se ejecuta fuera de Cordova, utiliza `fetch`.
 
@@ -58,10 +58,10 @@ El manifiesto remoto `update/version.json` permanece intencionalmente en 1.8.3 y
 
 Ejecución de GitHub Actions:
 
-- **Run:** [45826057943](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45825747987)
+- **Run:** [45852147511](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45825747987)
 - **Resultado:** ambos trabajos completados correctamente.
 - Sintaxis JavaScript/MJS: **333 archivos correctos**.
-- Pruebas del motor API: **8 correctas, 0 fallidas**.
+- Pruebas del motor API: **9 correctas, 0 fallidas**, incluida la cancelación del transporte HTTP nativo.
 - Pruebas aisladas del bot: correctas.
 - `tools/build-ai.js --check`: motor fuente y bundle Android sincronizados.
 - `cmp`: copia de publicación `update/ank/ai.js` idéntica al panel incluido.
