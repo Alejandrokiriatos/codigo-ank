@@ -1177,6 +1177,15 @@
   color: #7fb37f;
 }
 
+.ank-ai-file.revertido {
+  border-color: #42555a;
+  opacity: 0.8;
+}
+
+.ank-ai-file.revertido .ank-ai-file-est {
+  color: #8fb8c0;
+}
+
 .ank-ai-file.descartado {
   opacity: 0.55;
 }
