@@ -2465,7 +2465,7 @@
 
   function aplicarArchivo(id) {
     var a = st.archivos[id];
-    if (!a || a.aplicado || a.descartado) return;
+    if (!a || a.aplicado || a.descartado || a.errorLectura || a.sinCambios) return;
     var ruta = rutaAbsolutaArchivo(a.ruta);
     var caja = q('[data-archivo="' + id + '"]');
     var est = caja ? q('.ank-ai-file-est', caja) : null;
@@ -2473,33 +2473,89 @@
       aviso('Ruta no válida: ' + a.ruta);
       return;
     }
-    if (est) est.textContent = 'aplicando…';
+    if (est) est.textContent = 'comprobando archivo…';
     var carpeta = ruta.replace(/\/[^\/]+$/, '');
+    var respaldo = ruta + '.' + selloFecha() + '.bak';
     conSistema('mkdirs', carpeta)
       .catch(function () {})
-      .then(function () { return leerTexto(ruta); })
+      .then(function () { return leerArchivoDetallado(ruta); })
       .then(function (actual) {
-        if (!actual) return null;
-        return escribir(ruta + '.' + selloFecha() + '.bak', actual);
+        // No sobrescribir un archivo si cambió después de mostrar el diff.
+        if (actual.existe !== a.existe || actual.contenido !== a.actual) {
+          throw new Error('El archivo cambió desde que se mostró el diff. Vuelve a generar la propuesta.');
+        }
+        if (!actual.existe) {
+          a.creado = true;
+          a.respaldo = '';
+          return null;
+        }
+        return escribir(respaldo, actual.contenido).then(function () {
+          a.creado = false;
+          a.respaldo = respaldo;
+          return respaldo;
+        });
       })
-      .then(function () { return escribir(ruta, a.contenido); })
+      .then(function () {
+        if (est) est.textContent = 'aplicando…';
+        return escribir(ruta, a.contenido);
+      })
       .then(function () {
         a.aplicado = true;
-        if (caja) {
-          caja.classList.add('aplicado');
-          var b = q('[data-accion="aplicar-archivo"]', caja);
-          var d = q('[data-accion="descartar-archivo"]', caja);
-          if (b) b.disabled = true;
-          if (d) d.disabled = true;
-        }
-        if (est) est.textContent = 'aplicado';
+        a.revertido = false;
+        actualizarArchivoUI(id);
+        if (est) est.textContent = a.creado ? 'aplicado · archivo nuevo' : 'aplicado · copia de seguridad creada';
         aviso('Aplicado: ' + a.ruta);
-        log('i', 'Archivo aplicado: ' + a.ruta);
+        log('i', 'Archivo aplicado: ' + a.ruta + (a.respaldo ? ' · respaldo ' + a.respaldo : ' · nuevo'));
       })
       .catch(function (e) {
         if (est) est.textContent = 'error';
         aviso('No se pudo aplicar el archivo.');
         log('e', 'Aplicar ' + a.ruta + ': ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  function revertirArchivo(id) {
+    var a = st.archivos[id];
+    if (!a || !a.aplicado || a.revertido) return;
+    var ruta = rutaAbsolutaArchivo(a.ruta);
+    var caja = q('[data-archivo="' + id + '"]');
+    var est = caja ? q('.ank-ai-file-est', caja) : null;
+    if (!ruta) return aviso('No se puede revertir: ruta no válida.');
+    if (typeof window.confirm === 'function' &&
+        !window.confirm('¿Revertir "' + a.ruta + '" al contenido anterior?')) return;
+    if (est) est.textContent = 'revirtiendo…';
+
+    leerArchivoDetallado(ruta)
+      .then(function (actual) {
+        if (a.creado) {
+          if (!actual.existe) return false;
+          if (actual.contenido !== a.contenido) {
+            throw new Error('El archivo fue modificado después de aplicarlo. No se borrará para evitar perder cambios.');
+          }
+          return eliminarArchivoDetallado(ruta);
+        }
+        if (!actual.existe) throw new Error('El archivo original ya no existe.');
+        if (actual.contenido !== a.contenido) {
+          throw new Error('El archivo fue modificado después de aplicarlo. No se sobrescribirá.');
+        }
+        if (!a.respaldo) throw new Error('No se encontró la ruta de la copia de seguridad.');
+        return leerArchivoDetallado(a.respaldo).then(function (backup) {
+          if (!backup.existe) throw new Error('La copia de seguridad no existe.');
+          return escribir(ruta, backup.contenido);
+        });
+      })
+      .then(function () {
+        a.revertido = true;
+        actualizarArchivoUI(id);
+        if (est) est.textContent = a.creado ? 'archivo nuevo eliminado' : 'contenido anterior restaurado';
+        aviso('Cambios revertidos: ' + a.ruta);
+        log('i', 'Archivo revertido: ' + a.ruta + (a.respaldo ? ' · respaldo conservado' : ''));
+      })
+      .catch(function (error) {
+        if (est) est.textContent = 'no se pudo revertir';
+        actualizarArchivoUI(id);
+        aviso('No se pudo revertir el archivo. Revisa el registro.');
+        log('e', 'Revertir ' + a.ruta + ': ' + (error && error.message ? error.message : error));
       });
   }
 
