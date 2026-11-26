@@ -2045,8 +2045,8 @@
           var solicitud = null;
           var errorHerramienta = '';
           try {
-            solicitud = JSON.parse(herramienta[1]);
             if (herramienta[1].length > 4096) throw new Error('La solicitud supera el límite de 4 KiB.');
+            solicitud = JSON.parse(herramienta[1]);
             if (!solicitud || typeof solicitud !== 'object' || Array.isArray(solicitud)) {
               throw new Error('La solicitud debe ser un objeto JSON.');
             }
