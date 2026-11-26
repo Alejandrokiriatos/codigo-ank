@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-4-agent-tools`  
 **Base:** `ank/block-3-multiple-api`  
-**Estado:** primer ciclo de propuestas de comandos implementado en fuente. CI de GitHub Actions ha superado la verificación estática y 21 pruebas automatizadas en la primera versión; las pruebas de rutas seguras se añaden en esta revisión. Falta la prueba funcional en Android.
+**Estado:** primer ciclo de propuestas de comandos implementado en fuente. GitHub Actions superó la verificación estática y 22 pruebas automatizadas; falta la prueba funcional en Android.
 
 ## Objetivo
 
@@ -22,7 +22,7 @@ La propuesta puede repetirse en el historial al volver a abrir un chat, pero nun
 
 ## Política de comandos de esta etapa
 
-Se limita a una línea de máximo 240 caracteres. No admite saltos de línea, caracteres de control, tuberías, redirecciones, variables o expansión del shell. Se rechazan rutas absolutas, directorios superiores (`..`) y direcciones de red.
+Se limita a una línea de máximo 240 caracteres. No admite saltos de línea, caracteres de control, tuberías, redirecciones, variables o expansión del shell. Se rechazan rutas absolutas, directorios superiores (`..`) y direcciones de red. Los nombres de proyecto también se normalizan para retirar segmentos `.` y `..` antes de construir las rutas de trabajo.
 
 Se bloquean, entre otros:
 
