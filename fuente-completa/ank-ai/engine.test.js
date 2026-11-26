@@ -357,6 +357,14 @@ test('API personalizada rechaza JSON inválido y encabezados peligrosos', async 
     Engine.chat(Object.assign({}, base, { customBodyTemplate: '{invalid' })),
     (error) => error.code === 'ANK_AI_CUSTOM_BODY_INVALID'
   );
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { customHeaders: JSON.stringify({ 'x-test': 'ok\\r\\nInjected: yes' }) })),
+    (error) => error.code === 'ANK_AI_CUSTOM_HEADER_INVALID'
+  );
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { customBodyTemplate: '{"__proto__":{"polluted":true}}' })),
+    (error) => error.code === 'ANK_AI_CUSTOM_BODY_INVALID'
+  );
 });
 
 test('rechaza credenciales en query string para evitar filtrarlas en historial de red', () => {
