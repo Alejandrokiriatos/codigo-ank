@@ -83,7 +83,7 @@ jobs:
           if (!boot.includes('ANK_AI_ENGINE_BUNDLE_BEGIN')) throw new Error('El arranque no valida el panel nuevo');
           if (!updater.includes('Actualizaciones web desactivadas temporalmente') ||
               !updater.includes('activo: function () { return false; }') ||
-              /CLAVE_HEX|function hmac\\(/.test(updater)) {
+              /CLAVE_HEX|function hmac\(/.test(updater)) {
             throw new Error('El actualizador antiguo con HMAC comprometido no está completamente retirado');
           }
           console.log('Canal remoto desactivado sin clave HMAC; panel incluido:', match[1], 'manifiesto antiguo:', manifest.web);
@@ -99,6 +99,7 @@ jobs:
           if (!api.includes('sendRequest: sendRequest') || !api.includes('function abort(')) throw new Error('La interfaz HTTP no expone envío/cancelación');
           if (!panel.includes('function clienteHttpNativo()') || !panel.includes('http: clienteHttpNativo()')) throw new Error('El panel no conecta el transporte nativo');
           if (!panel.includes("return st.apiConfigured;")) throw new Error('No se pudo verificar la carga de configuración API');
+          if (!panel.includes(".then(function () { return cargarConfigApi(); })")) throw new Error('La configuración API no se restaura automáticamente al iniciar');
           console.log('Plugin HTTP Cordova registrado y conectado al asistente.');
           NODE
           test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Terminal.js
