@@ -72,7 +72,7 @@ jobs:
           node -e "const v=require('./fuente-completa/update/version.json'); if(!v.web || !v.ai || !v.css || !v.sig) process.exit(1); console.log('Canal del panel:', v.web)"
 
   apktool-rebuild:
-    name: Reconstrucción técnica del APK con Apktool
+    name: Reconstrucción diagnóstica (APK sin assets excluidos)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -93,6 +93,27 @@ jobs:
           printf '#!/usr/bin/env bash\nexec java -jar "%s" "$@"\n' "$RUNNER_TEMP/apktool.jar" | sudo tee /usr/local/bin/apktool >/dev/null
           sudo chmod +x /usr/local/bin/apktool
           apktool --version
+
+      - name: Registrar assets requeridos y omitidos
+        shell: bash
+        run: |
+          set -euo pipefail
+          MISSING=0
+          if [ ! -f fuente-completa/decoded/assets/opencode/opencode-arm64.tar.gz ]; then
+            echo "- Falta el binario OpenCode ARM64 incluido en la versión documentada." >> "$GITHUB_STEP_SUMMARY"
+            MISSING=1
+          fi
+          if [ ! -d fuente-completa/decoded/assets/alpine_assets ]; then
+            echo "- Falta el directorio de assets Alpine/AXS/proot." >> "$GITHUB_STEP_SUMMARY"
+            MISSING=1
+          fi
+          if [ "$MISSING" -eq 1 ]; then
+            echo "**ADVERTENCIA: el APK reconstruido es solo diagnóstico y no es instalable/funcional como release.**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Assets Linux principales presentes." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          test -s fuente-completa/decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Terminal.js
+          test -s fuente-completa/decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Executor.js
 
       - name: Reconstruir APK sin firmar
         shell: bash
