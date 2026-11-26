@@ -116,7 +116,8 @@ function correr(args, datos) {
     // 6b. anuncio de la última versión publicada del panel
     r = await correr(['anuncio'], datos);
     const an = ultimo('sendMessage');
-    check('anuncia la actualización en el canal', r.codigo === 0 && an && /actualización 1\.5\.9/.test(an.datos.text || ''), an && (an.datos.text || '').slice(0, 60));
+    const versionPublicada = JSON.parse(fs.readFileSync(path.join(BOT, '..', 'update', 'version.json'), 'utf8')).web;
+    check('anuncia la actualización publicada en el canal', r.codigo === 0 && an && String(an.datos.text || '').includes('actualización ' + versionPublicada), 'esperada ' + versionPublicada + ': ' + (an && (an.datos.text || '').slice(0, 60)));
 
     // 7. comandos
     r = await correr(['comandos'], datos);
