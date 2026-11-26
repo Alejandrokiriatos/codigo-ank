@@ -68,6 +68,7 @@ jobs:
           node --test ank-ai/engine.test.js
           node tools/build-ai.js --check
           cmp -s decoded/assets/www/ank/ai.js update/ank/ai.js
+          cmp -s decoded/assets/www/ank/ai.css update/ank/ai.css
           if grep -RniE 'opencode|OpenCode' decoded/assets/www/ank update/ank; then
             echo "Se encontró código antiguo en el panel o su copia de publicación."
             exit 1
@@ -94,11 +95,27 @@ jobs:
           const plugin = fs.readFileSync('decoded/assets/www/plugins/cordova-plugin-advanced-http/www/advanced-http.js', 'utf8');
           const api = fs.readFileSync('decoded/assets/www/plugins/cordova-plugin-advanced-http/www/public-interface.js', 'utf8');
           const panel = fs.readFileSync('decoded/assets/www/ank/ai.js', 'utf8');
+          const engine = fs.readFileSync('ank-ai/engine.js', 'utf8');
+          const css = fs.readFileSync('decoded/assets/www/ank/ai.css', 'utf8');
           if (!registry.includes('"cordova.plugin.http"')) throw new Error('Cordova no registra cordova.plugin.http');
           if (!plugin.includes("require(pluginId + '.public-interface')")) throw new Error('El plugin HTTP no carga su interfaz pública');
           if (!api.includes('sendRequest: sendRequest') || !api.includes('function abort(')) throw new Error('La interfaz HTTP no expone envío/cancelación');
           if (!panel.includes('function clienteHttpNativo()') || !panel.includes('http: clienteHttpNativo()')) throw new Error('El panel no conecta el transporte nativo');
           if (!panel.includes("return st.apiConfigured;")) throw new Error('No se pudo verificar la carga de configuración API');
+          if (!engine.includes("custom-json") || !engine.includes("ANK_AI_ENDPOINT_INSECURE") ||
+              !engine.includes("ANK_AI_CUSTOM_HEADER_INVALID")) {
+            throw new Error('El motor no contiene el adaptador JSON personalizado y sus validaciones de seguridad');
+          }
+          if (!panel.includes('option value="custom-json"')) throw new Error('El selector no ofrece API JSON personalizada');
+          for (const id of ['ank-ai-custom-auth-header', 'ank-ai-custom-auth-prefix', 'ank-ai-custom-headers', 'ank-ai-custom-body', 'ank-ai-custom-response']) {
+            if (!panel.includes('id="' + id + '"')) throw new Error('Falta el ajuste de API personalizada: ' + id);
+          }
+          if (!panel.includes('var noAuthCustom = protocol === \'custom-json\' && !customAuthHeader;')) {
+            throw new Error('El panel no admite conexiones locales sin clave API');
+          }
+          if (!css.includes('.ank-ai-field textarea') || !css.includes('.ank-ai-custom')) {
+            throw new Error('Faltan estilos para los ajustes de API personalizada');
+          }
           const configCheck = panel.indexOf('function chequearTodo()');
           const configLoad = panel.indexOf('return cargarConfigApi();', configCheck);
           const readyGate = panel.indexOf("document.addEventListener('deviceready'", panel.indexOf('function iniciar()'));
