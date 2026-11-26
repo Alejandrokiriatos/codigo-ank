@@ -1569,6 +1569,44 @@
     });
   }
 
+  function leerArchivoDetallado(ruta) {
+    var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+    if (typeof resolver !== 'function') return Promise.reject(new Error('El lector de archivos de la app no está disponible.'));
+    var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+    return new Promise(function (resolve, reject) {
+      resolver(uri, function (entry) {
+        if (!entry || typeof entry.file !== 'function') return reject(new Error('La ruta no es un archivo.'));
+        entry.file(function (file) {
+          if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
+          var reader = new window.FileReader();
+          reader.onload = function () { resolve({ existe: true, contenido: String(reader.result == null ? '' : reader.result) }); };
+          reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
+          reader.readAsText(file);
+        }, reject);
+      }, function (error) {
+        var notFound = window.FileError && window.FileError.NOT_FOUND_ERR || 1;
+        if (error && error.code === notFound) resolve({ existe: false, contenido: '' });
+        else reject(error || new Error('No se pudo consultar el archivo.'));
+      });
+    });
+  }
+
+  function eliminarArchivoDetallado(ruta) {
+    var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+    if (typeof resolver !== 'function') return Promise.reject(new Error('El eliminador de archivos no está disponible.'));
+    var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+    return new Promise(function (resolve, reject) {
+      resolver(uri, function (entry) {
+        if (!entry || typeof entry.remove !== 'function') return reject(new Error('El elemento no permite borrado.'));
+        entry.remove(function () { resolve(true); }, reject);
+      }, function (error) {
+        var notFound = window.FileError && window.FileError.NOT_FOUND_ERR || 1;
+        if (error && error.code === notFound) resolve(false);
+        else reject(error || new Error('No se pudo localizar el archivo.'));
+      });
+    });
+  }
+
   function hoy() {
     var d = new Date();
     function dos(n) { return ('0' + n).slice(-2); }
