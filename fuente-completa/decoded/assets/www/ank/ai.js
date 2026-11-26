@@ -1702,6 +1702,8 @@
         frag.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         frag.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'herramienta') {
+        frag.appendChild(bloqueHerramienta(t.solicitud, t.error));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -1733,6 +1735,8 @@
         d.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         d.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'herramienta') {
+        d.appendChild(bloqueHerramienta(t.solicitud, t.error));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -2031,24 +2035,39 @@
      Un bloque con el lenguaje `ank:archivo <ruta>` se convierte en una
      propuesta de archivo aplicable (con diff contra el archivo local). */
   function mdLite(texto) {
-    var partes = String(texto).split(/```/);
+    var partes = String(texto).split(/\x60{3}/);
     var salida = [];
     for (var i = 0; i < partes.length; i++) {
       if (i % 2 === 1) {
         var bruto = partes[i];
-        var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
-        if (propuesta) {
-          salida.push({
-            tipo: 'archivo',
-            ruta: propuesta[1].replace(/\r/g, '').trim(),
-            texto: bruto.slice(propuesta[0].length).replace(/\n$/, '')
-          });
+        var herramienta = /^ank:tool[ \t]*\r?\n([\s\S]*)$/i.exec(bruto.replace(/^\r?\n/, '').trim());
+        if (herramienta) {
+          var solicitud = null;
+          var errorHerramienta = '';
+          try {
+            solicitud = JSON.parse(herramienta[1]);
+            if (!solicitud || typeof solicitud !== 'object' || Array.isArray(solicitud)) {
+              throw new Error('La solicitud debe ser un objeto JSON.');
+            }
+          } catch (error) {
+            errorHerramienta = error && error.message ? error.message : 'JSON no válido.';
+          }
+          salida.push({ tipo: 'herramienta', solicitud: solicitud, error: errorHerramienta });
         } else {
-          salida.push({ tipo: 'codigo', texto: bruto.replace(/^[A-Za-z0-9+#_-]*\n/, '').replace(/\n$/, '') });
+          var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
+          if (propuesta) {
+            salida.push({
+              tipo: 'archivo',
+              ruta: propuesta[1].replace(/\r/g, '').trim(),
+              texto: bruto.slice(propuesta[0].length).replace(/\n$/, '')
+            });
+          } else {
+            salida.push({ tipo: 'codigo', texto: bruto.replace(/^[A-Za-z0-9+#_-]*\n/, '').replace(/\n$/, '') });
+          }
         }
       } else {
         var html = esc(partes[i])
-          .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+          .replace(/\x60([^\x60\n]+)\x60/g, '<code>$1</code>')
           .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
           .replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>');
         salida.push({ tipo: 'texto', html: html });
