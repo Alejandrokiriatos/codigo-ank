@@ -146,6 +146,8 @@ No se cambiarán de forma aislada: hay que verificar compatibilidad con el prove
 | `preview/serve.js` es un servidor de harness | No es prueba integral de la APK ni del WebView Android | Mantenerlo como prueba visual aislada y no confundirlo con validación real |
 | `.repo-publicacion/` y `repo-extra/` duplican archivos | Puede haber versiones distintas y publicar desde la copia equivocada | Definir una sola ubicación canónica y generar copias automáticamente |
 | Bot de Telegram | Las pruebas usan API simulada; no prueban Telegram real | Mantenerlo separado y hacer prueba real controlada solo con credenciales privadas |
+| El bot asigna `cfg.dueno` al primer usuario que le escribe en privado cuando aún no hay dueño | Un tercero puede adelantarse y quedarse con el control del bot antes que el propietario | Exigir configuración previa del ID del dueño o un procedimiento de emparejamiento con código de un solo uso; no confiar en el primer mensaje |
+| `preview/serve.js` concatena la ruta solicitada y la sirve con `fs.readFile` sin comprobar que el destino permanezca dentro de la raíz | La ruta `/../../...` puede escapar del directorio de preview y leer archivos locales cuando el servidor está activo | Normalizar con `path.resolve`, comprobar prefijo de ruta permitido y rechazar traversal; mantenerlo ligado a loopback |
 | Ajustes distribuidos entre múltiples claves de `localStorage` | Migraciones, respaldo y restauración difíciles | Diseñar un esquema versionado de ajustes con migraciones |
 
 ## 8. Pruebas automatizadas incorporadas en esta rama
