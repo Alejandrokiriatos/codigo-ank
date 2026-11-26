@@ -36,12 +36,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          pwd
+          test -d fuente-completa
+          test -d fuente-completa/decoded/assets/www/ank
           LIST="$RUNNER_TEMP/ank-js-files"
-          find fuente-completa/decoded/assets/www/ank fuente-completa/bot fuente-completa/tools fuente-completa/preview fuente-completa/web -type f -name '*.js' -print0 > "$LIST"
-          find fuente-completa/decoded/assets/www/ank fuente-completa/bot fuente-completa/tools fuente-completa/preview fuente-completa/web -type f -name '*.mjs' -print0 >> "$LIST"
-          COUNT="$(tr -cd '\\0' < "$LIST" | wc -c | tr -d ' ')"
+          find . -type f -name '*.js' -print0 > "$LIST"
+          find . -type f -name '*.mjs' -print0 >> "$LIST"
+          COUNT="$(python3 -c 'import sys; print(open(sys.argv[1], "rb").read().count(bytes([0])))' "$LIST")"
           if [ "$COUNT" -eq 0 ]; then
             echo "No se encontraron archivos JavaScript propios."
+            find fuente-completa -maxdepth 5 -type f | head -80
             exit 1
           fi
           while IFS= read -r -d '' file; do
