@@ -202,13 +202,14 @@
       })
       .then(function (info) {
         if (!info || !info.web) throw new Error('respuesta inválida');
-        var local = leer(K_VER, INCLUIDA);
+        var guardada = leer(K_VER, '');
+        var local = comparar(guardada, INCLUIDA) > 0 ? guardada : INCLUIDA;
         var hay = comparar(info.web, local) > 0;
         return {
           ok: true,
           hay: hay,
           version: info.web,
-          actual: local || INCLUIDA,
+          actual: local,
           notas: info.notas || '',
           info: info
         };
