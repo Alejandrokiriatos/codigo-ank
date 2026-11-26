@@ -520,13 +520,13 @@
     if (/[\\r\\n\\x00-\\x1f\\x7f]/.test(raw)) return no('Solo se permite un comando de una línea.');
     // Se excluyen operadores y expansiones del shell. ANK añade por separado
     // el directorio del proyecto y el marcador de código de salida.
-    if (!/^[A-Za-z0-9_./:@=,+-]+(?:\\s+[A-Za-z0-9_./:@=,+-]+)*$/.test(raw)) {
+    if (!/^[A-Za-z0-9_./:@=,+-]+(?:\s+[A-Za-z0-9_./:@=,+-]+)*$/.test(raw)) {
       return no('Usa un comando simple, sin tuberías, redirecciones, variables ni operadores de shell.');
     }
-    var tokens = raw.split(/\\s+/);
+    var tokens = raw.split(/\s+/);
     if (tokens.some(function (token) {
       return token.charAt(0) === '/' || token.charAt(0) === '~' ||
-        /(^|\\/)\\.\\.(\\/|$)/.test(token) || token.indexOf('://') !== -1 ||
+        /(^|\/)\.\.(\/|$)/.test(token) || token.indexOf('://') !== -1 ||
         /^-(delete|exec|execdir)$/i.test(token);
     })) return no('No se permiten rutas absolutas, directorios superiores, direcciones de red ni opciones de ejecución/borrado.');
     var executable = tokens[0].split('/').pop().toLowerCase();
