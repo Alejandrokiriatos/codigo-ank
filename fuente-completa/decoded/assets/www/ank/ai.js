@@ -1142,11 +1142,16 @@
     var model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
     var enteredKey = String((q('#ank-ai-key') && q('#ank-ai-key').value) || '').trim();
     var apiKey = enteredKey || st.apiKey;
-    var customAuthHeader = String((q('#ank-ai-custom-auth-header') && q('#ank-ai-custom-auth-header').value) || st.customAuthHeader || 'Authorization').trim();
-    var customAuthPrefix = String((q('#ank-ai-custom-auth-prefix') && q('#ank-ai-custom-auth-prefix').value) || '');
-    var customHeaders = String((q('#ank-ai-custom-headers') && q('#ank-ai-custom-headers').value) || st.customHeaders || '{}').trim();
-    var customBodyTemplate = String((q('#ank-ai-custom-body') && q('#ank-ai-custom-body').value) || st.customBodyTemplate || CUSTOM_BODY_DEFAULT).trim();
-    var customResponsePath = String((q('#ank-ai-custom-response') && q('#ank-ai-custom-response').value) || st.customResponsePath || 'choices.0.message.content').trim();
+    var customAuthHeaderEl = q('#ank-ai-custom-auth-header');
+    var customAuthPrefixEl = q('#ank-ai-custom-auth-prefix');
+    var customHeadersEl = q('#ank-ai-custom-headers');
+    var customBodyEl = q('#ank-ai-custom-body');
+    var customResponseEl = q('#ank-ai-custom-response');
+    var customAuthHeader = String(customAuthHeaderEl ? customAuthHeaderEl.value : (st.customAuthHeader == null ? 'Authorization' : st.customAuthHeader)).trim();
+    var customAuthPrefix = String(customAuthPrefixEl ? customAuthPrefixEl.value : (st.customAuthPrefix == null ? 'Bearer' : st.customAuthPrefix));
+    var customHeaders = String(customHeadersEl ? customHeadersEl.value : (st.customHeaders || '{}')).trim();
+    var customBodyTemplate = String(customBodyEl ? customBodyEl.value : (st.customBodyTemplate || CUSTOM_BODY_DEFAULT)).trim();
+    var customResponsePath = String(customResponseEl ? customResponseEl.value : (st.customResponsePath || 'choices.0.message.content')).trim();
     if (!endpoint) return aviso('Introduce la URL completa del endpoint API.');
     if (protocol === 'custom-json') {
       try {
