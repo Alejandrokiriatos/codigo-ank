@@ -1703,6 +1703,8 @@
         frag.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         frag.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'comando') {
+        frag.appendChild(bloqueComando(t.titulo, t.comando));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -1734,6 +1736,8 @@
         d.appendChild(nodoCodigo(t.texto));
       } else if (t.tipo === 'archivo') {
         d.appendChild(bloqueArchivo(t.ruta, t.texto));
+      } else if (t.tipo === 'comando') {
+        d.appendChild(bloqueComando(t.titulo, t.comando));
       } else {
         var sp = document.createElement('span');
         sp.className = 'ank-ai-txt';
@@ -2036,8 +2040,15 @@
     for (var i = 0; i < partes.length; i++) {
       if (i % 2 === 1) {
         var bruto = partes[i];
+        var comando = /^ank:comando(?:[ \t]+([^\n]+))?\n?/i.exec(bruto);
         var propuesta = /^ank:archivo[ \t]+([^\n]+)\n?/i.exec(bruto);
-        if (propuesta) {
+        if (comando) {
+          salida.push({
+            tipo: 'comando',
+            titulo: String(comando[1] || 'Comando solicitado').replace(/\r/g, '').trim(),
+            comando: bruto.slice(comando[0].length).replace(/\n$/, '').trim()
+          });
+        } else if (propuesta) {
           salida.push({
             tipo: 'archivo',
             ruta: propuesta[1].replace(/\r/g, '').trim(),
