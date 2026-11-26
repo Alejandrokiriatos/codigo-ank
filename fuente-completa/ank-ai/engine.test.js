@@ -167,3 +167,23 @@ test('convierte errores del transporte HTTP nativo en errores legibles', async (
     /API HTTP 401: Invalid API token/
   );
 });
+
+test('cancela la petición HTTP nativa al abortar el chat', async () => {
+  const controller = new AbortController();
+  let abortedId = null;
+  const http = {
+    sendRequest() { return 314; },
+    abort(id, success) { abortedId = id; if (success) success(); }
+  };
+  const pending = Engine.chat({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'secret',
+    model: 'x',
+    messages: [],
+    http,
+    signal: controller.signal
+  });
+  controller.abort();
+  await assert.rejects(pending, (error) => error.code === 'ANK_AI_ABORTED');
+  assert.equal(abortedId, 314);
+});
