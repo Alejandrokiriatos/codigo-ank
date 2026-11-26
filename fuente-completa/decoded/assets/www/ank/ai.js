@@ -2201,7 +2201,9 @@
       return;
     }
     var proyecto = limpioRuta(st.project) || 'ank';
-    var carpeta = st.prefix + '/public/proyectos/' + proyecto;
+    // La terminal ve el árbol publicado como /public, no con la ruta privada
+    // absoluta del plugin File. Mantener la misma ruta que st.work.
+    var carpeta = '/public/proyectos/' + proyecto;
     item.estado = 'preparando';
     item.salida = '';
     actualizarComandoUI(id);
