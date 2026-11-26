@@ -259,3 +259,109 @@ test('el timeout del transporte nativo termina y cancela la petición', async ()
   );
   assert.equal(abortedId, 515);
 });
+
+
+test('API personalizada usa endpoint exacto, query no sensible, headers configurados y extrae respuesta por ruta', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    protocol: 'custom-json',
+    endpoint: 'https://gateway.example.com/v2/infer?tenant=ank',
+    apiKey: 'custom-secret',
+    model: 'modelo-propio',
+    customAuthHeader: 'api-key',
+    customAuthPrefix: '',
+    customHeaders: JSON.stringify({
+      'x-workspace': 'ank-lab',
+      'x-model-hint': '{{MODEL}}',
+      'x-key-copy': '{{API_KEY}}'
+    }),
+    customBodyTemplate: JSON.stringify({
+      engine: '{{MODEL}}',
+      input: '{{MESSAGES}}',
+      instructions: '{{SYSTEM}}',
+      temperature: '{{TEMPERATURE}}',
+      limit: '{{MAX_TOKENS}}'
+    }),
+    customResponsePath: 'result.answer.text',
+    messages: [
+      { role: 'system', content: 'Eres ANK.' },
+      { role: 'user', content: 'Crea un archivo.' }
+    ],
+    http: nativeSuccess({
+      result: { answer: { text: 'Respuesta de API propia' } },
+      usage: { total_tokens: 21 }
+    }, captured)
+  });
+
+  assert.equal(captured.url, 'https://gateway.example.com/v2/infer?tenant=ank');
+  assert.equal(captured.options.headers['api-key'], 'custom-secret');
+  assert.equal(captured.options.headers['x-workspace'], 'ank-lab');
+  assert.equal(captured.options.headers['x-model-hint'], 'modelo-propio');
+  assert.equal(captured.options.headers['x-key-copy'], 'custom-secret');
+  assert.equal(captured.options.data.engine, 'modelo-propio');
+  assert.deepEqual(captured.options.data.input, [{ role: 'system', content: 'Eres ANK.' }, { role: 'user', content: 'Crea un archivo.' }]);
+  assert.equal(captured.options.data.instructions, 'Eres ANK.');
+  assert.equal(result.content, 'Respuesta de API propia');
+  assert.equal(result.usage.total_tokens, 21);
+});
+
+test('API personalizada conserva la ruta y responde por fetch fuera de Cordova', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  let request;
+  global.fetch = async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ output: [{ content: [{ text: 'Respuesta web' }] }] })
+    };
+  };
+
+  const result = await Engine.chat({
+    protocol: 'custom-json',
+    endpoint: 'https://api.example.com/custom/invoke',
+    apiKey: 'secret',
+    customAuthHeader: 'X-API-Key',
+    customAuthPrefix: '',
+    model: 'm',
+    customBodyTemplate: '{"prompt":"{{MESSAGES}}","deployment":"{{MODEL}}"}',
+    customResponsePath: 'output.0.content',
+    messages: [{ role: 'user', content: 'Hola' }]
+  });
+
+  assert.equal(request.url, 'https://api.example.com/custom/invoke');
+  assert.equal(request.options.headers['X-API-Key'], 'secret');
+  assert.equal(JSON.parse(request.options.body).deployment, 'm');
+  assert.equal(result.content, 'Respuesta web');
+});
+
+test('API personalizada rechaza JSON inválido y encabezados peligrosos', async () => {
+  const base = {
+    protocol: 'custom-json',
+    endpoint: 'https://api.example.com/infer',
+    apiKey: 'secret',
+    model: 'm',
+    messages: [{ role: 'user', content: 'Hola' }],
+    http: nativeSuccess({ answer: 'ok' })
+  };
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { customHeaders: '{bad json' })),
+    (error) => error.code === 'ANK_AI_CUSTOM_JSON_INVALID'
+  );
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { customHeaders: JSON.stringify({ Host: 'evil.example' }) })),
+    (error) => error.code === 'ANK_AI_CUSTOM_HEADER_INVALID'
+  );
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { customBodyTemplate: '{invalid' })),
+    (error) => error.code === 'ANK_AI_CUSTOM_BODY_INVALID'
+  );
+});
+
+test('rechaza credenciales en query string para evitar filtrarlas en historial de red', () => {
+  assert.throws(
+    () => Engine.endpointUrl('https://api.example.com/v1/infer?api_key=secret', 'custom-json'),
+    (error) => error.code === 'ANK_AI_ENDPOINT_SECRET'
+  );
+});
