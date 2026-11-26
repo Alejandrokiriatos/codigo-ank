@@ -278,7 +278,7 @@
     }
 
     var timeoutMs = Number(options.timeoutMs) || DEFAULT_TIMEOUT;
-    var control = crearControl(options.signal, timeoutMs);
+    var control = crearControl(nativeHttp ? undefined : options.signal, nativeHttp ? 0 : timeoutMs);
     var messages = Array.isArray(options.messages) ? options.messages : [];
     var body = {
       model: model,
