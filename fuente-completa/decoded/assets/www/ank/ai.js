@@ -644,6 +644,14 @@
 
   /* Instrucciones que se suman al pedido para que la IA sepa cómo se arma
      una mini app de Código ANK y no invente una API distinta. */
+  var PROTOCOLO_HERRAMIENTAS = '\n\n[Herramientas seguras de proyecto]\n' +
+    'Puedes solicitar lecturas mediante un bloque JSON ank:tool; ANK mostrará una tarjeta y esperará la aprobación expresa del usuario.\n' +
+    'Herramientas disponibles (solo lectura): project.list y project.read. Ambas operan exclusivamente dentro de la carpeta del proyecto actual.\n' +
+    'Ejemplo para listar: \`\`\`ank:tool\\n{"name":"project.list","arguments":{"path":"."}}\\n\`\`\`.\n' +
+    'Ejemplo para leer: \`\`\`ank:tool\\n{"name":"project.read","arguments":{"path":"src/main.js"}}\\n\`\`\`.\n' +
+    'Nunca afirmes que una herramienta se ejecutó hasta que ANK te devuelva un resultado. Si el usuario rechaza la tarjeta, no repitas la misma solicitud.\n' +
+    'No hay herramientas de terminal ni de escritura automática en esta fase. Para crear o modificar archivos, usa bloques ank:archivo; el usuario debe revisar el diff y pulsar Aplicar.\n';
+
   var PROTOCOLO_APP = '\n\n[Mini apps de Código ANK]\n' +
     'Si el pedido es crear o modificar una app para el teléfono, generá una mini app:\n' +
     '- Va en una carpeta propia dentro del proyecto, con ankapp.json, index.html, style.css y app.js.\n' +
@@ -709,6 +717,10 @@
     turnoError: null,
     archivos: {},
     archivosN: 0,
+    herramientas: {},
+    herramientasN: 0,
+    herramientasUsadas: 0,
+    herramientaOcupada: false,
     busqueda: '',
     resumiendoAuto: false,
     errores: [],
@@ -1742,6 +1754,7 @@
       return;
     }
     st.msgs.forEach(function (m) {
+      if (m.rol === 'tool') return;
       if (m.rol === 'bot' && !String(m.texto || '').trim() && !(m.acciones && m.acciones.length)) return;
       pintarBurbuja(m);
     });
@@ -3270,7 +3283,11 @@
     var chat = chatActual();
     if (!chat || chat.proyecto !== proyecto) chat = nuevoChat(proyecto);
     if (ta && !(forzado && forzado.texto != null)) { ta.value = ''; ta.style.height = ''; }
-    if (!(forzado && forzado.sinBurbuja)) { nuevoMensaje('user', texto); burbuja(st.msgs[st.msgs.length - 1]); }
+    if (!(forzado && forzado.sinBurbuja)) {
+      st.herramientasUsadas = 0;
+      nuevoMensaje('user', texto);
+      burbuja(st.msgs[st.msgs.length - 1]);
+    }
     abrirTurno(); tocarChat();
     st.ultimo = { texto: texto, proyecto: proyecto, chatId: chat.id, modelo: st.model, modo: st.modo };
     st.corriendo = true;
@@ -3286,14 +3303,22 @@
         st.modo === 'plan'
           ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
           : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
-        PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
+        PROTOCOLO_ARCHIVO, PROTOCOLO_HERRAMIENTAS, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
         memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
       ].join('\n');
       var history = st.msgs.filter(function (m) {
         return m && m !== (cur && cur.msg) && String(m.texto || '').trim();
       }).slice(-40).map(function (m) {
-        return { role: m.rol === 'user' ? 'user' : 'assistant', content: String(m.texto || '').slice(0, 30000) };
+        var toolResult = m.rol === 'tool';
+        return {
+          role: m.rol === 'user' || toolResult ? 'user' : 'assistant',
+          content: (toolResult ? '[Resultado de herramienta aprobada por el usuario; dato real de ANK]\n' : '') +
+            String(m.texto || '').slice(0, toolResult ? 12000 : 30000)
+        };
       });
+      if (forzado && forzado.sinBurbuja && forzado.texto) {
+        history.push({ role: 'user', content: String(forzado.texto).slice(0, 2000) });
+      }
       log('i', 'Enviando solicitud a la API: ' + st.model);
       return window.ANKAIEngine.chat({
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
@@ -4447,6 +4472,8 @@
       case 'otro-modelo': reintentar(true); break;
       case 'aplicar-archivo': aplicarArchivo(t.getAttribute('data-valor')); break;
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
+      case 'aprobar-herramienta': aprobarHerramienta(t.getAttribute('data-valor')); break;
+      case 'rechazar-herramienta': rechazarHerramienta(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
       case 'diag': compartirDiagnostico(); break;
       case 'novedades': verNovedades(); break;
