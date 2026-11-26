@@ -136,24 +136,47 @@ No se cambiarán de forma aislada: hay que verificar compatibilidad con el prove
 
 ## 8. Pruebas automatizadas incorporadas en esta rama
 
-Se incorporó `.github/workflows/auditoria-bloque-1.yml` para comprobar:
+Se incorporó `.github/workflows/auditoria-bloque-1.yml` y la ejecución más reciente terminó **en verde**:
 
-1. Sintaxis de los JavaScript propios del panel, bot, herramientas, preview y servidor auxiliar.
-2. Pruebas del bot contra su API simulada.
-3. Existencia y estructura del paquete de actualización.
+| Prueba | Resultado |
+|---|---:|
+| Sintaxis Node.js de archivos JS/MJS | 330 correctos |
+| Pruebas del bot con API simulada | 24 correctas, 0 fallidas |
+| Manifiesto del actualizador | versión 1.8.3 y archivos presentes |
+| Resultado general de CI | **SUCCESS** |
 
 Se corrigió el test del anuncio del bot: antes esperaba fija la versión 1.5.9 y ahora toma la versión de `update/version.json`. Es una corrección de la prueba, no cambia el comportamiento del bot.
 
-**El primer intento del workflow falló por un error de sintaxis en el propio script Bash de CI, antes de ejecutar las comprobaciones.** Ya se corrigió en la rama de trabajo; la nueva ejecución debe confirmar si el código pasa. No se marcará como validado hasta ver el resultado en verde.
+Hubo dos intentos fallidos por errores en el propio workflow (primero un escape Bash, después el descubrimiento de archivos). Ambos se corrigieron y la ejecución posterior validó el conjunto. La prueba del bot sigue siendo contra una API simulada; no equivale a probar Telegram real ni la aplicación Android.
 
-## 9. Condiciones para cerrar el bloque 1
+## 9. Referencias externas estudiadas y decisiones de arquitectura
+
+Se contrastó ANK con proyectos y documentación oficiales:
+
+- **Acode upstream:** mantiene fuentes originales separadas en `src/`, web/plantillas en `www/`, herramientas de build en `utils/` y un submódulo dedicado a LSP. La copia de ANK carece de esa estructura fuente; solo conserva la salida compilada y Smali descompilado. Para mantenimiento a largo plazo conviene recuperar el upstream original y mantener un conjunto pequeño de parches propios versionados, en vez de seguir creciendo sobre chunks compilados. Referencia: https://github.com/Acode-Foundation/Acode
+- **Spck Editor:** es una referencia para móvil por Git local, historial de commits, resolución de conflictos, credenciales por proveedor y flujo de pull requests. Su documentación también presenta agentes remotos conectados desde el móvil mediante ACP. Referencias: https://docs.spck.io/en/editor y https://docs.spck.io/en/git-support
+- **Agent Client Protocol (ACP):** define una interfaz común editor-agente con mensajes JSON-RPC, eventos de sesión, actualizaciones de herramientas/terminal y solicitudes de permiso. Puede añadirse en una fase posterior como puente opcional para agentes externos; no sustituye los adaptadores API que ANK necesita para hablar directamente con cada proveedor. Referencia: https://github.com/agentclientprotocol/agent-client-protocol
+- **APIs de proveedores:** OpenAI documenta tool/function calling en Responses; Anthropic devuelve bloques `tool_use` y recibe `tool_result`; Gemini también define llamadas de función que la aplicación ejecuta y devuelve al modelo. Los formatos y ciclos no son idénticos. Por tanto, ANK debe tener un contrato interno normalizado y un adaptador por proveedor/protocolo, no asumir que todas las APIs son OpenAI-compatible. Referencias: https://developers.openai.com/api/docs/guides/tools · https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview · https://ai.google.dev/gemini-api/docs/get-started
+
+### Arquitectura recomendada para el nuevo ANK IA
+
+1. **Proveedor/adaptador:** endpoints, API keys, modelos, cabeceras, streaming, límites y capacidades del modelo.
+2. **Contrato común de conversación:** roles, texto, imágenes/archivos si se admiten, errores, cancelación y uso de tokens.
+3. **Bucle de agente propio:** gestiona ciclos de respuesta y llamadas a herramientas, límites de pasos, timeouts y cancelación.
+4. **Herramientas controladas por ANK:** listar/leer/buscar/escribir archivos, generar diff, aplicar o rechazar cambios, y ejecutar comandos en el sandbox. La IA propone la acción; ANK la valida y la ejecuta.
+5. **Permisos y recuperación:** aprobación para operaciones destructivas, alcance limitado al proyecto, registro, snapshots/rollback y control de comandos.
+6. **ACP opcional:** puente adicional para agentes externos que hablen ese protocolo, sin convertir OpenCode en dependencia central.
+
+El soporte universal nunca será literalmente cualquier endpoint arbitrario: cada proveedor debe implementar un protocolo compatible o disponer de un adaptador. Una API de solo texto podrá chatear, pero no programar el proyecto hasta que soporte tool/function calling o un formato de acciones que ANK pueda interpretar y validar.
+
+## 10. Condiciones para cerrar el bloque 1
 
 - [x] Inventario de la fuente y localización de módulos principales.
 - [x] Rama de referencia intacta y rama de trabajo separada.
 - [x] Auditoría estática del actualizador, panel IA, manifiesto, terminal y publicación.
 - [x] Corrección del test de versión obsoleto en el bot.
 - [x] Workflow de sintaxis y pruebas automatizadas preparado.
-- [ ] Workflow de CI en verde.
+- [x] Workflow de CI en verde (330 archivos JS/MJS y 24 pruebas del bot).
 - [ ] Proyecto Android original o procedimiento Apktool reproducible verificado.
 - [ ] APK base y huella del certificado de firma identificados para preservar instalación y datos.
 - [ ] Prueba real de instalación/arranque en un dispositivo Android.
