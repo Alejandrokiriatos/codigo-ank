@@ -277,7 +277,7 @@
     }
 
     var timeoutMs = Number(options.timeoutMs) || DEFAULT_TIMEOUT;
-    var control = crearControl(nativeHttp ? undefined : options.signal, nativeHttp ? 0 : timeoutMs);
+    var control = crearControl(options.signal, nativeHttp ? 0 : timeoutMs);
     var messages = Array.isArray(options.messages) ? options.messages : [];
     var body = {
       model: model,
@@ -291,8 +291,11 @@
       body.max_tokens = Math.max(1, Math.min(32768, Math.floor(Number(options.maxTokens))));
     }
 
+    var nativeOptions = nativeHttp
+      ? Object.assign({}, options, { signal: control.signal })
+      : options;
     var request = nativeHttp
-      ? chatNativo(nativeHttp, options, url, body, timeoutMs)
+      ? chatNativo(nativeHttp, nativeOptions, url, body, timeoutMs)
       : fetch(url, {
           method: 'POST',
           headers: {
