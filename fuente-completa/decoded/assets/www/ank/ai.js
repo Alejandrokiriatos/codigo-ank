@@ -3550,7 +3550,7 @@
   }
 
   function enviar(forzado) {
-    if (st.corriendo) { aviso('Todavía está trabajando. Esperá o tocá Detener.'); return; }
+    if (st.corriendo || st.herramientaOcupada) { aviso('Todavía hay una operación en curso. Esperá a que termine.'); return; }
     var ta = q('.ank-ai-input');
     var pedido = forzado && forzado.texto != null ? String(forzado.texto) : (ta ? String(ta.value || '') : '');
     var texto = pedido.trim();
@@ -3622,7 +3622,7 @@
       if (!(forzado && forzado.sinBurbuja)) {
         anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
       }
-      quizasResumir(proyecto, chat);
+      if (!(forzado && forzado.sinBurbuja)) quizasResumir(proyecto, chat);
       log('i', 'Respuesta recibida de la API.'); pintar();
     }).catch(function (e) {
       st.corriendo = false; st.abortController = null;
