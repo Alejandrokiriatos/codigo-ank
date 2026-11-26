@@ -38,9 +38,9 @@ Se permiten comandos de prueba/diagnóstico habituales, como `npm test`, `npm ru
 
 La política es una barrera inicial, no una garantía de sandbox frente a código de proyecto malicioso. Por ejemplo, un script configurado por el propio proyecto puede realizar operaciones adicionales al ejecutarse mediante `npm test`. Por eso se muestra la línea exacta y el usuario debe revisar qué está aprobando.
 
-La terminal Alpine debe estar instalada. Esta fase no instala herramientas ni paquetes, no ejecuta comandos en segundo plano y no realiza acciones sobre otros proyectos. Los archivos que proponga la IA continúan sujetos al diff y al botón **Aplicar** independiente.
+La terminal Alpine debe estar instalada. Esta fase no instala herramientas ni paquetes, no ejecuta comandos en segundo plano y no realiza acciones sobre otros proyectos. Los archivos que proponga la IA continúan sujetos al diff y al botón **Aplicar** independiente. Al reemplazar un archivo existente se guarda una copia `.bak`; la tarjeta ofrece **Revertir**. Si la IA creó un archivo nuevo, revertir lo elimina. Antes de aplicar se compara el archivo actual con el contenido leído para el diff, y antes de revertir se verifica que nadie haya cambiado el resultado aplicado; si detecta cambios posteriores, se niega a sobrescribirlos.
 
-Snapshots, rollback automático, permisos por herramienta, allowlists por proyecto y ejecución aislada más estricta son trabajo de fases posteriores. Esta rama no debe distribuirse como APK: los recursos nativos de la reconstrucción y la firma original siguen sin estar disponibles; tampoco hay prueba física Android.
+Los snapshots completos del proyecto, rollback por lote, permisos por herramienta, allowlists por proyecto y ejecución aislada más estricta siguen siendo trabajo de fases posteriores. Esta rama no debe distribuirse como APK: los recursos nativos de la reconstrucción y la firma original siguen sin estar disponibles; tampoco hay prueba física Android.
 
 ## Verificación automatizada
 
