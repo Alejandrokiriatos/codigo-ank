@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-3-multiple-api`  
 **Base:** bloque 2, commit `ca27820463950bcd455e1349b49e47a43a1d16a6`  
-**Estado:** cuatro modos API implementados y comprobación CI superada; falta validar endpoints reales y ejecutar las pruebas en Android físico.
+**Estado:** cuatro modos API implementados; las pruebas automatizadas y la reconstrucción diagnóstica están en verificación; sigue pendiente la validación en Android físico.
 
 ## Objetivo
 
@@ -45,7 +45,9 @@ Pensada para proveedores HTTP que no implementan los tres protocolos anteriores,
 - `{{MESSAGES}}` debe escribirse entre comillas en la plantilla; ANK la sustituye por el array de mensajes, no por texto JSON escapado.
 - La respuesta se extrae mediante una ruta con puntos e índices, por ejemplo `data.answer.text`, `choices.0.message.content` o `output.0.content`.
 - El endpoint puede incluir parámetros de consulta no sensibles; las claves y tokens en la URL se rechazan.
-- Se bloquean encabezados de transporte y saltos de línea para reducir riesgo de inyección.
+- Se bloquean encabezados de transporte, saltos de línea y propiedades JSON peligrosas para reducir riesgos de inyección.
+- Las APIs públicas deben usar HTTPS; HTTP queda permitido para localhost y direcciones privadas de LAN.
+- Se permite una API local sin clave cuando el encabezado de autenticación se deja vacío.
 
 Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSocket, gRPC, protocolos binarios, autenticación de firma compleja o streaming propietario siguen necesitando un adaptador específico.
 
