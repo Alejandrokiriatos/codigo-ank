@@ -35,23 +35,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(find \
-            fuente-completa/decoded/assets/www/ank \
-            fuente-completa/bot \
-            fuente-completa/tools \
-            fuente-completa/preview \
-            fuente-completa/web \
-            -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | sort -z)
-          if [ "${#files[@]}" -eq 0 ]; then
+          LIST="$RUNNER_TEMP/ank-js-files"
+          find fuente-completa/decoded/assets/www/ank fuente-completa/bot fuente-completa/tools fuente-completa/preview fuente-completa/web -type f -name '*.js' -print0 > "$LIST"
+          find fuente-completa/decoded/assets/www/ank fuente-completa/bot fuente-completa/tools fuente-completa/preview fuente-completa/web -type f -name '*.mjs' -print0 >> "$LIST"
+          COUNT="$(tr -cd '\\0' < "$LIST" | wc -c | tr -d ' ')"
+          if [ "$COUNT" -eq 0 ]; then
             echo "No se encontraron archivos JavaScript propios."
             exit 1
           fi
-          for file in "${files[@]}"; do
+          while IFS= read -r -d '' file; do
             node --check "$file"
-          done
-          echo "Sintaxis correcta en ${#files[@]} archivos JavaScript/MJS."
+          done < "$LIST"
+          echo "Sintaxis correcta en $COUNT archivos JavaScript/MJS."
           echo "### Sintaxis JavaScript" >> "$GITHUB_STEP_SUMMARY"
-          echo "Correctos: ${#files[@]} archivos." >> "$GITHUB_STEP_SUMMARY"
+          echo "Correctos: $COUNT archivos." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ejecutar pruebas del bot con API simulada
         working-directory: fuente-completa
