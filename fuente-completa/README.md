@@ -42,22 +42,34 @@ Registro, pero el motor ya no depende de un ejecutable Linux externo.
 
 ### Conexión multi-proveedor
 
-El bloque 3 amplía la conexión directa e incorpora tres formatos de API:
+El bloque 3 incorpora cuatro modos de conexión:
 
 | Formato | Endpoint base de ejemplo | Autenticación |
 |---|---|---|
 | OpenAI Chat Completions compatible | `https://api.openai.com/v1` | `Authorization: Bearer` |
 | Anthropic Messages | `https://api.anthropic.com/v1` | `x-api-key` + `anthropic-version` |
 | Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `x-goog-api-key` |
+| API JSON personalizada | URL completa del endpoint | Encabezado y prefijo configurables |
 
-El formato OpenAI compatible permite conectar otros proveedores que publiquen
-esa misma interfaz (por ejemplo, OpenRouter, DeepSeek, Groq, Mistral y
-servicios compatibles), introduciendo su endpoint y el ID exacto del modelo.
-No significa que todas las APIs arbitrarias sean intercambiables: si el
-proveedor utiliza un protocolo diferente, necesita un adaptador propio.
+El formato OpenAI compatible conecta proveedores que publican ese mismo
+contrato (por ejemplo, OpenRouter, DeepSeek, Groq, Mistral y otros). Cuando una
+API utiliza otro formato JSON, el modo **API personalizada** permite definir
+el endpoint exacto, el encabezado de autenticación, encabezados adicionales,
+la plantilla JSON del cuerpo y la ruta de la respuesta.
+
+La plantilla personalizada admite las variables `{{MODEL}}`,
+`{{MESSAGES}}`, `{{SYSTEM}}`, `{{API_KEY}}`,
+`{{TEMPERATURE}}` y `{{MAX_TOKENS}}`. Escribe la variable de
+mensajes entre comillas en el JSON de plantilla para que ANK la sustituya por
+el historial estructurado. En los encabezados, las variables de clave y modelo
+se sustituyen dentro de sus valores. Las claves en URLs se rechazan.
+
+El modo personalizado cubre servicios HTTP POST que acepten y devuelvan JSON.
+WebSocket, protocolos binarios, flujos propietarios o respuestas no JSON
+requieren un adaptador específico.
 
 1. Selecciona el formato que documenta tu proveedor.
-2. Introduce su URL base.
+2. Introduce su URL base o endpoint completo.
 3. Escribe el ID exacto del modelo.
 4. Pega la clave API y pulsa **Guardar conexión**.
 5. Pulsa **Probar conexión** y revisa el resultado en Registro.
@@ -66,13 +78,8 @@ Las configuraciones anteriores sin campo `protocol` siguen leyéndose como
 OpenAI Chat Completions para conservar compatibilidad con las conexiones
 guardadas en la versión 2.0.0. Android utiliza el transporte HTTP nativo de
 Cordova; fuera de Cordova se utiliza `fetch`. OpenAI compatible ofrece
-streaming cuando la respuesta y el entorno lo permiten; Anthropic y Gemini
-utilizan respuesta JSON completa en esta primera versión.
-
-La clave queda en un archivo bajo el directorio interno privado de la app y se
-carga a memoria al arrancar. En esta fase no está cifrada con Android Keystore:
-ese endurecimiento forma parte del bloque de seguridad. No la guardes en una
-carpeta pública ni compartas un diagnóstico que incluya secretos.
+streaming cuando la respuesta y el entorno lo permiten; Anthropic, Gemini y
+API personalizada utilizan respuesta JSON completa en esta versión.
 
 ### Terminal y proyectos
 
