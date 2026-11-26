@@ -119,6 +119,12 @@ jobs:
           if (!engine.includes('function validarComando(command)') || !engine.includes('validateCommand: validarComando')) {
             throw new Error('El motor no expone la política de validación de comandos');
           }
+          if (!engine.includes('function normalizarRutaProyecto(value)') ||
+              !engine.includes('normalizeProjectPath: normalizarRutaProyecto') ||
+              !panel.includes('function limpioProyecto(s)') ||
+              !panel.includes('normalizeProjectPath(s)')) {
+            throw new Error('Las carpetas de proyecto no están protegidas contra rutas ../');
+          }
           if (!panel.includes('PROTOCOLO_COMANDO') || !panel.includes('ank:comando')) {
             throw new Error('Falta el protocolo de propuestas de comandos');
           }
