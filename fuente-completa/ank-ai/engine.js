@@ -512,6 +512,16 @@
     });
   }
 
+  function normalizarRutaProyecto(value) {
+    var raw = String(value == null ? '' : value)
+      .replace(/[^A-Za-z0-9._\-\/]/g, '')
+      .replace(/^\/+/, '')
+      .replace(/\/{2,}/g, '/');
+    return raw.split('/').filter(function (segmento) {
+      return segmento && segmento !== '.' && segmento !== '..';
+    }).join('/');
+  }
+
   function validarComando(command) {
     var raw = String(command == null ? '' : command).trim();
     function no(reason) { return { ok: false, command: raw, reason: reason }; }
@@ -628,6 +638,7 @@
     protocols: PROTOCOLS,
     protocolName: protocolName,
     endpointUrl: endpointUrl,
+    normalizeProjectPath: normalizarRutaProyecto,
     validateCommand: validarComando,
     chat: chat
   };
