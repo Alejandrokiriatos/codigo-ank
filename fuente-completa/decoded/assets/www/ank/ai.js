@@ -647,8 +647,8 @@
   var PROTOCOLO_HERRAMIENTAS = '\n\n[Herramientas seguras de proyecto]\n' +
     'Puedes solicitar lecturas mediante un bloque JSON ank:tool; ANK mostrará una tarjeta y esperará la aprobación expresa del usuario.\n' +
     'Herramientas disponibles (solo lectura): project.list y project.read. Ambas operan exclusivamente dentro de la carpeta del proyecto actual.\n' +
-    'Ejemplo para listar: \`\`\`ank:tool\\n{"name":"project.list","arguments":{"path":"."}}\\n\`\`\`.\n' +
-    'Ejemplo para leer: \`\`\`ank:tool\\n{"name":"project.read","arguments":{"path":"src/main.js"}}\\n\`\`\`.\n' +
+    'Formato: bloque de código etiquetado ank:tool; la línea siguiente contiene un único objeto JSON.\\n' +
+    'Ejemplo de lista: {"name":"project.list","arguments":{"path":"."}}. Ejemplo de lectura: {"name":"project.read","arguments":{"path":"src/main.js"}}.\\n' +
     'Nunca afirmes que una herramienta se ejecutó hasta que ANK te devuelva un resultado. Si el usuario rechaza la tarjeta, no repitas la misma solicitud.\n' +
     'No hay herramientas de terminal ni de escritura automática en esta fase. Para crear o modificar archivos, usa bloques ank:archivo; el usuario debe revisar el diff y pulsar Aplicar.\n';
 
