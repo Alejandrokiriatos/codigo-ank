@@ -92,13 +92,28 @@ chat mediante API no necesita iniciar la terminal.
 
 Los proyectos continúan en `/public/proyectos`, con su `AGENTS.md`, memoria,
 bitácora, historial de chats y sistema de propuestas de archivos. La lectura de
-memoria se hace mediante el plugin de archivos de Cordova, no mediante comandos
-de un agente externo. Las propuestas se muestran con diff y requieren que el
-usuario pulse **Aplicar**.
+memoria se hace mediante el plugin de archivos de Cordova. Las propuestas se
+muestran con diff y requieren que el usuario pulse **Aplicar**.
 
-El motor de API de esta etapa todavía no ejecuta herramientas ni comandos por
-decisión autónoma. La ejecución controlada de herramientas, permisos,
-aprobaciones y rollback se desarrollará en el bloque 4.
+### Comandos controlados con aprobación
+
+El bloque 4 añade propuestas de comandos en tarjetas dentro del chat. La IA
+puede sugerir un comando de una línea mediante un bloque `ank:comando`, pero
+no lo ejecuta al generarlo. El usuario debe pulsar **Ejecutar en terminal**.
+
+Antes de mostrarlo como ejecutable, ANK valida el comando. Se bloquean
+operaciones destructivas, instalación de paquetes del sistema, descargas y
+comandos de red, reinicios, permisos, tuberías, redirecciones, expansión de
+variables, rutas absolutas y escape con `..`. Los comandos se ejecutan dentro
+de la carpeta del proyecto en Alpine, cuando la terminal ya está instalada.
+Los resultados y el código de salida vuelven a la tarjeta del chat.
+
+La aprobación es importante: comandos como `npm test` o `node tests/run.js`
+pueden ejecutar scripts que formen parte del propio proyecto. El usuario debe
+revisar la línea propuesta antes de aprobarla. Esta primera etapa no es un
+sandbox de seguridad para ejecutar proyectos de terceros no confiables; el
+aislamiento de herramientas, permisos más granulares, snapshots y rollback
+quedan para las siguientes fases.
 
 ### Qué se conserva
 
