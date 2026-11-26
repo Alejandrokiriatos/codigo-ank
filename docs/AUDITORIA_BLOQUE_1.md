@@ -159,6 +159,8 @@ Se incorporó `.github/workflows/auditoria-bloque-1.yml` y la ejecución más re
 | Sintaxis Node.js de archivos JS/MJS | 330 correctos |
 | Pruebas del bot con API simulada | 24 correctas, 0 fallidas |
 | Manifiesto del actualizador | versión 1.8.3 y archivos presentes |
+| Reconstrucción Apktool 2.11.1 | SUCCESS · 15.475.779 bytes, sin firma |
+| Comprobación de assets de release | Detecta OpenCode y Alpine ausentes y lo registra como advertencia |
 | Resultado general de CI | **SUCCESS** |
 
 Se corrigió el test del anuncio del bot: antes esperaba fija la versión 1.5.9 y ahora toma la versión de `update/version.json`. Es una corrección de la prueba, no cambia el comportamiento del bot.
