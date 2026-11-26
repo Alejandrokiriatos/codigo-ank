@@ -1121,7 +1121,7 @@
       st.customHeaders = String(data.customHeaders || '{}');
       st.customBodyTemplate = String(data.customBodyTemplate || CUSTOM_BODY_DEFAULT);
       st.customResponsePath = String(data.customResponsePath || 'choices.0.message.content');
-      st.apiConfigured = !!(st.endpoint && st.model && st.apiKey);
+      st.apiConfigured = !!(st.endpoint && st.model && (st.apiKey || (st.protocol === 'custom-json' && !st.customAuthHeader.trim())));
       st.credencial = st.apiConfigured ? 'listo' : 'falta';
       return st.apiConfigured;
     }).catch(function () {
@@ -1174,7 +1174,8 @@
       } catch (_) { return aviso('La plantilla del cuerpo debe ser un objeto JSON válido.'); }
     }
     if (!window.ANKAIEngine) return aviso('No se ha cargado el motor API de ANK.');
-    if (!apiKey) return aviso('Introduce la clave API.');
+    var noAuthCustom = protocol === 'custom-json' && !customAuthHeader;
+    if (!apiKey && !noAuthCustom) return aviso('Introduce la clave API o deja vacío el encabezado de autenticación para una API sin clave.');
     if (!model) return aviso('Introduce el identificador exacto del modelo.');
     try { window.ANKAIEngine.endpointUrl(endpoint, protocol, model); }
     catch (e) { return aviso(e.message || 'La dirección API no es válida.'); }
@@ -4196,7 +4197,8 @@
               '<div class="ank-ai-field"><label>URL base o endpoint del proveedor</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
               '<div class="ank-ai-field"><label>ID exacto del modelo</label><input id="ank-ai-modelo" type="text" spellcheck="false" autocomplete="off" placeholder="identificador-exacto-del-modelo" /></div>' +
               '<div class="ank-ai-custom" style="display:none">' +
-                '<div class="ank-ai-field"><label>Encabezado de autenticación</label><input id="ank-ai-custom-auth-header" type="text" spellcheck="false" placeholder="Authorization, api-key, x-api-key..." /></div>' +
+                '<div class="ank-ai-field"><label>Encabezado de autenticación</label><input id="ank-ai-custom-auth-header" type="text" spellcheck="false" placeholder="Authorization, api-key, x-api-key..." />' +
+        '<div class="ank-ai-hint">Déjalo vacío junto con la clave API para servicios locales o públicos que no requieren autenticación.</div></div>' +
                 '<div class="ank-ai-field"><label>Prefijo de autenticación</label><input id="ank-ai-custom-auth-prefix" type="text" spellcheck="false" placeholder="Bearer (vacío = clave directa)" /></div>' +
                 '<div class="ank-ai-field"><label>Encabezados adicionales (JSON)</label><textarea id="ank-ai-custom-headers" spellcheck="false" rows="3" placeholder="{}"></textarea>' +
                   '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}} en valores de encabezado. No pongas secretos en la URL.</div></div>' +
