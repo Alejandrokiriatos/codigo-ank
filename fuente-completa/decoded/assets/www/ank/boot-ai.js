@@ -1,11 +1,8 @@
 /* Código ANK — arranque del panel del asistente.
 
-   Carga la versión incluida en el APK o, si hay una actualización descargada
-   desde GitHub, esa. Así las mejoras del panel llegan sin reinstalar la app
-   completa (que pesa ~97 MB por el entorno Linux y OpenCode).
-
-   Este archivo casi nunca cambia: por eso conviene que la lógica viva en
-   ai.js, que sí se puede actualizar por red. */
+   Carga el panel incluido en el APK o la versión previamente descargada y
+   validada por el actualizador. La lógica mantenible del asistente vive en
+   ai.js para que pueda actualizarse sin recompilar toda la app. */
 
 (function () {
   'use strict';
@@ -29,10 +26,10 @@
   }
 
   function cargarIncluido() {
-    var s = document.createElement('script');
-    s.src = './ank/ai.js';
-    s.async = false;
-    (document.head || document.documentElement).appendChild(s);
+    var script = document.createElement('script');
+    script.src = './ank/ai.js';
+    script.async = false;
+    (document.head || document.documentElement).appendChild(script);
   }
 
   function arrancar() {
@@ -42,7 +39,6 @@
     var ai = leer(K_AI);
     if (ai && ai.length > 20000 && ai.indexOf('ankAIInstalled') !== -1) {
       try {
-        // Ejecuta la versión descargada en el ámbito global, igual que un <script>.
         (new Function(ai)).call(window);
         return;
       } catch (e) {
