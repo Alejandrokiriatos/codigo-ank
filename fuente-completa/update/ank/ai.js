@@ -4288,8 +4288,15 @@
     setTimeout(function () { leerEstadisticas(false); }, 9000);
     engancharMenu();
     dirsIniciales()
-      .then(function () { return asegurarMemoria(st.project); })
-      .catch(function () {});
+      .then(function () { return cargarConfigApi(); })
+      .then(function () {
+        if (st.apiConfigured) log('i', 'Configuración API restaurada desde el almacenamiento privado.');
+        pintar();
+        return asegurarMemoria(st.project);
+      })
+      .catch(function (e) {
+        log('w', 'No se pudo restaurar la configuración local: ' + (e && e.message ? e.message : e));
+      });
     mountTimer = setInterval(ciclo, 700);
     ciclo();
     /* Si recién se aplicó una actualización, muestra qué cambió. */
