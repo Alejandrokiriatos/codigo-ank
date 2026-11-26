@@ -25,7 +25,7 @@
   var CLAVE_HEX = 'c266026ba0fbe7d5938b21e9c7474cc9c14bf57fbfb7d8e5c3374dafcd43ac5f';
 
   /* Versión del panel incluida en este APK. Se sube junto con ai.js/ai.css. */
-  var INCLUIDA = '1.5.8';
+  var INCLUIDA = '2.0.0';
 
   var K_VER = 'ank.web.version';
   var K_AI = 'ank.web.ai.js';
@@ -202,7 +202,7 @@
       })
       .then(function (info) {
         if (!info || !info.web) throw new Error('respuesta inválida');
-        var local = leer(K_VER, '');
+        var local = leer(K_VER, INCLUIDA);
         var hay = comparar(info.web, local) > 0;
         return {
           ok: true,
@@ -268,7 +268,8 @@
         avisarProgreso(0.92, 'Verificando firma…');
         var ai = t.ai;
         var css = t.css;
-        if (ai.length < 20000 || ai.indexOf('ankAIInstalled') === -1) {
+        if (ai.length < 20000 || ai.indexOf('ankAIInstalled') === -1 ||
+            ai.indexOf('ANK_AI_ENGINE_BUNDLE_BEGIN') === -1) {
           throw new Error('el paquete no parece válido');
         }
         if (!info.sig || firmar(info.web, ai, css) !== String(info.sig).toLowerCase()) {
