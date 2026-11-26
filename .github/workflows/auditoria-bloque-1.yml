@@ -8,6 +8,7 @@ on:
       - ".github/workflows/auditoria-bloque-1.yml"
       - "docs/**"
       - "fuente-completa/bot/**"
+      - "fuente-completa/ank-ai/**"
       - "fuente-completa/tools/**"
       - "fuente-completa/preview/**"
       - "fuente-completa/web/**"
@@ -58,6 +59,21 @@ jobs:
       - name: Ejecutar pruebas del bot con API simulada
         working-directory: fuente-completa
         run: node bot/pruebas/prueba.js
+
+      - name: Probar el motor API y comprobar el bundle Android
+        working-directory: fuente-completa
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test ank-ai/engine.test.js
+          node tools/build-ai.js --check
+          if grep -RniE 'opencode|OpenCode' decoded/assets/www/ank; then
+            echo "Se encontró una dependencia OpenCode en el panel de Android."
+            exit 1
+          fi
+          test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Terminal.js
+          test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Executor.js
+          echo "Motor API verificado; terminal/Executor siguen presentes." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verificar que el canal de actualización y el código fuente estén presentes
         shell: bash
