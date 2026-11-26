@@ -621,7 +621,7 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.3.0';
+  var PANEL_VERSION = '3.0.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '26/11/2026';
@@ -2439,6 +2439,7 @@
     var h = st.herramientas[id];
     if (!h || h.status !== 'pending') return;
     actualizarTarjetaHerramienta(id, 'rejected', '');
+    registrarResultadoHerramienta(String(h.request && (h.request.name || h.request.tool) || 'herramienta'), { rejected_by_user: true });
     log('i', 'El usuario rechazó la herramienta ' + String(h.request && (h.request.name || h.request.tool) || 'solicitada') + '.');
   }
 
@@ -3607,7 +3608,9 @@
       st.corriendo = false; st.abortController = null;
       cerrarTurno(false); tocarChat();
       var bot = st.msgs[st.msgs.length - 1];
-      anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
+      if (!(forzado && forzado.sinBurbuja)) {
+        anotarMemoria(proyecto, texto, bot && bot.rol === 'bot' ? bot.texto : result.content);
+      }
       quizasResumir(proyecto, chat);
       log('i', 'Respuesta recibida de la API.'); pintar();
     }).catch(function (e) {
