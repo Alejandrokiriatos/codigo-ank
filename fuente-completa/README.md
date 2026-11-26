@@ -4,119 +4,86 @@ Editor de código para Android con identidad propia, interfaz en español y
 marca **ANK**. El código base es libre (MIT, © 2020 Foxdebug / Ajit Kumar);
 el aviso de licencia se conserva en el APK.
 
-## APK
+## APK y estado de compilación
 
-- Archivo: `CodigoANK.apk` (97,37 MB)
+Los datos siguientes corresponden al APK histórico 1.7.0 que se usó como base
+de esta reconstrucción, no a una versión nueva del bloque 2:
+
 - Paquete: `com.ank.codigoank`
-- Versión: 1.7.0 (versionCode 1027)
+- Versión base: 1.7.0 (versionCode 1027)
 - minSdk 26 · targetSdk 28
-- Firmado con `ank.keystore` (alias `codigoank`)
-- Incluye el panel 1.7.0 (mini apps) ya integrado; el APK anterior queda en
-  `CodigoANK-1.5.8.apk`
+- El APK original y su firma no están guardados en este repositorio.
 
-SHA-256:
-
-```
-8FE4B9F315000A6082049E1EFBDB1A27C465AE10E34F6C601B21A3DF8E06F15E
-```
-
-El APK pesa 96 MB porque lleva dentro todo lo que la app necesita para
-funcionar sin internet: el binario del asistente (OpenCode 1.19.4 para Linux
-ARM64) y el entorno Linux completo (Alpine, `axs`, `proot` y `bash`). No se
-descarga nada al instalar ni al preparar el entorno.
-
-## Instalación
-
-1. Pasá `CodigoANK.apk` al teléfono.
-2. Permití "instalar apps de origen desconocido".
-3. Al no estar en Play Store, Play Protect puede pedir confirmación.
-
-Se instala **encima** de la versión anterior: misma firma y mismo paquete, así
-que conserva archivos, ajustes y la carpeta de proyectos.
+El nuevo código se está preparando en una rama separada. No se debe instalar
+ni distribuir el APK diagnóstico creado durante la auditoría: faltan recursos
+nativos excluidos del repositorio y todavía no hay una compilación release
+firmada para esta nueva arquitectura.
 
 ### Actualizaciones
 
-El panel del asistente se actualiza solo desde GitHub (menú ⋮ → **Actualizar
-ANK**): descarga únicamente `version.json`, `ank/ai.js` y `ank/ai.css`, verifica
-la firma y lo aplica al reiniciar. No hace falta reinstalar ni usar la PC.
+El panel web tiene un canal de actualización separado del APK. La publicación
+de la nueva versión queda bloqueada hasta sincronizar el archivo del canal,
+actualizar el manifiesto y firmarlo con el mecanismo seguro previsto para el
+bloque de seguridad. No se publica una versión parcial desde esta rama.
 
-El APK solo se reemplaza cuando cambia la parte nativa (permisos, iconos,
-entorno Linux u OpenCode). En ese caso se pasa el archivo nuevo al teléfono por
-cable, almacenamiento o la vía que prefieras.
+## Instalación
 
-> `web/` queda como herramienta opcional para servir el APK por red local
-> (`node web/serve.js`). No participa en las actualizaciones del panel.
+No instales un APK de diagnóstico. La distribución se reanudará cuando se
+recuperen los recursos nativos que faltan, se compruebe la firma original y se
+complete la auditoría final.
 
-No convive con Acode: si ya lo tenés instalado, desinstalalo antes (distinto
-paquete, así que no hay conflicto real, pero evita duplicados).
+`web/` queda como herramienta opcional para servir un APK release por red local
+(`node web/serve.js`). No interviene en el motor de IA.
 
 ## Asistente IA
 
-Panel propio dentro de la app (botón **IA** en la barra superior) con cuatro
-pestañas: Chat, Chats, Apps y Entorno, más Registro. El asistente corre en el
-mismo sandbox Alpine que usa la terminal, sin interfaz gráfica y sin permisos
-extra.
+El panel de Código ANK mantiene sus pestañas de Chat, Chats, Apps, Entorno y
+Registro, pero el motor ya no depende de un ejecutable Linux externo.
 
-### Cómo dejarlo funcionando
+### Conexión actual
 
-Son cuatro pasos, una sola vez, desde la pestaña **Entorno**:
+El bloque 2 incorpora un primer transporte de API compatible con
+**OpenAI Chat Completions**:
 
-1. **Entorno Linux.** Descarga Alpine y las librerías de proot (~20 MB). Es la
-   misma instalación que pide la terminal. Requiere red.
-2. **Asistente.** Copia el binario incluido en el APK y lo descomprime en el
-   almacenamiento privado de la app (~217 MB). Verifica el espacio libre antes
-   de empezar (pide unos 320 MB) y muestra la versión al terminar.
-3. **Cuenta.** Se pega una clave de API. Por defecto el proveedor es OpenCode
-   (`opencode.ai/auth`), que da acceso a los modelos gratuitos. También acepta
-   OpenRouter, Anthropic, OpenAI, DeepSeek, Groq y Google.
-4. **Proyecto.** Carpeta de trabajo dentro de `/public/proyectos`. Se crea sola
-   al enviar el primer mensaje.
+1. Introduce la URL base del proveedor (por ejemplo, `https://api.openai.com/v1`).
+2. Escribe el identificador exacto del modelo que ofrece esa cuenta.
+3. Pega la clave API y pulsa **Guardar conexión**.
+4. Pulsa **Probar conexión** y revisa el resultado en Registro.
 
-La barra inferior muestra el estado (`falta el entorno`, `listo · modelo`, etc.)
-y el botón de envío se convierte en **detener** mientras el modelo trabaja.
+El transporte nativo de Cordova se usa en Android para evitar depender de CORS
+del WebView; fuera de Cordova se utiliza `fetch`. En este bloque solo está
+implementado el formato compatible con Chat Completions. Los adaptadores
+específicos para otros protocolos se incorporan en el bloque 3.
 
-### Memoria y bitácora
+La clave queda en un archivo bajo el directorio interno privado de la app y se
+carga a memoria al arrancar. En esta fase no está cifrada con Android Keystore:
+ese endurecimiento forma parte del bloque de seguridad. No la guardes en una
+carpeta pública ni compartas un diagnóstico que incluya secretos.
 
-Cada proyecto tiene un `AGENTS.md` con su objetivo, estado, decisiones y una
-**bitácora** de lo hablado. La app lo lee en segundo plano para tener contexto:
-su contenido **no se muestra en el chat**, va al detalle plegado del bloque de
-trabajo. La IA tampoco narra qué archivos leyó ni copia la memoria en la
-respuesta; solo entrega el resultado.
+### Terminal y proyectos
 
-La bitácora se alimenta sola con cada pedido (hasta 40 líneas) y, cada ocho
-conversaciones, con un resumen automático. Se puede editar a mano desde
-**Chats → Memoria**.
+Alpine, proot, AXS, Bash y los plugins Terminal/Executor permanecen como
+módulos independientes. La instalación de Alpine sigue siendo opcional: el
+chat mediante API no necesita iniciar la terminal.
 
-### Cómo trabaja
+Los proyectos continúan en `/public/proyectos`, con su `AGENTS.md`, memoria,
+bitácora, historial de chats y sistema de propuestas de archivos. La lectura de
+memoria se hace mediante el plugin de archivos de Cordova, no mediante comandos
+de un agente externo. Las propuestas se muestran con diff y requieren que el
+usuario pulse **Aplicar**.
 
-Mientras el asistente lee, escribe o ejecuta comandos, el chat no se llena de
-líneas: aparece **un solo renglón** con lo que está haciendo («Leyendo app.js»,
-«Escribiendo style.css», «Revisando…») y un punto dorado que indica que sigue
-trabajando. Al terminar, ese renglón resume el trabajo («6 pasos · Escribiendo
-style.css»).
+El motor de API de esta etapa todavía no ejecuta herramientas ni comandos por
+decisión autónoma. La ejecución controlada de herramientas, permisos,
+aprobaciones y rollback se desarrollará en el bloque 4.
 
-Si querés ver el detalle, tocá la flecha **›** del bloque: se despliega la lista
-completa de pasos y avisos. Si no la tocás, el chat queda limpio y solo se ve la
-respuesta final. El detalle se guarda con el chat, así que sigue disponible
-cuando lo reabrís.
+### Qué se conserva
 
-### Qué hace y qué no
-
-- Ejecuta `opencode run --auto` dentro de la carpeta del proyecto: puede leer y
-  escribir archivos del proyecto y correr comandos en el sandbox.
-- **No controla la interfaz de la app.** No abre pestañas, no toca ajustes y no
-  sale de la carpeta de trabajo.
-- Las credenciales quedan en
-  `/public/.local/share/opencode/auth.json`, dentro del almacenamiento privado.
-- Los modelos `free` no tienen costo y pueden tener límites de uso. La lista se
-  lee con `opencode models`; si falla, se usan los sugeridos.
-
-### Si algo falla
-
-La pestaña **Registro** guarda los últimos 400 eventos con hora. **Copiar**
-deja todo el registro en el portapapeles y **Diagnóstico** vuelve a comprobar
-entorno, binario y credencial. La consola de la pestaña Registro permite lanzar
-comandos a mano (`opencode --version`, `opencode auth list`, `df -h /public`).
+- Historial local de chats y exportación Markdown.
+- Memoria por proyecto y bitácora.
+- Pestaña Apps y sus mini aplicaciones.
+- Terminal Linux opcional y consola manual.
+- Estadísticas, diagnóstico, registro y actualizador del panel (sin publicar
+  todavía esta versión nueva).
 
 ## Apps
 
