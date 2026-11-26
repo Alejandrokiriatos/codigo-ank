@@ -2193,6 +2193,255 @@
     }
   }
 
+
+  /* ------------------------------------------------------------------ *
+   * herramientas del proyecto: solo lectura y aprobación explícita
+   * ------------------------------------------------------------------ */
+
+  function rutaHerramientaProyecto(rel, permitirRaiz) {
+    var raw = String(rel == null ? '' : rel).trim();
+    if (permitirRaiz && (!raw || raw === '.')) {
+      return st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank');
+    }
+    if (!raw || raw.length > 240 || raw.charAt(0) === '/' || raw.indexOf('\\') !== -1 ||
+        /[\u0000-\u001f\u007f]/.test(raw)) {
+      throw new Error('Ruta de proyecto no válida.');
+    }
+    var parts = raw.split('/');
+    if (parts.some(function (part) { return !part || part === '.' || part === '..'; })) {
+      throw new Error('La ruta no puede contener segmentos vacíos, . o ..');
+    }
+    var base = st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank');
+    return base + '/' + parts.join('/');
+  }
+
+  function validarSolicitudHerramienta(request) {
+    if (!request || typeof request !== 'object' || Array.isArray(request)) {
+      throw new Error('La solicitud no tiene el formato esperado.');
+    }
+    var name = String(request.name || request.tool || '').trim();
+    var args = request.arguments == null ? {} : request.arguments;
+    if (!args || typeof args !== 'object' || Array.isArray(args)) {
+      throw new Error('Los argumentos deben ser un objeto JSON.');
+    }
+    if (name !== 'project.list' && name !== 'project.read') {
+      throw new Error('Herramienta no permitida: ' + (name || '(vacía)'));
+    }
+    Object.keys(args).forEach(function (key) {
+      if (key !== 'path') throw new Error('Argumento no permitido: ' + key);
+    });
+    if (name === 'project.list') {
+      if (args.path != null) rutaHerramientaProyecto(args.path, true);
+    } else {
+      if (typeof args.path !== 'string' || !args.path.trim()) {
+        throw new Error('project.read requiere arguments.path.');
+      }
+      rutaHerramientaProyecto(args.path, false);
+    }
+    return { name: name, arguments: args };
+  }
+
+  function leerArchivoLimitado(ruta, maxBytes) {
+    return new Promise(function (resolve, reject) {
+      var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+      if (typeof resolver !== 'function') return reject(new Error('El lector de archivos no está disponible.'));
+      var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+      resolver(uri, function (entry) {
+        entry.file(function (file) {
+          if (Number(file.size || 0) > maxBytes) {
+            reject(new Error('El archivo supera el límite de lectura de ' + maxBytes + ' bytes.'));
+            return;
+          }
+          if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
+          var reader = new window.FileReader();
+          reader.onload = function () { resolve(String(reader.result || '')); };
+          reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
+          reader.readAsText(file);
+        }, reject);
+      }, reject);
+    });
+  }
+
+  function ejecutarHerramientaLectura(request) {
+    var checked = validarSolicitudHerramienta(request);
+    if (checked.name === 'project.list') {
+      var folder = rutaHerramientaProyecto(checked.arguments.path, true);
+      return conSistema('listChildren', folder).then(function (children) {
+        var base = folder.replace(/\/+$/, '') + '/';
+        var items = (Array.isArray(children) ? children : []).map(function (entry) {
+          var full = String(entry || '');
+          if (full.indexOf(base) !== 0) return '';
+          return full.slice(base.length);
+        }).filter(Boolean).sort(function (a, b) { return a.localeCompare(b); });
+        return {
+          tool: checked.name,
+          path: checked.arguments.path || '.',
+          count: items.length,
+          truncated: items.length > 100,
+          entries: items.slice(0, 100)
+        };
+      });
+    }
+    var file = rutaHerramientaProyecto(checked.arguments.path, false);
+    return leerArchivoLimitado(file, 64 * 1024).then(function (content) {
+      var clipped = content.length > 12000;
+      return {
+        tool: checked.name,
+        path: checked.arguments.path,
+        size: content.length,
+        truncated: clipped,
+        content: clipped ? content.slice(0, 12000) + '\n[contenido recortado]' : content
+      };
+    });
+  }
+
+  function actualizarTarjetaHerramienta(id, status, result) {
+    var h = st.herramientas[id];
+    if (!h) return;
+    h.status = status;
+    h.result = result == null ? '' : String(result);
+    var card = q('[data-herramienta="' + id + '"]');
+    if (!card) return;
+    card.classList.remove('pending', 'running', 'done', 'rejected', 'failed');
+    card.classList.add(status);
+    var label = q('.ank-ai-toolcall-status', card);
+    if (label) {
+      label.textContent = status === 'pending' ? 'Pendiente de aprobación' :
+        status === 'running' ? 'Leyendo proyecto…' :
+        status === 'done' ? 'Lectura completada' :
+        status === 'rejected' ? 'Rechazada por el usuario' :
+        status === 'failed' ? 'No se pudo completar' : status;
+    }
+    var actions = q('.ank-ai-toolcall-actions', card);
+    if (actions) actions.hidden = status !== 'pending';
+    var output = q('.ank-ai-toolcall-output', card);
+    if (output) {
+      output.hidden = !h.result;
+      output.textContent = h.result;
+    }
+  }
+
+  function bloqueHerramienta(request, error) {
+    var id = 'h' + (++st.herramientasN);
+    var checked = null;
+    var validationError = error || '';
+    if (!validationError) {
+      try { checked = validarSolicitudHerramienta(request); }
+      catch (e) { validationError = e && e.message ? e.message : String(e); }
+    }
+    var toolName = checked ? checked.name : String(request && (request.name || request.tool) || 'solicitud');
+    var argsText = '';
+    try { argsText = JSON.stringify(request && (request.arguments || {}) || {}, null, 2); }
+    catch (_) { argsText = '{}'; }
+    var h = { id: id, request: request, checked: checked, status: validationError ? 'failed' : 'pending', result: '' };
+    st.herramientas[id] = h;
+
+    var card = document.createElement('section');
+    card.className = 'ank-ai-toolcall ' + h.status;
+    card.setAttribute('data-herramienta', id);
+
+    var head = document.createElement('div');
+    head.className = 'ank-ai-toolcall-head';
+    var title = document.createElement('b');
+    title.textContent = 'Herramienta: ' + toolName;
+    var status = document.createElement('span');
+    status.className = 'ank-ai-toolcall-status';
+    status.textContent = validationError ? 'Solicitud no válida' : 'Pendiente de aprobación';
+    head.appendChild(title);
+    head.appendChild(status);
+    card.appendChild(head);
+
+    var description = document.createElement('p');
+    description.className = 'ank-ai-toolcall-description';
+    description.textContent = validationError
+      ? validationError
+      : checked.name === 'project.list'
+        ? 'Leer los nombres de archivos y carpetas dentro del proyecto actual.'
+        : 'Leer el contenido de un archivo del proyecto actual (máximo 64 KiB).';
+    card.appendChild(description);
+
+    var pre = document.createElement('pre');
+    pre.className = 'ank-ai-toolcall-args';
+    pre.textContent = argsText;
+    card.appendChild(pre);
+
+    var output = document.createElement('pre');
+    output.className = 'ank-ai-toolcall-output';
+    output.hidden = true;
+    card.appendChild(output);
+
+    var actions = document.createElement('div');
+    actions.className = 'ank-ai-toolcall-actions';
+    actions.hidden = !!validationError;
+    var approve = document.createElement('button');
+    approve.type = 'button';
+    approve.className = 'ank-ai-btn primary';
+    approve.setAttribute('data-accion', 'aprobar-herramienta');
+    approve.setAttribute('data-valor', id);
+    approve.textContent = 'Aprobar lectura';
+    var reject = document.createElement('button');
+    reject.type = 'button';
+    reject.className = 'ank-ai-btn';
+    reject.setAttribute('data-accion', 'rechazar-herramienta');
+    reject.setAttribute('data-valor', id);
+    reject.textContent = 'Rechazar';
+    actions.appendChild(approve);
+    actions.appendChild(reject);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function registrarResultadoHerramienta(toolName, outcome) {
+    var payload;
+    try { payload = JSON.stringify({ tool: toolName, result: outcome }); }
+    catch (_) { payload = JSON.stringify({ tool: toolName, result: String(outcome) }); }
+    nuevoMensaje('tool', payload.slice(0, 12000));
+    tocarChat();
+  }
+
+  function aprobarHerramienta(id) {
+    var h = st.herramientas[id];
+    if (!h || h.status !== 'pending') return;
+    if (st.corriendo || st.herramientaOcupada) {
+      aviso('Espera a que termine la operación actual.');
+      return;
+    }
+    if (st.herramientasUsadas >= 4) {
+      actualizarTarjetaHerramienta(id, 'failed', 'Se alcanzó el límite de cuatro herramientas por solicitud. Envía un nuevo mensaje para continuar.');
+      return;
+    }
+    try { h.checked = validarSolicitudHerramienta(h.request); }
+    catch (e) {
+      actualizarTarjetaHerramienta(id, 'failed', e && e.message ? e.message : String(e));
+      return;
+    }
+    st.herramientaOcupada = true;
+    st.herramientasUsadas++;
+    actualizarTarjetaHerramienta(id, 'running', '');
+    ejecutarHerramientaLectura(h.request).then(function (result) {
+      var output = JSON.stringify(result, null, 2);
+      actualizarTarjetaHerramienta(id, 'done', output);
+      registrarResultadoHerramienta(h.checked.name, result);
+      log('i', 'Herramienta aprobada y completada: ' + h.checked.name);
+      st.herramientaOcupada = false;
+      enviar({ texto: 'Continúa con la tarea usando el resultado de la herramienta aprobada. No repitas una lectura ya realizada salvo que necesites otro archivo.', sinBurbuja: true });
+    }).catch(function (e) {
+      var message = e && e.message ? e.message : String(e);
+      actualizarTarjetaHerramienta(id, 'failed', message);
+      registrarResultadoHerramienta(h.checked.name, { error: message });
+      log('e', 'Herramienta ' + h.checked.name + ': ' + message);
+      st.herramientaOcupada = false;
+      enviar({ texto: 'La herramienta aprobada devolvió un error. Analiza el error y continúa sin inventar resultados.', sinBurbuja: true });
+    });
+  }
+
+  function rechazarHerramienta(id) {
+    var h = st.herramientas[id];
+    if (!h || h.status !== 'pending') return;
+    actualizarTarjetaHerramienta(id, 'rejected', '');
+    log('i', 'El usuario rechazó la herramienta ' + String(h.request && (h.request.name || h.request.tool) || 'solicitada') + '.');
+  }
+
   function selloFecha() {
     var d = new Date();
     function dos(n) { return ('0' + n).slice(-2); }
