@@ -27,6 +27,17 @@
     return err;
   }
 
+  function normalizarModelo(value) {
+    var model = String(value == null ? '' : value).trim();
+    if (/[\u0000-\u001f\u007f]/.test(model)) {
+      throw fail('El identificador del modelo contiene caracteres de control.', 'ANK_AI_MODEL_INVALID');
+    }
+    if (model.length > 256) {
+      throw fail('El identificador del modelo supera el límite de 256 caracteres.', 'ANK_AI_MODEL_TOO_LONG');
+    }
+    return model;
+  }
+
   function protocolName(value) {
     var p = String(value || PROTOCOLS.openai).trim().toLowerCase();
     if (p === 'openai' || p === 'openai-compatible' || p === 'openai-chat-completions') return PROTOCOLS.openai;
@@ -86,7 +97,7 @@
       }
     } else {
       if (!/:generateContent$/i.test(path)) {
-        var modelName = String(model || '').trim();
+        var modelName = normalizarModelo(model);
         if (!modelName) throw fail('Indica el modelo Gemini para construir el endpoint.', 'ANK_AI_MODEL_REQUIRED');
         if (!/\/models$/i.test(path)) path += '/models';
         path += '/' + encodeURIComponent(modelName) + ':generateContent';
@@ -515,10 +526,11 @@
   function chat(options) {
     options = options || {};
     var apiKey = String(options.apiKey || '').trim();
-    var model = String(options.model || '').trim();
+    var model;
     var protocol;
     var url;
     try {
+      model = normalizarModelo(options.model);
       protocol = protocolName(options.protocol);
       url = endpointUrl(options.endpoint, protocol, model);
     } catch (err) { return Promise.reject(err); }
@@ -583,6 +595,7 @@
     version: VERSION,
     protocols: PROTOCOLS,
     protocolName: protocolName,
+    normalizarModelo: normalizarModelo,
     endpointUrl: endpointUrl,
     chat: chat
   };
