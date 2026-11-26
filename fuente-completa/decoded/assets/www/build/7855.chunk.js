@@ -1,0 +1,1 @@
+"use strict";(self.rspackChunkcom_foxdebug_acode=self.rspackChunkcom_foxdebug_acode||[]).push([[7855],{26930:function(e,c,r){r.r(c);var u=r(40597);r(17967),r.d(c,{ArchitectureModule:function(){return u.i},createArchitectureServices:function(){return u.S}})}}]);

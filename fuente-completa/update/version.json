@@ -1,0 +1,7 @@
+{
+  "web": "1.8.3",
+  "ai": "ank/ai.js",
+  "css": "ank/ai.css",
+  "notas": "Corrige el cierre al abrir enlaces: los enlaces abren con CustomTabs y nunca se lanza un intent con URL vacia.",
+  "sig": "bac5decf3b4dfad0ba672df4347511ffd1b6db40da1300f7ee96bc44167b132a"
+}

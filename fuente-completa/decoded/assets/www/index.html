@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      background-color: #0F1618;
+      /* fallback dark */
+    }
+
+    :root {
+      --bg-color: #0F1618;
+      /* fallback splash color */
+      --test-height: 45px;
+    }
+
+    body.loading {
+      position: relative;
+    }
+
+    body.loading #splash {
+      display: block;
+    }
+
+    #splash {
+      display: none;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      inset: 0;
+      z-index: 999999;
+
+      background-image: url("./logo.svg");
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: 180px;
+      background-color: var(--bg-color);
+
+      text-align: center;
+
+      /* Disable any possible fade */
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .splash-version {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+
+      color: rgb(209, 209, 209);
+      font-size: 0.8rem;
+      white-space: pre;
+      font-family: monospace;
+      text-align: left;
+    }
+
+    .splash-message {
+      position: absolute;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgb(209, 209, 209);
+      font-size: 0.92rem;
+      width: 90vw;
+      text-align: center;
+      max-height: 55vh;
+      overflow-y: auto;
+      line-height: 1.45;
+      word-break: break-word;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+
+  <!-- Set theme color BEFORE UI renders -->
+  <script>
+    (function () {
+      var MIN_WEBVIEW_MAJOR = 67;
+      var color = localStorage.getItem("__primary_color");
+      var bg = color || "#0F1618";
+
+      document.documentElement.style.setProperty("--bg-color", bg);
+      document.documentElement.style.backgroundColor = bg;
+      document.body && (document.body.style.backgroundColor = bg);
+
+      function getWebViewMajor() {
+        var match = navigator.userAgent.match(/(?:Chrome|CriOS)\/(\d+)/);
+        return match ? Number(match[1]) : 0;
+      }
+
+      var pendingStartupMessage = "";
+      var hasPendingStartupMessageListener = false;
+
+      function isStartupLoading() {
+        return !document.body || document.body.classList.contains("loading");
+      }
+
+      function applyStartupMessage() {
+        hasPendingStartupMessageListener = false;
+        if (document.body && isStartupLoading()) {
+          document.body.setAttribute("data-small-msg", pendingStartupMessage);
+        }
+      }
+
+      function setStartupMessage(message) {
+        pendingStartupMessage = message;
+
+        if (document.body) {
+          applyStartupMessage();
+        } else if (!hasPendingStartupMessageListener) {
+          hasPendingStartupMessageListener = true;
+          document.addEventListener("DOMContentLoaded", applyStartupMessage, {
+            once: true
+          });
+        }
+      }
+
+      var hasES6 = false;
+      try {
+        hasES6 = !!new Function("return (()=>{})")();
+      } catch (e) {}
+
+      if (!hasES6) {
+        setStartupMessage(
+          "Código ANK requiere un navegador moderno. Actualizá Android System WebView o Chrome."
+        );
+      }
+
+      window.__ACODE_WEBVIEW_MAJOR__ = getWebViewMajor();
+      window.__ACODE_MIN_WEBVIEW_MAJOR__ = MIN_WEBVIEW_MAJOR;
+
+      if (hasES6 &&
+        window.__ACODE_WEBVIEW_MAJOR__ &&
+        window.__ACODE_WEBVIEW_MAJOR__ < MIN_WEBVIEW_MAJOR
+      ) {
+        setStartupMessage(
+          "Tu Android System WebView está viejo. Actualizalo si Código ANK queda en esta pantalla."
+        );
+      }
+
+      function isStorageError(reason) {
+        if (!reason) return false;
+        return (
+          reason.name === "FileError" ||
+          reason.name === "NotFoundError" ||
+          reason.name === "SecurityError" ||
+          (typeof window.FileError !== "undefined" &&
+            reason instanceof window.FileError)
+        );
+      }
+
+      var startupErrors = [];
+
+      function errorLocation(event) {
+        if (!event || !event.filename) return "";
+        var file = String(event.filename).split("/").pop();
+        return file + ":" + (event.lineno || 0) + ":" + (event.colno || 0);
+      }
+
+      function recordStartupError(prefix, message, event) {
+        var loc = errorLocation(event);
+        startupErrors.push(message + (loc ? " [" + loc + "]" : ""));
+        if (startupErrors.length > 4) startupErrors.shift();
+        setStartupMessage(prefix + startupErrors.join(" | "));
+      }
+
+      function handleStartupError(event) {
+        if (!isStartupLoading()) return;
+        var message = event && event.message ? event.message : "Error de inicio";
+        recordStartupError(
+          isStorageError(event && event.error)
+            ? "ANK no pudo iniciar: el almacenamiento no está disponible. Reiniciá el dispositivo o borrá los datos de la app. "
+            : "ANK no pudo iniciar. Actualizá Android System WebView o Chrome. ",
+          message,
+          event
+        );
+      }
+
+      function handleStartupRejection(event) {
+        if (!isStartupLoading()) return;
+        var reason = event && event.reason;
+        var message =
+          reason && reason.message ? reason.message : "Falló la promesa de inicio";
+        recordStartupError(
+          isStorageError(reason)
+            ? "ANK no pudo iniciar: el almacenamiento no está disponible. Reiniciá el dispositivo o borrá los datos de la app. "
+            : "ANK no pudo iniciar. Actualizá Android System WebView o Chrome. ",
+          message,
+          null
+        );
+      }
+
+      window.addEventListener("error", handleStartupError);
+      window.addEventListener("unhandledrejection", handleStartupRejection);
+    })();
+  </script>
+
+  <!-- Core Scripts -->
+  <script src="cordova.js"></script>
+
+  <script>
+    /* Cordova publica cordova.exec recién cuando el lado nativo responde y los
+       plugins cargan. Algunos módulos del bundle lo capturan al evaluarse; si
+       main.js gana la carrera, cordova.exec todavía es undefined y el arranque
+       muere con "Cannot read properties of undefined (reading 'bind')".
+       Este puente expone exec desde ya y lo reemplaza por el real en cuanto
+       exista, sin perder la referencia capturada. */
+    (function () {
+      var c = window.cordova;
+      if (!c || typeof c.exec === "function") return;
+      var real = null;
+      function shim() {
+        if (typeof real === "function") return real.apply(c, arguments);
+      }
+      try {
+        Object.defineProperty(c, "exec", {
+          configurable: true,
+          enumerable: true,
+          get: function () { return real || shim; },
+          set: function (fn) { real = fn; }
+        });
+      } catch (e) {
+        c.exec = shim;
+      }
+    })();
+  </script>
+
+  <script src="./build/boot.js"></script>
+
+  <title>Código ANK</title>
+  <link rel="stylesheet" href="./ank/ai.css" />
+</head>
+
+<body class="loading" data-version="" data-small-msg="">
+  <div id="splash">
+    <div class="splash-version"></div>
+    <div class="splash-message"></div>
+  </div>
+
+  <wc-page id="root" class="primary"></wc-page>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const splash = document.getElementById("splash");
+
+      function updateSplash() {
+        splash.querySelector(".splash-version").textContent =
+          document.body.getAttribute("data-version") || "";
+
+        splash.querySelector(".splash-message").textContent =
+          document.body.getAttribute("data-small-msg") || "";
+      }
+
+      updateSplash();
+
+      new MutationObserver(updateSplash).observe(document.body, {
+        attributes: true,
+        attributeFilter: ["data-version", "data-small-msg"]
+      });
+    });
+  </script>
+  <script src="./ank/ank.js"></script>
+  <script src="./ank/upd.js"></script>
+  <script src="./ank/boot-ai.js"></script>
+</body>
+
+</html>

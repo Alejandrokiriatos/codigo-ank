@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<widget android-versionCode="1011" id="com.foxdebug.acode" version="1.1.1" xmlns="http://www.w3.org/ns/widgets"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <feature name="Clipboard">
+        <param name="android-package" value="com.verso.cordova.clipboard.Clipboard" />
+    </feature>
+    <feature name="Device">
+        <param name="android-package" value="org.apache.cordova.device.Device" />
+    </feature>
+    <feature name="File">
+        <param name="android-package" value="org.apache.cordova.file.FileUtils" />
+        <param name="onload" value="true" />
+    </feature>
+    <allow-navigation href="cdvfile:*" />
+    <feature name="Ftp">
+        <param name="android-package" value="com.foxdebug.ftp.Ftp" />
+    </feature>
+    <feature name="SDcard">
+        <param name="android-package" value="com.foxdebug.sdcard.SDcard" />
+    </feature>
+    <feature name="WebSocketPlugin">
+        <param name="android-package" value="com.foxdebug.websocket.WebSocketPlugin" />
+    </feature>
+    <feature name="BuildInfo">
+        <param name="android-package" value="org.apache.cordova.buildinfo.BuildInfo" />
+    </feature>
+    <feature name="Browser">
+        <param name="android-package" value="com.foxdebug.browser.Plugin" />
+    </feature>
+    <feature name="Sftp">
+        <param name="android-package" value="com.foxdebug.sftp.Sftp" />
+    </feature>
+    <feature name="Executor">
+        <param name="android-package" value="com.foxdebug.acode.rk.exec.terminal.Executor" />
+    </feature>
+    <feature name="BackgroundExecutor">
+        <param name="android-package" value="com.foxdebug.acode.rk.exec.terminal.BackgroundExecutor" />
+    </feature>
+    <feature name="Tee">
+        <param name="android-package" value="com.foxdebug.acode.rk.plugin.Tee" />
+    </feature>
+    <feature name="Authenticator">
+        <param name="android-package" value="com.foxdebug.acode.rk.auth.Authenticator" />
+        <param name="onload" value="true" />
+    </feature>
+    <feature name="CustomTabs">
+        <param name="android-package" value="com.foxdebug.acode.rk.customtabs.CustomTabsPlugin" />
+    </feature>
+    <feature name="System">
+        <param name="android-package" value="com.foxdebug.system.System" />
+    </feature>
+    <feature name="CrashHandler">
+        <param name="android-package" value="com.foxdebug.crashhandler.CrashHandler" />
+        <param name="onload" value="true" />
+    </feature>
+    <feature name="CordovaHttpPlugin">
+        <param name="android-package" value="com.silkimen.cordovahttp.CordovaHttpPlugin" />
+    </feature>
+    <feature name="AcodeWebView">
+        <param name="android-package" value="com.foxdebug.webview.WebViewPlugin" />
+    </feature>
+    <feature name="Server">
+        <param name="android-package" value="com.foxdebug.server.Server" />
+    </feature>
+    <name>ANK</name>
+    <description> Editor de código ligero con terminal y vista previa para Android. </description>
+    <author email="ajit@foxdebug.com" href="https://foxdebug.com"> Foxdebug </author>
+    <content src="index.html" />
+    <access launch-external="yes" origin="*" />
+    <allow-navigation href="https://*/*" />
+    <allow-navigation href="http://*/*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+    <allow-intent href="market:*" />
+    <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
+        <application android:hardwareAccelerated="true" android:largeHeap="true" android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config" android:requestLegacyExternalStorage="true" android:enableOnBackInvokedCallback="false" />
+    </edit-config>
+    <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application/activity[@android:name='MainActivity']">
+        <activity android:windowSoftInputMode="adjustResize" android:resizeableActivity="true" />
+    </edit-config>
+    <config-file parent="./application/activity" target="AndroidManifest.xml">
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <action android:name="android.intent.action.EDIT" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.LAUNCHER" />
+            <data android:mimeType="*/*" android:scheme="file" />
+            <data android:mimeType="*/*" android:scheme="content" />
+        </intent-filter>
+        <intent-filter android:autoVerify="true">
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="acode" />
+        </intent-filter>
+    </config-file>
+    <config-file parent="/manifest" target="AndroidManifest.xml">
+        <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+        <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+        <uses-permission android:name="android.permission.WRITE_MEDIA_STORAGE" />
+        <uses-permission android:name="android.permission.VIBRATE" />
+    </config-file>
+    <hook src="hooks/restore-cordova-resources.js" type="before_prepare" />
+    <hook src="hooks/modify-java-files.js" type="before_prepare" />
+    <hook src="hooks/post-process.js" type="after_prepare" />
+    <preference name="loglevel" value="DEBUG" />
+    <preference name="AndroidBlacklistSecureSocketProtocols" value="SSLv3,TLSv1" />
+    <preference name="GradlePluginKotlinVersion" value="2.3.0" />
+    <preference name="fullscreen" value="false" />
+    <preference name="SplashScreen" value="none" />
+    <preference name="ShowTitle" value="true" />
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="BackgroundColor" value="0xFF313131" />
+    <preference name="AndroidWindowSplashScreenBackground" value="@color/ic_splash_background" />
+    <preference name="AndroidWindowSplashScreenAnimatedIcon" value="res/android/drawable/ic_launcher_foreground.xml" />
+    <preference name="AndroidPostSplashScreenTheme" value="@style/Theme.App.Activity" />
+    <preference name="AndroidPersistentFileLocation" value="Compatibility" />
+    <preference name="AndroidLaunchMode" value="singleTask" />
+    <preference name="prerendered-icon" value="false" />
+    <preference name="androidxEnabled" value="true" />
+    <preference name="GradlePluginKotlinEnabled" value="true" />
+    <preference name="android-targetSdkVersion" value="36" />
+    <preference name="android-minSdkVersion" value="26" />
+</widget>

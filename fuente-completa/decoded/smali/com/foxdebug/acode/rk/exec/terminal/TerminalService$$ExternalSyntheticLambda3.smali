@@ -1,0 +1,42 @@
+.class public final synthetic Lcom/foxdebug/acode/rk/exec/terminal/TerminalService$$ExternalSyntheticLambda3;
+.super Ljava/lang/Object;
+.source "D8$$SyntheticClass"
+
+# interfaces
+.implements Lcom/foxdebug/acode/rk/exec/terminal/StreamHandler$OutputListener;
+
+
+# instance fields
+.field public final synthetic f$0:Lcom/foxdebug/acode/rk/exec/terminal/TerminalService;
+
+.field public final synthetic f$1:Ljava/lang/String;
+
+
+# direct methods
+.method public synthetic constructor <init>(Lcom/foxdebug/acode/rk/exec/terminal/TerminalService;Ljava/lang/String;)V
+    .locals 0
+
+    .line 0
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    iput-object p1, p0, Lcom/foxdebug/acode/rk/exec/terminal/TerminalService$$ExternalSyntheticLambda3;->f$0:Lcom/foxdebug/acode/rk/exec/terminal/TerminalService;
+
+    iput-object p2, p0, Lcom/foxdebug/acode/rk/exec/terminal/TerminalService$$ExternalSyntheticLambda3;->f$1:Ljava/lang/String;
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public final onLine(Ljava/lang/String;)V
+    .locals 2
+
+    .line 0
+    iget-object v0, p0, Lcom/foxdebug/acode/rk/exec/terminal/TerminalService$$ExternalSyntheticLambda3;->f$0:Lcom/foxdebug/acode/rk/exec/terminal/TerminalService;
+
+    iget-object v1, p0, Lcom/foxdebug/acode/rk/exec/terminal/TerminalService$$ExternalSyntheticLambda3;->f$1:Ljava/lang/String;
+
+    invoke-virtual {v0, v1, p1}, Lcom/foxdebug/acode/rk/exec/terminal/TerminalService;->lambda$startProcess$0$com-foxdebug-acode-rk-exec-terminal-TerminalService(Ljava/lang/String;Ljava/lang/String;)V
+
+    return-void
+.end method

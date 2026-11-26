@@ -1,0 +1,38 @@
+name: estadisticas
+
+# Arma stats.json una vez al día con los contadores públicos de la app.
+# No usa secretos: los datos salen de abacus.jasoncameron.dev y el resumen
+# queda versionado en el propio repositorio.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Recolectar contadores
+        run: node tools/estadisticas.mjs
+
+      - name: Guardar en el repositorio
+        run: |
+          if [ -z "$(git status --porcelain stats.json)" ]; then
+            echo "Sin cambios en stats.json"
+            exit 0
+          fi
+          git config user.name "ANK"
+          git config user.email "ank@codigoank.app"
+          git add stats.json
+          git commit -m "estadisticas $(date -u +%F)"
+          git push

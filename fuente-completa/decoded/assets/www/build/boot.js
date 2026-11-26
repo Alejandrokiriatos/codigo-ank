@@ -1,0 +1,1 @@
+!function(){let e,n;(e=document.createElement("link")).rel="stylesheet",e.href="./build/main.css",document.head.appendChild(e),(n=document.createElement("script")).src="./build/main.js",document.head.appendChild(n)}();

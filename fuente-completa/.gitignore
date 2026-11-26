@@ -1,5 +1,20 @@
-# Nunca se publican: llevan el token y datos del canal/grupo.
-token.txt
-config.json
-estado.json
-*.tmp
+# Binarios y artefactos que no van al repo
+*.apk
+*.apk.idsig
+*.jar
+*.keystore
+*.jks
+node_modules/
+
+# Entorno Linux / asistente incluido en el APK (se descarga aparte)
+decoded/assets/opencode/
+decoded/assets/alpine_assets/
+decoded/assets/dexopt/
+decoded/build/
+
+# Secretos
+bot/token.txt
+bot/estado.json
+tools/update-key.txt
+.env
+.env.*

@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0F1618" />
+  <title>Código ANK · descarga</title>
+  <style>
+    :root {
+      --bg: #0f1618;
+      --panel: #111b1d;
+      --panel2: #0c1315;
+      --line: #26363a;
+      --line2: #2c3e41;
+      --text: #e7e0d2;
+      --dim: #8e8778;
+      --faint: #6f6a5f;
+      --amber: #e0a458;
+      --green: #7fb3a7;
+      --danger: #c2624a;
+      --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      min-height: 100dvh;
+      padding: 0 16px calc(28px + env(safe-area-inset-bottom));
+    }
+
+    .wrap {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    /* ---------- cabecera ---------- */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 22px 0 18px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 18px;
+    }
+
+    .mark {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .brand {
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--faint);
+      line-height: 1.5;
+    }
+
+    .brand b {
+      display: block;
+      color: var(--text);
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      text-transform: none;
+      font-weight: 600;
+    }
+
+    /* ---------- bloque principal ---------- */
+    h1 {
+      font-size: 21px;
+      line-height: 1.3;
+      margin: 0 0 8px;
+      font-weight: 600;
+    }
+
+    .lead {
+      color: var(--dim);
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 0 0 20px;
+    }
+
+    .download {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line2);
+      border-left: 2px solid var(--amber);
+      padding: 14px 16px;
+      text-decoration: none;
+      color: var(--text);
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+
+    .download:active {
+      background: #16211f;
+    }
+
+    .download .icon {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      border: 1px solid #33474a;
+      display: grid;
+      place-items: center;
+      color: var(--amber);
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .download .txt {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .download .t1 {
+      display: block;
+      font-family: var(--mono);
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+
+    .download .t2 {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--faint);
+      margin-top: 3px;
+    }
+
+    .download .go {
+      flex: 0 0 auto;
+      color: var(--amber);
+      font-size: 18px;
+    }
+
+    /* ---------- ficha ---------- */
+    .meta {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 78px 1fr;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid #1a2628;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .row:last-child {
+      border-bottom: 0;
+    }
+
+    .k {
+      color: var(--faint);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding-top: 2px;
+    }
+
+    .v {
+      font-family: var(--mono);
+      color: #cfc8b8;
+      word-break: break-all;
+    }
+
+    .v.ok {
+      color: var(--green);
+    }
+
+    .hash {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .hash code {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 10px;
+      letter-spacing: -0.01em;
+      line-height: 1.55;
+      color: var(--dim);
+      word-break: break-all;
+    }
+
+    button.copy {
+      flex: 0 0 auto;
+      background: #1a282a;
+      border: 1px solid #33474a;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 8px;
+      border-radius: 0;
+    }
+
+    button.copy:active {
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    /* ---------- pasos ---------- */
+    h2 {
+      font-size: 10.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin: 26px 0 10px;
+      font-weight: 500;
+    }
+
+    ol.steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      counter-reset: s;
+    }
+
+    ol.steps li {
+      counter-increment: s;
+      position: relative;
+      padding: 0 0 14px 34px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #cfc8b8;
+    }
+
+    ol.steps li::before {
+      content: "0" counter(s);
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--amber);
+      border: 1px solid #33474a;
+      padding: 2px 5px;
+    }
+
+    ol.steps b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* ---------- avisos ---------- */
+    .note {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 11px 12px;
+      font-size: 11.5px;
+      line-height: 1.6;
+      color: var(--dim);
+      margin-top: 6px;
+    }
+
+    .note b {
+      color: #cfc8b8;
+      font-weight: 600;
+    }
+
+    .note.warn {
+      border-color: #4a3a2a;
+    }
+
+    .note.warn b {
+      color: var(--amber);
+    }
+
+    footer {
+      margin-top: 26px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: #4f5c5e;
+      line-height: 1.7;
+      word-break: break-all;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(20px + env(safe-area-inset-bottom));
+      transform: translate(-50%, 12px);
+      background: #1a282a;
+      border: 1px solid var(--amber);
+      color: var(--text);
+      font-size: 12px;
+      padding: 8px 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.on {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="mark">ANK</div>
+      <div class="brand">
+        Código ANK
+        <b>Descarga local</b>
+      </div>
+    </header>
+
+    <main>
+      <h1>Aplicación para Android</h1>
+      <p class="lead">
+        Editor de código con asistente IA incluido. Descargá el APK desde esta
+        misma red y abrilo en el teléfono.
+      </p>
+
+      <a class="download" href="/CodigoANK.apk" download="CodigoANK.apk">
+        <span class="icon">&#8595;</span>
+        <span class="txt">
+          <span class="t1">CodigoANK.apk</span>
+          <span class="t2" id="size">calculando tamaño…</span>
+        </span>
+        <span class="go">&#8250;</span>
+      </a>
+
+      <div class="meta">
+        <div class="row"><div class="k">Versión</div><div class="v">1.5.8 · build 1026</div></div>
+        <div class="row"><div class="k">Paquete</div><div class="v">com.ank.codigoank</div></div>
+        <div class="row"><div class="k">Android</div><div class="v">8.0 o superior</div></div>
+        <div class="row">
+          <div class="k">SHA-256</div>
+          <div class="v">
+            <div class="hash">
+              <code id="sha">—</code>
+              <button class="copy" id="copySha" type="button">Copiar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2>Instalación</h2>
+      <ol class="steps">
+        <li>Tocá <b>CodigoANK.apk</b> y esperá la descarga (unos 96 MB).</li>
+        <li>Si Chrome avisa que el archivo puede ser peligroso, elegí <b>Descargar de todos modos</b>.</li>
+        <li>Al abrirlo, permití <b>Instalar apps desconocidas</b> para el navegador o el gestor de archivos.</li>
+        <li>Play Protect puede pedir confirmación: <b>Instalar de todos modos</b>.</li>
+        <li>Se instala encima de la versión anterior y conserva archivos, ajustes y proyectos.</li>
+      </ol>
+
+      <h2>Asistente IA</h2>
+      <div class="note">
+        El binario ya viene dentro del APK. La primera vez, en el panel <b>IA</b>:
+        preparar el <b>entorno Linux</b> (ya incluido, sin internet), instalar el
+        <b>asistente</b> (descomprime ~217 MB) y pegar una clave de
+        <b>opencode.ai/auth</b>. Reservá unos <b>350 MB libres</b>.
+      </div>
+
+      <div class="note">
+        En el chat: <b>Construir</b> o <b>Plan</b> (Plan solo lee y propone),
+        el <b>modelo</b> agrupado en «Gratis» y «Tu API», y el <b>esfuerzo</b>
+        (Auto, low, medium, high, max) según lo que admita el modelo elegido.
+      </div>
+
+      <div class="note">
+        Si una respuesta falla, aparecen <b>Reintentar</b> y <b>Probar otro
+        modelo</b>. En <b>Chats</b> podés <b>buscar</b> en el historial y
+        <b>exportar</b> la conversación a Markdown. Cuando el asistente propone
+        un archivo, se ve el <b>diff</b> y podés <b>Aplicar</b> o
+        <b>Descartar</b>; antes de escribir se guarda un respaldo <b>.bak</b>.
+        El botón <b>Diagnóstico</b> del registro arma un informe para compartir.
+      </div>
+
+      <div class="note warn">
+        <b>Red local.</b> Esta página solo existe mientras el servidor esté
+        encendido en la PC. No la publiques en internet: no tiene contraseña.
+      </div>
+
+      <footer id="foot">Servidor local · misma red Wi-Fi</footer>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (function () {
+      var sha = document.getElementById('sha');
+      var size = document.getElementById('size');
+      var foot = document.getElementById('foot');
+      var toast = document.getElementById('toast');
+      var tm = null;
+
+      function aviso(t) {
+        toast.textContent = t;
+        toast.classList.add('on');
+        clearTimeout(tm);
+        tm = setTimeout(function () { toast.classList.remove('on'); }, 1800);
+      }
+
+      function mb(b) {
+        return (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
+      }
+
+      fetch('/api/info', { cache: 'no-store' })
+        .then(function (r) { if (!r.ok) throw new Error('info'); return r.json(); })
+        .then(function (i) {
+          size.textContent = mb(i.bytes) + ' · Android';
+          sha.textContent = i.sha256;
+          document.getElementById('copySha').setAttribute('data-sha', i.sha256);
+        })
+        .catch(function () {
+          size.textContent = '97,4 MB · Android';
+          sha.textContent = '4808DA1B748DA693BE0DFCE01B41E20B16D7C0C680D6F43BB51E2CA71449A313';
+          document.getElementById('copySha').setAttribute('data-sha', sha.textContent);
+        });
+
+      foot.textContent = 'Servidor local · ' + location.host + ' · misma red Wi-Fi';
+
+      function copiar(texto, ok) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(texto).then(ok, function () { respaldo(texto, ok); });
+        } else respaldo(texto, ok);
+      }
+
+      function respaldo(texto, ok) {
+        var t = document.createElement('textarea');
+        t.value = texto;
+        t.style.position = 'fixed';
+        t.style.opacity = '0';
+        document.body.appendChild(t);
+        t.select();
+        var bien = false;
+        try { bien = document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(t);
+        if (bien) ok(); else aviso('No se pudo copiar');
+      }
+
+      document.getElementById('copySha').addEventListener('click', function () {
+        var v = this.getAttribute('data-sha') || sha.textContent;
+        copiar(v, function () { aviso('SHA-256 copiado'); });
+      });
+
+      document.getElementById('foot').addEventListener('click', function () {
+        copiar(location.href, function () { aviso('Dirección copiada'); });
+      });
+    })();
+  </script>
+</body>
+
+</html>

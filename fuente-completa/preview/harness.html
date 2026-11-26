@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harness · Código ANK</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1113;font-family:"Segoe UI",system-ui,sans-serif}
+  .stage{width:390px;height:760px;margin:24px auto;position:relative;overflow:hidden;
+         border:1px solid #223033;border-radius:14px;background:#0F1618;box-shadow:0 30px 70px rgba(0,0,0,.6)}
+  header.tile{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;
+              gap:8px;padding:0 10px;box-sizing:border-box;font-size:14px;z-index:120}
+  .mono{width:22px;height:22px;border:1px solid #E0A458;color:#E0A458;display:grid;place-items:center;
+        font:600 11px/1 monospace}
+  #sidebar{position:absolute;top:46px;bottom:0;left:0;width:214px;display:flex;z-index:109}
+  #sidebar.phone{transform:translateX(-100%);transition:transform .25s}
+  #sidebar.show{transform:none}
+  #sidebar + .mask{position:fixed;top:0;right:0;bottom:0;left:0;z-index:108;background:#000;opacity:0}
+  #sidebar + .mask.on{opacity:1}
+  #sidebar .apps{width:46px;background:rgba(0,0,0,.18);border-right:1px solid #1E2C2E;padding-top:8px}
+  #sidebar .apps .app-icons-container{display:flex;flex-direction:column;align-items:center;gap:6px}
+  #sidebar .apps .app-icon{width:30px;height:30px;display:grid;place-items:center;color:#8E8778;font:14px monospace;border:1px solid transparent}
+  #sidebar .apps .app-icon.on{color:#E0A458;border-color:#33474A}
+  #sidebar .container{flex:1;overflow-y:auto;background:#101A1C}
+  main{position:absolute;top:46px;left:0;right:0;bottom:0;background:#0F1618}
+  .editor{padding:14px;font:12.5px/1.7 "Meslo LG S",monospace;color:#C9C2B2}
+  .editor .k{color:#E0A458}.editor .s{color:#7FB3A7}.editor .c{color:#5E6B69}
+  .hint{position:absolute;left:228px;top:60px;color:#5E6B69;font:10px/1.5 monospace;width:140px}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <header class="tile">
+      <div class="mono">A/</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">Código ANK</div>
+        <div style="font:9px/1 monospace;letter-spacing:.14em;color:#8E8778;margin-top:3px">EDITOR</div>
+      </div>
+      <span class="icon play_arrow" action="run" style="color:#B9B2A2">▷</span>
+      <span class="icon more_vert" action="toggle-menu" style="color:#8E8778">⋮</span>
+    </header>
+
+    <div id="sidebar" class="phone show">
+      <div class="apps">
+        <div class="app-icons-container">
+          <div class="app-icon on">▤</div>
+          <div class="app-icon">⌕</div>
+        </div>
+      </div>
+      <div class="container" id="app-container">
+        <div style="padding:14px;color:#8E8778;font-size:12px">Raíz del proyecto</div>
+      </div>
+    </div>
+    <span class="mask on"></span>
+
+    <main>
+      <wc-page id="root">
+        <div class="editor">
+          <div><span class="c">// tocá acá: la barra lateral debe cerrarse</span></div>
+          <div><span class="k">const</span> tema = {</div>
+          <div>&nbsp;&nbsp;fondo: <span class="s">"#0F1618"</span>,</div>
+          <div>&nbsp;&nbsp;acento: <span class="s">"#E0A458"</span></div>
+          <div>};</div>
+        </div>
+      </wc-page>
+    </main>
+    <div class="hint">1) sidebar abierto<br>2) clic en el editor → se cierra<br>3) botón + → diálogo</div>
+  </div>
+
+<script>
+  document.querySelector('.mask').addEventListener('click', function () {
+    document.getElementById('sidebar').classList.remove('show');
+    this.classList.remove('on');
+  });
+
+  var created = [];
+  window.__created = created;
+  window.acode = {
+    require: function (name) {
+      name = String(name).toLowerCase();
+      if (name === 'sidebarapps') {
+        return {
+          add: function (icon, id, title, init, prepend, onSelected) {
+            var c = document.getElementById('app-container');
+            if (prepend) c.parentNode.insertBefore(c, c.parentNode.children[1]);
+            init(c);
+            if (onSelected) onSelected(c);
+          }
+        };
+      }
+      if (name === 'fsoperation' || name === 'fs') {
+        return function (url) {
+          return {
+            exists: function () { return Promise.resolve(!/\.[a-z0-9]+$/i.test(url)); },
+            createFile: function (n, c) { created.push(url.replace(/\/$/, '') + '/' + n); return Promise.resolve(url.replace(/\/$/, '') + '/' + n); },
+            createDirectory: function (n) { return Promise.resolve(url.replace(/\/$/, '') + '/' + n); }
+          };
+        };
+      }
+      if (name === 'editorfile') {
+        return function (n, o) { this.name = n; this.uri = o && o.uri; this.loaded = false; this.load = function () { this.loaded = true; return Promise.resolve(); }; };
+      }
+      if (name === 'toast') return function (m) { console.log('TOAST:', m); };
+      if (name === 'actionstack') return { push: function () {}, remove: function () {} };
+      if (name === 'openfolder') return { find: function () { return null; } };
+      if (name === 'filebrowser') return function () { return Promise.reject(new Error('cancel')); };
+      if (name === 'prompt') return function () { return Promise.resolve('demo'); };
+      return null;
+    },
+    exec: function (c) { console.log('EXEC:', c); },
+    pushNotification: function (a, b) { console.log('NOTIFY:', a, b); }
+  };
+  window.editorManager = {
+    activeFile: { uri: 'file:///storage/emulated/0/proyecto/app.js', location: 'file:///storage/emulated/0/proyecto' },
+    on: function () {}
+  };
+</script>
+<script src="../decoded/assets/www/ank/ank.js"></script>
+</body>
+</html>
