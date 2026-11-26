@@ -1201,6 +1201,85 @@
   border-top: 1px solid #1c2a2c;
 }
 
+/* ---------- comandos de agente con aprobación ---------- */
+.ank-ai-command {
+  margin: 9px 0;
+  border: 1px solid #33474a;
+  border-left: 2px solid #e0a458;
+  background: #0e1718;
+}
+
+.ank-ai-command-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #1c2a2c;
+}
+
+.ank-ai-command-title {
+  color: #e0a458;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ank-ai-command-status {
+  margin-left: auto;
+  color: #9a927f;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.ank-ai-command-code,
+.ank-ai-command-output {
+  margin: 0;
+  padding: 9px 10px;
+  overflow: auto;
+  max-height: 180px;
+  background: #091112;
+  color: #cfc8b8;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ank-ai-command-output {
+  border-top: 1px solid #1c2a2c;
+  color: #8fb8a0;
+}
+
+.ank-ai-command-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid #1c2a2c;
+}
+
+.ank-ai-command.blocked {
+  border-left-color: #c2624a;
+}
+
+.ank-ai-command.blocked .ank-ai-command-status,
+.ank-ai-command.failed .ank-ai-command-status {
+  color: #c2624a;
+}
+
+.ank-ai-command.done {
+  border-color: #3c5b3c;
+  border-left-color: #7fb37f;
+}
+
+.ank-ai-command.done .ank-ai-command-status {
+  color: #7fb37f;
+}
+
+.ank-ai-command.discarded {
+  opacity: 0.55;
+}
+
+
 /* ---------- mini apps ---------- */
 .ank-ai-appbar {
   display: flex;
