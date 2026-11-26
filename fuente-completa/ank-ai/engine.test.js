@@ -373,3 +373,35 @@ test('rechaza credenciales en query string para evitar filtrarlas en historial d
     (error) => error.code === 'ANK_AI_ENDPOINT_SECRET'
   );
 });
+
+
+test('permite HTTP solo para localhost y direcciones privadas', () => {
+  assert.equal(Engine.endpointUrl('http://localhost:11434/api', 'custom-json'), 'http://localhost:11434/api');
+  assert.equal(Engine.endpointUrl('http://192.168.1.30:11434/api', 'custom-json'), 'http://192.168.1.30:11434/api');
+  assert.equal(Engine.endpointUrl('http://10.0.0.5:8080/infer', 'custom-json'), 'http://10.0.0.5:8080/infer');
+  assert.throws(
+    () => Engine.endpointUrl('http://api.example.com/v1/infer', 'custom-json'),
+    (error) => error.code === 'ANK_AI_ENDPOINT_INSECURE'
+  );
+});
+
+test('permite API personalizada sin clave cuando el encabezado de autenticación está vacío', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    protocol: 'custom-json',
+    endpoint: 'http://192.168.1.30:11434/api/generate',
+    apiKey: '',
+    customAuthHeader: '',
+    customAuthPrefix: '',
+    customHeaders: '{}',
+    customBodyTemplate: '{"model":"{{MODEL}}","prompt":"{{MESSAGES}}"}',
+    customResponsePath: 'response',
+    model: 'llama-local',
+    messages: [{ role: 'user', content: 'Hola' }],
+    http: nativeSuccess({ response: 'Respuesta local sin clave' }, captured)
+  });
+  assert.equal(captured.url, 'http://192.168.1.30:11434/api/generate');
+  assert.equal(captured.options.headers.Authorization, undefined);
+  assert.equal(captured.options.data.model, 'llama-local');
+  assert.equal(result.content, 'Respuesta local sin clave');
+});
