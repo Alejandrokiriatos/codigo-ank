@@ -62,7 +62,10 @@ La plantilla personalizada admite las variables `{{MODEL}}`,
 `{{TEMPERATURE}}` y `{{MAX_TOKENS}}`. Escribe la variable de
 mensajes entre comillas en el JSON de plantilla para que ANK la sustituya por
 el historial estructurado. En los encabezados, las variables de clave y modelo
-se sustituyen dentro de sus valores. Las claves en URLs se rechazan.
+se sustituyen dentro de sus valores. Las claves en URLs se rechazan. Para APIs
+públicas se exige HTTPS; HTTP solo se permite en localhost o direcciones de red
+privada. En una API local sin autenticación, deja vacío el encabezado de
+autenticación y la clave API.
 
 El modo personalizado cubre servicios HTTP POST que acepten y devuelvan JSON.
 WebSocket, protocolos binarios, flujos propietarios o respuestas no JSON
