@@ -1,8 +1,8 @@
 /* ANK_AI_ENGINE_BUNDLE_BEGIN */
-/* Código ANK · Motor API desacoplado
- * Contrato inicial: Chat Completions compatible con OpenAI.
- * No instala binarios, no ejecuta shell y no guarda credenciales.
- * Las credenciales y la configuración las administra la capa privada de ANK.
+/* Código ANK · Motor multi-API
+ * Protocolos: OpenAI Chat Completions compatible, Anthropic Messages y Gemini.
+ * No instala binarios, no ejecuta shell y no almacena credenciales.
+ * Las claves y la configuración pertenecen a la capa privada de ANK.
  */
 (function (root, factory) {
   'use strict';
@@ -12,9 +12,14 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this), function () {
   'use strict';
 
-  var VERSION = '2.0.0';
+  var VERSION = '2.1.0';
   var DEFAULT_TIMEOUT = 120000;
   var MAX_ERROR_LENGTH = 1200;
+  var PROTOCOLS = {
+    openai: 'openai-chat-completions',
+    anthropic: 'anthropic-messages',
+    gemini: 'gemini-generate-content'
+  };
 
   function fail(message, code) {
     var err = new Error(message);
@@ -22,14 +27,18 @@
     return err;
   }
 
-  function endpointUrl(endpoint) {
-    var raw = String(endpoint || '').trim();
-    if (!raw) throw fail('Falta la dirección de la API.', 'ANK_AI_ENDPOINT_REQUIRED');
+  function protocolName(value) {
+    var p = String(value || PROTOCOLS.openai).trim().toLowerCase();
+    if (p === 'openai' || p === 'openai-compatible' || p === 'openai-chat-completions') return PROTOCOLS.openai;
+    if (p === 'anthropic' || p === 'anthropic-messages') return PROTOCOLS.anthropic;
+    if (p === 'gemini' || p === 'google' || p === 'gemini-generate-content') return PROTOCOLS.gemini;
+    throw fail('Protocolo API no compatible: ' + p, 'ANK_AI_PROTOCOL_UNSUPPORTED');
+  }
 
+  function validarUrl(raw) {
     var url;
-    try { url = new URL(raw); }
+    try { url = new URL(String(raw || '').trim()); }
     catch (_) { throw fail('La dirección de la API no es válida.', 'ANK_AI_ENDPOINT_INVALID'); }
-
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       throw fail('La API debe utilizar HTTPS o HTTP para un servidor local.', 'ANK_AI_ENDPOINT_PROTOCOL');
     }
@@ -37,12 +46,31 @@
       throw fail('No incluyas credenciales dentro de la dirección de la API.', 'ANK_AI_ENDPOINT_CREDENTIALS');
     }
     if (!url.hostname) throw fail('La dirección de la API no tiene un servidor válido.', 'ANK_AI_ENDPOINT_INVALID');
-
     url.hash = '';
     url.search = '';
+    return url;
+  }
+
+  function endpointUrl(endpoint, protocol, model) {
+    var p = protocolName(protocol);
+    var url = validarUrl(endpoint);
     var path = url.pathname.replace(/\/+$/, '');
-    if (!/\/chat\/completions$/i.test(path)) path += '/chat/completions';
-    url.pathname = path || '/chat/completions';
+    if (p === PROTOCOLS.openai) {
+      if (!/\/chat\/completions$/i.test(path)) path += '/chat/completions';
+    } else if (p === PROTOCOLS.anthropic) {
+      if (!/\/messages$/i.test(path)) {
+        if (/\/v1$/i.test(path)) path += '/messages';
+        else path += '/v1/messages';
+      }
+    } else {
+      if (!/:generateContent$/i.test(path)) {
+        var modelName = String(model || '').trim();
+        if (!modelName) throw fail('Indica el modelo Gemini para construir el endpoint.', 'ANK_AI_MODEL_REQUIRED');
+        if (!/\/models$/i.test(path)) path += '/models';
+        path += '/' + encodeURIComponent(modelName) + ':generateContent';
+      }
+    }
+    url.pathname = path || '/';
     return url.toString();
   }
 
@@ -57,18 +85,20 @@
     return '';
   }
 
-  function mensajeError(response, body) {
+  function errorDesdeCuerpo(status, statusText, body) {
     var message = '';
     try {
-      var parsed = JSON.parse(body || '{}');
-      message = parsed && parsed.error
-        ? (parsed.error.message || parsed.error.type || '')
-        : (parsed && (parsed.message || parsed.detail)) || '';
+      var parsed = typeof body === 'string' ? JSON.parse(body || '{}') : body || {};
+      if (parsed && parsed.error) {
+        message = parsed.error.message || parsed.error.status || parsed.error.type || '';
+      } else {
+        message = parsed && (parsed.message || parsed.detail) || '';
+      }
     } catch (_) {}
-    if (!message) message = String(body || '').trim().slice(0, 500);
-    if (!message) message = response.statusText || 'Error de conexión';
-    message = message.slice(0, MAX_ERROR_LENGTH);
-    return fail('API HTTP ' + response.status + ': ' + message, 'ANK_AI_HTTP_' + response.status);
+    if (!message && typeof body === 'string') message = body.trim().slice(0, 500);
+    if (!message) message = statusText || 'Error de conexión';
+    message = String(message).slice(0, MAX_ERROR_LENGTH);
+    return fail('API HTTP ' + status + ': ' + message, 'ANK_AI_HTTP_' + status);
   }
 
   function crearControl(signal, timeoutMs) {
@@ -85,9 +115,7 @@
         signal.addEventListener('abort', externalAbort, { once: true });
       }
     }
-    if (timeoutMs > 0) {
-      timer = setTimeout(function () { controller.abort(); }, timeoutMs);
-    }
+    if (timeoutMs > 0) timer = setTimeout(function () { controller.abort(); }, timeoutMs);
     return {
       controller: controller,
       signal: controller.signal,
@@ -98,21 +126,121 @@
     };
   }
 
+  function normalizarMensajes(messages) {
+    return (Array.isArray(messages) ? messages : []).filter(function (m) {
+      return m && typeof m.content === 'string' && String(m.content).trim();
+    }).map(function (m) {
+      var role = String(m.role || 'user').toLowerCase();
+      if (role !== 'system' && role !== 'assistant' && role !== 'user') role = 'user';
+      return { role: role, content: String(m.content) };
+    });
+  }
+
+  function crearSolicitud(options, protocol) {
+    var messages = normalizarMensajes(options.messages);
+    var system = messages.filter(function (m) { return m.role === 'system'; })
+      .map(function (m) { return m.content; }).join('\n\n');
+    var chatMessages = messages.filter(function (m) { return m.role !== 'system'; });
+    var temperature = options.temperature != null && isFinite(Number(options.temperature))
+      ? Math.max(0, Math.min(2, Number(options.temperature))) : 0.2;
+    var maxTokens = options.maxTokens != null && isFinite(Number(options.maxTokens))
+      ? Math.max(1, Math.min(32768, Math.floor(Number(options.maxTokens)))) : null;
+
+    if (protocol === PROTOCOLS.anthropic) {
+      return {
+        body: {
+          model: String(options.model).trim(),
+          max_tokens: maxTokens || 4096,
+          messages: chatMessages.map(function (m) {
+            return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
+          }),
+          temperature: temperature
+        },
+        headers: {
+          'x-api-key': String(options.apiKey),
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        stream: false,
+        system: system
+      };
+    }
+
+    if (protocol === PROTOCOLS.gemini) {
+      var contents = chatMessages.map(function (m) {
+        return {
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        };
+      });
+      var generationConfig = { temperature: temperature };
+      if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
+      var body = { contents: contents, generationConfig: generationConfig };
+      if (system) body.systemInstruction = { parts: [{ text: system }] };
+      return {
+        body: body,
+        headers: {
+          'x-goog-api-key': String(options.apiKey),
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        stream: false
+      };
+    }
+
+    var openBody = {
+      model: String(options.model).trim(),
+      messages: messages,
+      stream: true
+    };
+    if (options.temperature != null && isFinite(Number(options.temperature))) openBody.temperature = temperature;
+    if (maxTokens) openBody.max_tokens = maxTokens;
+    return {
+      body: openBody,
+      headers: {
+        'Authorization': 'Bearer ' + String(options.apiKey),
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream, application/json'
+      },
+      stream: true
+    };
+  }
+
+  function respuestaNormalizada(data, protocol) {
+    var content = '';
+    var usage = null;
+    var finishReason = null;
+    if (protocol === PROTOCOLS.anthropic) {
+      content = textoContenido(data && data.content);
+      usage = data && data.usage || null;
+      finishReason = data && data.stop_reason || null;
+    } else if (protocol === PROTOCOLS.gemini) {
+      var candidate = data && data.candidates && data.candidates[0] || {};
+      var parts = candidate.content && candidate.content.parts || [];
+      content = textoContenido(parts);
+      usage = data && data.usageMetadata || null;
+      finishReason = candidate.finishReason || null;
+      if (!content && data && data.promptFeedback && data.promptFeedback.blockReason) {
+        throw fail('Gemini bloqueó la respuesta: ' + data.promptFeedback.blockReason, 'ANK_AI_PROVIDER_BLOCKED');
+      }
+    } else {
+      var choice = data && data.choices && data.choices[0] || {};
+      content = textoContenido(choice.message && choice.message.content);
+      usage = data && data.usage || null;
+      finishReason = choice.finish_reason || null;
+    }
+    return { content: content, usage: usage, finishReason: finishReason, raw: data };
+  }
+
   function parsearSSE(response, onDelta, signal) {
     if (!response.body || typeof response.body.getReader !== 'function') {
       return response.json().then(function (data) {
-        var choice = data && data.choices && data.choices[0] || {};
-        var content = textoContenido(choice.message && choice.message.content);
-        if (content && onDelta) onDelta(content);
-        return {
-          content: content,
-          usage: data && data.usage || null,
-          finishReason: choice.finish_reason || null,
-          raw: data
-        };
+        var result = respuestaNormalizada(data, PROTOCOLS.openai);
+        if (result.content && onDelta) onDelta(result.content);
+        return result;
       });
     }
-
     var reader = response.body.getReader();
     var decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
     var buffer = '';
@@ -126,9 +254,7 @@
       var payload = value.slice(5).trim();
       if (!payload || payload === '[DONE]') return;
       var data;
-      try { data = JSON.parse(payload); }
-      catch (_) { return; }
-
+      try { data = JSON.parse(payload); } catch (_) { return; }
       if (data.usage) usage = data.usage;
       var choice = data.choices && data.choices[0];
       if (!choice) return;
@@ -151,34 +277,37 @@
           if (buffer) consumirLinea(buffer);
           return { content: content, usage: usage, finishReason: finishReason };
         }
-        buffer += decoder
-          ? decoder.decode(item.value, { stream: true })
-          : String.fromCharCode.apply(null, item.value);
+        buffer += decoder ? decoder.decode(item.value, { stream: true }) : String.fromCharCode.apply(null, item.value);
         var lines = buffer.split(/\r?\n/);
         buffer = lines.pop() || '';
         lines.forEach(consumirLinea);
         return leer();
       });
     }
-
     return leer();
   }
 
-  function chatNativo(http, options, url, body, timeoutMs) {
+  function parsearRespuestaNativa(response, protocol) {
+    var raw = response && response.data != null ? response.data : response;
+    var data = raw;
+    if (typeof raw === 'string') {
+      try { data = JSON.parse(raw); }
+      catch (_) { throw fail('La API devolvió una respuesta que no es JSON válido.', 'ANK_AI_INVALID_JSON'); }
+    }
+    return respuestaNormalizada(data || {}, protocol);
+  }
+
+  function chatNativo(http, options, url, request, timeoutMs, protocol) {
     return new Promise(function (resolve, reject) {
       var finished = false;
       var requestId = null;
       var signal = options.signal;
       var timeout = Math.max(1, Math.ceil(timeoutMs / 1000));
-      var headers = {
-        'Authorization': 'Bearer ' + String(options.apiKey || ''),
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      var nativeBody = Object.assign({}, body, { stream: false });
-      var timer = setTimeout(function () {
-        abort('La API superó el tiempo de espera.', 'ANK_AI_TIMEOUT');
-      }, timeoutMs);
+      var headers = request.headers;
+      var nativeBody = Object.assign({}, request.body);
+      if (request.system && protocol === PROTOCOLS.anthropic) nativeBody.system = request.system;
+      if (request.stream) nativeBody.stream = false;
+      var timer = setTimeout(function () { abort('La API superó el tiempo de espera.', 'ANK_AI_TIMEOUT'); }, timeoutMs);
 
       function cleanup() {
         clearTimeout(timer);
@@ -202,32 +331,9 @@
         }
         settleError(fail(message, code));
       }
-      function onAbort() {
-        abort('La solicitud fue cancelada.', 'ANK_AI_ABORTED');
-      }
-      if (signal && signal.aborted) {
-        onAbort();
-        return;
-      }
+      function onAbort() { abort('La solicitud fue cancelada.', 'ANK_AI_ABORTED'); }
+      if (signal && signal.aborted) { onAbort(); return; }
       if (signal) signal.addEventListener('abort', onAbort, { once: true });
-
-      function processResponse(response) {
-        var raw = response && response.data != null ? response.data : response;
-        var data = raw;
-        if (typeof raw === 'string') {
-          try { data = JSON.parse(raw); }
-          catch (_) { return settleError(fail('La API devolvió una respuesta que no es JSON válido.', 'ANK_AI_INVALID_JSON')); }
-        }
-        var choice = data && data.choices && data.choices[0] || {};
-        var content = textoContenido(choice.message && choice.message.content);
-        if (content && options.onDelta) options.onDelta(content);
-        settleSuccess({
-          content: content,
-          usage: data && data.usage || null,
-          finishReason: choice.finish_reason || null,
-          raw: data
-        });
-      }
 
       try {
         requestId = http.sendRequest(url, {
@@ -239,20 +345,26 @@
           connectTimeout: timeout,
           readTimeout: timeout,
           followRedirect: true
-        }, processResponse, function (error) {
+        }, function (response) {
+          var status = response && response.status != null ? response.status : 200;
+          if (status < 200 || status >= 300) {
+            var body = response && response.data != null ? response.data : '';
+            settleError(errorDesdeCuerpo(status, response.statusText, body));
+            return;
+          }
+          try {
+            var result = parsearRespuestaNativa(response, protocol);
+            if (result.content && options.onDelta) options.onDelta(result.content);
+            settleSuccess(result);
+          } catch (error) { settleError(error); }
+        }, function (error) {
           var response = error && error.status != null ? error : (error && error.error && error.error.status != null ? error.error : null);
           var raw = error && error.error != null ? error.error : (error && error.data != null ? error.data : '');
           var status = response && response.status != null ? response.status : (error && error.status ? error.status : 0);
-          var msg = '';
-          if (typeof raw === 'string') {
-            try {
-              var parsed = JSON.parse(raw);
-              msg = parsed && parsed.error && (parsed.error.message || parsed.error.type) || parsed.message || '';
-            } catch (_) { msg = raw.slice(0, 500); }
-          }
-          settleError(fail(
-            status ? 'API HTTP ' + status + ': ' + (msg || 'Error de proveedor') : 'Error de conexión nativa: ' + (msg || String(error && (error.message || error.error) || 'sin detalle')),
-            status ? 'ANK_AI_HTTP_' + status : 'ANK_AI_NATIVE_HTTP'
+          if (status) settleError(errorDesdeCuerpo(status, response && response.statusText, raw));
+          else settleError(fail(
+            'Error de conexión nativa: ' + String(error && (error.message || error.error) || 'sin detalle').slice(0, 500),
+            'ANK_AI_NATIVE_HTTP'
           ));
         });
       } catch (error) {
@@ -268,9 +380,12 @@
     if (!apiKey) return Promise.reject(fail('Falta la clave API.', 'ANK_AI_KEY_REQUIRED'));
     if (!model) return Promise.reject(fail('Indica el nombre del modelo.', 'ANK_AI_MODEL_REQUIRED'));
 
+    var protocol;
     var url;
-    try { url = endpointUrl(options.endpoint); }
-    catch (err) { return Promise.reject(err); }
+    try {
+      protocol = protocolName(options.protocol);
+      url = endpointUrl(options.endpoint, protocol, model);
+    } catch (err) { return Promise.reject(err); }
 
     var nativeHttp = options.http && typeof options.http.sendRequest === 'function' ? options.http : null;
     if (!nativeHttp && typeof fetch !== 'function') {
@@ -279,38 +394,27 @@
 
     var timeoutMs = Number(options.timeoutMs) || DEFAULT_TIMEOUT;
     var control = crearControl(options.signal, nativeHttp ? 0 : timeoutMs);
-    var messages = Array.isArray(options.messages) ? options.messages : [];
-    var body = {
-      model: model,
-      messages: messages,
-      stream: true
-    };
-    if (options.temperature != null && isFinite(Number(options.temperature))) {
-      body.temperature = Math.max(0, Math.min(2, Number(options.temperature)));
-    }
-    if (options.maxTokens != null && isFinite(Number(options.maxTokens))) {
-      body.max_tokens = Math.max(1, Math.min(32768, Math.floor(Number(options.maxTokens))));
-    }
+    var request;
+    try { request = crearSolicitud(Object.assign({}, options, { apiKey: apiKey, model: model }), protocol); }
+    catch (error) { control.dispose(); return Promise.reject(error); }
 
-    var nativeOptions = nativeHttp
-      ? Object.assign({}, options, { signal: control.signal })
-      : options;
-    var request = nativeHttp
-      ? chatNativo(nativeHttp, nativeOptions, url, body, timeoutMs)
+    var pending = nativeHttp
+      ? chatNativo(nativeHttp, Object.assign({}, options, { apiKey: apiKey }), url, request, timeoutMs, protocol)
       : fetch(url, {
           method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + apiKey,
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream, application/json'
-          },
-          body: JSON.stringify(body),
+          headers: request.headers,
+          body: JSON.stringify(request.body),
           signal: control.signal
         }).then(function (response) {
           if (!response.ok) {
-            return response.text().then(function (txt) { throw mensajeError(response, txt); });
+            return response.text().then(function (txt) { throw errorDesdeCuerpo(response.status, response.statusText, txt); });
           }
-          return parsearSSE(response, options.onDelta, control.signal);
+          if (protocol === PROTOCOLS.openai && request.stream) return parsearSSE(response, options.onDelta, control.signal);
+          return response.json().then(function (data) {
+            var result = respuestaNormalizada(data, protocol);
+            if (result.content && options.onDelta) options.onDelta(result.content);
+            return result;
+          });
         }).catch(function (err) {
           if (err && err.code) throw err;
           if (err && err.name === 'AbortError') {
@@ -323,9 +427,11 @@
           throw fail(message.slice(0, MAX_ERROR_LENGTH), 'ANK_AI_NETWORK');
         });
 
-    return request.then(function (result) {
+    return pending.then(function (result) {
       control.dispose();
-      if (!result.content.trim()) throw fail('La API respondió, pero no devolvió texto.', 'ANK_AI_EMPTY_RESPONSE');
+      if (!result || !String(result.content || '').trim()) {
+        throw fail('La API respondió, pero no devolvió texto.', 'ANK_AI_EMPTY_RESPONSE');
+      }
       return result;
     }, function (err) {
       control.dispose();
@@ -335,6 +441,8 @@
 
   return {
     version: VERSION,
+    protocols: PROTOCOLS,
+    protocolName: protocolName,
     endpointUrl: endpointUrl,
     chat: chat
   };
@@ -356,8 +464,15 @@
 
   var LOG_MAX = 400;
   var API_ENDPOINT_DEFAULT = 'https://api.openai.com/v1';
+  var API_PROTOCOL_DEFAULT = 'openai-chat-completions';
+
+  function endpointPredeterminado(protocol) {
+    if (protocol === 'anthropic-messages') return 'https://api.anthropic.com/v1';
+    if (protocol === 'gemini-generate-content') return 'https://generativelanguage.googleapis.com/v1beta';
+    return API_ENDPOINT_DEFAULT;
+  }
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.0.0';
+  var PANEL_VERSION = '2.1.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '26/11/2026';
@@ -418,6 +533,7 @@
     project: leer('ank.ai.project', 'ank'),
     model: '',
     endpoint: API_ENDPOINT_DEFAULT,
+    protocol: API_PROTOCOL_DEFAULT,
     apiKey: '',
     apiConfigured: false,
     modo: leer('ank.ai.modo', 'build'),
@@ -857,7 +973,8 @@
     return leerTexto(rutaConfigApi()).then(function (raw) {
       if (!raw.trim()) throw new Error('sin configuración');
       var data = JSON.parse(raw);
-      st.endpoint = String(data.endpoint || API_ENDPOINT_DEFAULT);
+      st.protocol = window.ANKAIEngine.protocolName(data.protocol || API_PROTOCOL_DEFAULT);
+      st.endpoint = String(data.endpoint || endpointPredeterminado(st.protocol));
       st.model = String(data.model || '');
       st.apiKey = String(data.apiKey || '');
       st.apiConfigured = !!(st.endpoint && st.model && st.apiKey);
@@ -868,26 +985,34 @@
       st.apiConfigured = false;
       st.credencial = 'falta';
       st.model = '';
+      st.protocol = API_PROTOCOL_DEFAULT;
       st.endpoint = API_ENDPOINT_DEFAULT;
       return false;
     });
   }
 
   function guardarCredencial() {
-    var endpoint = String((q('#ank-ai-endpoint') && q('#ank-ai-endpoint').value) || st.endpoint || API_ENDPOINT_DEFAULT).trim();
+    var protocolInput = q('#ank-ai-protocolo');
+    var protocol;
+    try {
+      protocol = window.ANKAIEngine.protocolName((protocolInput && protocolInput.value) || st.protocol || API_PROTOCOL_DEFAULT);
+    } catch (protocolError) {
+      return aviso(protocolError.message || 'Selecciona un protocolo compatible.');
+    }
+    var endpoint = String((q('#ank-ai-endpoint') && q('#ank-ai-endpoint').value) || st.endpoint || endpointPredeterminado(protocol)).trim();
     var model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
     var enteredKey = String((q('#ank-ai-key') && q('#ank-ai-key').value) || '').trim();
     var apiKey = enteredKey || st.apiKey;
     if (!window.ANKAIEngine) return aviso('No se ha cargado el motor API de ANK.');
     if (!apiKey) return aviso('Introduce la clave API.');
     if (!model) return aviso('Introduce el identificador exacto del modelo.');
-    try { window.ANKAIEngine.endpointUrl(endpoint); }
+    try { window.ANKAIEngine.endpointUrl(endpoint, protocol, model); }
     catch (e) { return aviso(e.message || 'La dirección API no es válida.'); }
-    var data = { version: 1, protocol: 'openai-chat-completions', endpoint: endpoint, model: model, apiKey: apiKey, temperature: 0.2 };
+    var data = { version: 2, protocol: protocol, endpoint: endpoint, model: model, apiKey: apiKey, temperature: 0.2 };
     return dirsIniciales().then(function () {
       return escribir(rutaConfigApi(), JSON.stringify(data));
     }).then(function () {
-      st.endpoint = endpoint; st.model = model; st.apiKey = apiKey;
+      st.endpoint = endpoint; st.protocol = protocol; st.model = model; st.apiKey = apiKey;
       st.apiConfigured = true; st.credencial = 'listo';
       if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
       log('i', 'Configuración API guardada en el almacenamiento privado de ANK.');
@@ -908,7 +1033,7 @@
     log('i', 'Probando la conexión API…');
     aviso('Probando conexión…');
     window.ANKAIEngine.chat({
-      endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
       messages: [
         { role: 'system', content: 'Responde únicamente OK.' },
         { role: 'user', content: 'Prueba de conexión de Código ANK. Responde OK.' }
@@ -2962,7 +3087,7 @@
       });
       log('i', 'Enviando solicitud a la API: ' + st.model);
       return window.ANKAIEngine.chat({
-        endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+        protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
         messages: [{ role: 'system', content: systemPrompt }].concat(history),
         temperature: 0.2, timeoutMs: 120000,
         signal: st.abortController ? st.abortController.signal : undefined,
@@ -3083,7 +3208,7 @@
       return (m.rol === 'user' ? 'Usuario: ' : 'Asistente: ') + String(m.texto || '').replace(/\s+/g, ' ').slice(0, 400);
     }).join('\n');
     window.ANKAIEngine.chat({
-      endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+      protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
       messages: [
         { role: 'system', content: 'Resume solo hechos técnicos confirmados, sin inventar.' },
         { role: 'user', content: 'Resume esta conversación en 1 a 3 viñetas, en español.\n\n' + history }
@@ -3141,6 +3266,8 @@
     if (model && model.value !== st.model) model.value = st.model;
     var endpoint = q('#ank-ai-endpoint');
     if (endpoint && endpoint.value !== st.endpoint) endpoint.value = st.endpoint;
+    var protocol = q('#ank-ai-protocolo');
+    if (protocol && protocol.value !== st.protocol) protocol.value = st.protocol;
     var label = q('#ank-ai-chat-modelo');
     if (label) label.textContent = st.model || 'Sin modelo';
     var mode = q('.ank-ai-modo');
@@ -3839,12 +3966,15 @@
 
           '<section class="ank-ai-view" data-view="entorno">' +
             '<div class="ank-ai-setup">' +
-              '<p class="ank-ai-lead">Conecta ANK a una API compatible con OpenAI Chat Completions. El terminal Linux es independiente y opcional.</p>' +
+              '<p class="ank-ai-lead">Conecta ANK directamente con tu proveedor. Admite APIs compatibles con OpenAI, Anthropic Messages y Google Gemini. El terminal Linux es independiente y opcional.</p>' +
               '<div class="ank-ai-steps"></div>' +
-              '<div class="ank-ai-field"><label>Protocolo</label><input type="text" value="Chat Completions compatible con OpenAI" readonly />' +
-                '<div class="ank-ai-hint">Los adaptadores nativos para otros protocolos se añadirán en el bloque 3.</div></div>' +
-              '<div class="ank-ai-field"><label>Endpoint base</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
-              '<div class="ank-ai-field"><label>Modelo</label><input id="ank-ai-modelo" type="text" spellcheck="false" autocomplete="off" placeholder="identificador-exacto-del-modelo" /></div>' +
+              '<div class="ank-ai-field"><label>Formato de API</label><select id="ank-ai-protocolo">' +
+                '<option value="openai-chat-completions">OpenAI compatible (OpenAI, OpenRouter, DeepSeek, Groq, Mistral y otros)</option>' +
+                '<option value="anthropic-messages">Anthropic Messages</option>' +
+                '<option value="gemini-generate-content">Google Gemini</option>' +
+              '</select><div class="ank-ai-hint">Selecciona el formato que ofrece tu proveedor. Para otros servicios, usa OpenAI compatible si documentan Chat Completions.</div></div>' +
+              '<div class="ank-ai-field"><label>URL base del proveedor</label><input id="ank-ai-endpoint" type="url" spellcheck="false" placeholder="https://api.openai.com/v1" /></div>' +
+              '<div class="ank-ai-field"><label>ID exacto del modelo</label><input id="ank-ai-modelo" type="text" spellcheck="false" autocomplete="off" placeholder="identificador-exacto-del-modelo" /></div>' +
               '<div class="ank-ai-field"><label>Clave API</label><input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Pega tu clave API" />' +
                 '<div class="ank-ai-hint">Se guarda en el almacenamiento privado de la app. El cifrado con Android Keystore se incorpora en el bloque de seguridad.</div></div>' +
               '<div class="ank-ai-field ank-ai-appbar"><button class="ank-ai-btn primary" data-accion="guardar-clave">Guardar conexión</button>' +
@@ -4015,7 +4145,7 @@
     leerTexto(rutaMemProyecto(project)).then(function (memory) {
       var prompt = 'Reescribe este AGENTS.md en menos de 60 líneas. Conserva objetivo, estado, decisiones y bitácora reciente. No inventes datos. Devuelve solo Markdown.\n\n' + (memory || plantillaProyecto(project));
       return window.ANKAIEngine.chat({
-        endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
+        protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
         messages: [
           { role: 'system', content: 'Editas memorias técnicas. Conserva decisiones y hechos, no inventes.' },
           { role: 'user', content: prompt }
@@ -4148,6 +4278,18 @@
       guardar('ank.ai.model', st.model);
       var label = q('#ank-ai-chat-modelo');
       if (label) label.textContent = st.model || 'Sin modelo';
+      return;
+    }
+    if (e.target.id === 'ank-ai-protocolo') {
+      var siguiente;
+      try { siguiente = window.ANKAIEngine.protocolName(e.target.value); }
+      catch (error) { aviso(error.message || 'Protocolo no compatible.'); return; }
+      var endpointActual = q('#ank-ai-endpoint');
+      var anteriorDefault = endpointPredeterminado(st.protocol || API_PROTOCOL_DEFAULT);
+      var nuevoDefault = endpointPredeterminado(siguiente);
+      if (!st.endpoint || st.endpoint === anteriorDefault) st.endpoint = nuevoDefault;
+      st.protocol = siguiente;
+      if (endpointActual && (!endpointActual.value || endpointActual.value === anteriorDefault)) endpointActual.value = nuevoDefault;
       return;
     }
     if (e.target.id === 'ank-ai-endpoint') { st.endpoint = String(e.target.value || '').trim(); return; }
