@@ -163,6 +163,9 @@
     if (value && typeof value === 'object') {
       var output = {};
       Object.keys(value).forEach(function (key) {
+        if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+          throw fail('La plantilla contiene una propiedad JSON no permitida.', 'ANK_AI_CUSTOM_BODY_INVALID');
+        }
         output[key] = sustituirPlantilla(value[key], variables);
       });
       return output;
@@ -202,9 +205,13 @@
       if (value == null || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean')) {
         throw fail('El valor del encabezado ' + name + ' debe ser texto o número.', 'ANK_AI_CUSTOM_HEADER_INVALID');
       }
-      headers[name] = String(value)
+      var headerValue = String(value)
         .replace(/\{\{API_KEY\}\}/g, String(options.apiKey || ''))
         .replace(/\{\{MODEL\}\}/g, String(options.model || ''));
+      if (/[\r\n]/.test(headerValue)) {
+        throw fail('Los encabezados no pueden contener saltos de línea.', 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
+      headers[name] = headerValue;
     });
     var authName = String(options.customAuthHeader == null ? 'Authorization' : options.customAuthHeader).trim();
     if (authName) {
@@ -213,6 +220,9 @@
         throw fail('Nombre del encabezado de autenticación no válido.', 'ANK_AI_CUSTOM_HEADER_INVALID');
       }
       var prefix = String(options.customAuthPrefix == null ? 'Bearer' : options.customAuthPrefix).trim();
+      if (/[\r\n]/.test(prefix)) {
+        throw fail('El prefijo de autenticación no puede contener saltos de línea.', 'ANK_AI_CUSTOM_HEADER_INVALID');
+      }
       headers[authName] = (prefix ? prefix + ' ' : '') + String(options.apiKey || '');
     }
     return headers;
@@ -1142,11 +1152,16 @@
     var model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
     var enteredKey = String((q('#ank-ai-key') && q('#ank-ai-key').value) || '').trim();
     var apiKey = enteredKey || st.apiKey;
-    var customAuthHeader = String((q('#ank-ai-custom-auth-header') && q('#ank-ai-custom-auth-header').value) || st.customAuthHeader || 'Authorization').trim();
-    var customAuthPrefix = String((q('#ank-ai-custom-auth-prefix') && q('#ank-ai-custom-auth-prefix').value) || '');
-    var customHeaders = String((q('#ank-ai-custom-headers') && q('#ank-ai-custom-headers').value) || st.customHeaders || '{}').trim();
-    var customBodyTemplate = String((q('#ank-ai-custom-body') && q('#ank-ai-custom-body').value) || st.customBodyTemplate || CUSTOM_BODY_DEFAULT).trim();
-    var customResponsePath = String((q('#ank-ai-custom-response') && q('#ank-ai-custom-response').value) || st.customResponsePath || 'choices.0.message.content').trim();
+    var customAuthHeaderEl = q('#ank-ai-custom-auth-header');
+    var customAuthPrefixEl = q('#ank-ai-custom-auth-prefix');
+    var customHeadersEl = q('#ank-ai-custom-headers');
+    var customBodyEl = q('#ank-ai-custom-body');
+    var customResponseEl = q('#ank-ai-custom-response');
+    var customAuthHeader = String(customAuthHeaderEl ? customAuthHeaderEl.value : (st.customAuthHeader == null ? 'Authorization' : st.customAuthHeader)).trim();
+    var customAuthPrefix = String(customAuthPrefixEl ? customAuthPrefixEl.value : (st.customAuthPrefix == null ? 'Bearer' : st.customAuthPrefix));
+    var customHeaders = String(customHeadersEl ? customHeadersEl.value : (st.customHeaders || '{}')).trim();
+    var customBodyTemplate = String(customBodyEl ? customBodyEl.value : (st.customBodyTemplate || CUSTOM_BODY_DEFAULT)).trim();
+    var customResponsePath = String(customResponseEl ? customResponseEl.value : (st.customResponsePath || 'choices.0.message.content')).trim();
     if (!endpoint) return aviso('Introduce la URL completa del endpoint API.');
     if (protocol === 'custom-json') {
       try {
