@@ -1,0 +1,5 @@
+# Nunca se publican: llevan el token y datos del canal/grupo.
+token.txt
+config.json
+estado.json
+*.tmp

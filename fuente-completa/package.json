@@ -1,0 +1,13 @@
+{
+  "name": "ank-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bot de Código ANK para el canal y el grupo de Telegram",
+  "main": "index.js",
+  "scripts": {
+    "estado": "node cli.js estado",
+    "revisar": "node cli.js revisar",
+    "pasada": "node cli.js pasada",
+    "escuchar": "node cli.js escuchar"
+  }
+}

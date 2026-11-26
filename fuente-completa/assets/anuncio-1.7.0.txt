@@ -1,0 +1,34 @@
+🚀 <b>Código ANK 1.7.0 — ahora la IA te crea apps dentro del teléfono</b>
+
+Antes escribías código. Ahora le pedís una app y la tenés funcionando. 🧡
+
+<b>✨ Mini apps: apps hechas por vos, sin PC</b>
+• Le contás qué querés en <b>IA → Apps → Crear app</b> y el asistente arma <code>ankapp.json</code>, HTML, CSS y JS.
+• Ves el <b>diff</b> de cada archivo y aplicás solo lo que te gusta.
+• <b>Abrir</b> la ejecuta a pantalla completa. <b>Editar</b> vuelve al chat de esa app para seguir mejorándola las veces que quieras. ♻️
+• Permisos reales con tu consentimiento: cámara, archivos, notificaciones, compartir, portapapeles, vibración y almacenamiento propio.
+• La <b>Ayuda</b> en español te enseña los matices que nadie explica: estructura, API, límites y errores, con ejemplos copiables.
+• Datos aislados por app: una mini app no puede leer tus chats, tu memoria ni otros proyectos. 🔒
+
+<b>🧠 Lo que ANK tiene y un editor con IA normal no</b>
+• No necesitás computadora: terminal Linux, entorno y asistente corren en el mismo teléfono. 📱
+• Todo junto desde la instalación: <b>editor + terminal + IA</b>, con una sola clave gratuita de OpenCode.
+• <b>Modelos gratuitos</b> incluidos (DeepSeek, GLM, Mimo y más) y también podés conectar tu clave de OpenAI, Anthropic, DeepSeek, Groq o Google.
+• Chats con <b>memoria por proyecto</b>, buscador, exportación a Markdown y resumen automático de lo trabajado.
+• Propuestas de archivos con <b>diff y respaldo .bak</b>: nada se escribe sin tu OK.
+• Actualizaciones <b>firmadas</b> que bajan solas: menú ⋮ → <b>Actualizar ANK</b>. Sin reinstalar el APK y sin perder nada. 🔐
+• Todo en español, con la interfaz de ANK.
+
+<b>🧩 Qué podés crear hoy</b>
+Gastos, tareas, notas, listas, recordatorios, inventario, calculadoras, formularios con fotos… cualquier cosa que se pueda hacer con HTML, CSS y JS, con los datos guardados en tu teléfono.
+
+<b>📲 Cómo empezar</b>
+1. Abrí ANK y tocá el botón <b>IA</b>.
+2. Menú ⋮ → <b>Actualizar ANK</b>: te lleva a la 1.7.0.
+3. <b>Apps → Crear app</b> y contale qué querés.
+
+<b>🛠️ Si algo falla</b>
+Registro → <b>Diagnóstico</b> arma el informe listo para pegar acá. Lo leemos y lo arreglamos.
+
+Canal: @codigoank · Grupo: @Codigoank1
+Hecho para Android, pensado para crear sin computadora. 🧡
