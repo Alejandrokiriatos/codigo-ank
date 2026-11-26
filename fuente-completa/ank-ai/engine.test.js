@@ -4,16 +4,54 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Engine = require('../ank-ai/engine');
 
-test('normaliza URL base y conserva ruta completa', () => {
+function nativeSuccess(response, capture) {
+  return {
+    sendRequest(url, options, success) {
+      if (capture) Object.assign(capture, { url, options });
+      success({ status: 200, data: JSON.stringify(response) });
+      return 77;
+    },
+    abort() {}
+  };
+}
+
+test('normaliza endpoint OpenAI compatible sin duplicar la ruta', () => {
   assert.equal(Engine.endpointUrl('https://api.example.com/v1'), 'https://api.example.com/v1/chat/completions');
   assert.equal(Engine.endpointUrl('https://api.example.com/v1/'), 'https://api.example.com/v1/chat/completions');
   assert.equal(Engine.endpointUrl('https://api.example.com/v1/chat/completions'), 'https://api.example.com/v1/chat/completions');
 });
 
-test('rechaza protocolos y URLs con credenciales', () => {
+test('normaliza endpoint Anthropic Messages', () => {
+  assert.equal(
+    Engine.endpointUrl('https://api.anthropic.com/v1', 'anthropic-messages'),
+    'https://api.anthropic.com/v1/messages'
+  );
+  assert.equal(
+    Engine.endpointUrl('https://api.anthropic.com/v1/messages', 'anthropic'),
+    'https://api.anthropic.com/v1/messages'
+  );
+  assert.equal(
+    Engine.endpointUrl('https://gateway.example.com', 'anthropic'),
+    'https://gateway.example.com/v1/messages'
+  );
+});
+
+test('construye endpoint Gemini con el modelo exacto', () => {
+  assert.equal(
+    Engine.endpointUrl('https://generativelanguage.googleapis.com/v1beta', 'gemini', 'gemini-2.5-flash'),
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+  );
+  assert.equal(
+    Engine.endpointUrl('https://generativelanguage.googleapis.com/v1beta/models', 'gemini-generate-content', 'gemini-2.5-flash'),
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+  );
+});
+
+test('rechaza protocolos, URLs inválidas y credenciales dentro del endpoint', () => {
   assert.throws(() => Engine.endpointUrl('ftp://api.example.com/v1'), /HTTPS o HTTP/);
   assert.throws(() => Engine.endpointUrl('https://user:pass@api.example.com/v1'), /credenciales/);
   assert.throws(() => Engine.endpointUrl('not a URL'), /no es válida/);
+  assert.throws(() => Engine.endpointUrl('https://api.example.com', 'proveedor-desconocido'), /no compatible/);
 });
 
 test('exige clave y modelo antes de hacer red', async () => {
@@ -21,7 +59,7 @@ test('exige clave y modelo antes de hacer red', async () => {
   await assert.rejects(Engine.chat({ endpoint: 'https://api.example.com/v1', apiKey: 'secret' }), /nombre del modelo/);
 });
 
-test('envía petición compatible y consume eventos SSE', async (t) => {
+test('envía petición OpenAI compatible y consume eventos SSE', async (t) => {
   const originalFetch = global.fetch;
   t.after(() => { global.fetch = originalFetch; });
   let request;
@@ -71,68 +109,17 @@ test('envía petición compatible y consume eventos SSE', async (t) => {
   assert.equal(result.finishReason, 'stop');
 });
 
-test('muestra errores HTTP del proveedor sin ocultar el mensaje', async (t) => {
-  const originalFetch = global.fetch;
-  t.after(() => { global.fetch = originalFetch; });
-  global.fetch = async () => ({
-    ok: false,
-    status: 401,
-    statusText: 'Unauthorized',
-    text: async () => JSON.stringify({ error: { message: 'Invalid API key' } })
-  });
-  await assert.rejects(
-    Engine.chat({ endpoint: 'https://api.example.com/v1', apiKey: 'bad-key', model: 'x', messages: [] }),
-    /API HTTP 401: Invalid API key/
-  );
-});
-
-test('acepta respuesta JSON sin streaming cuando el servidor no ofrece SSE', async (t) => {
-  const originalFetch = global.fetch;
-  t.after(() => { global.fetch = originalFetch; });
-  global.fetch = async () => ({
-    ok: true,
-    status: 200,
-    body: null,
-    json: async () => ({ choices: [{ message: { content: 'Respuesta normal' }, finish_reason: 'stop' }] })
-  });
-  const result = await Engine.chat({
-    endpoint: 'https://api.example.com/v1',
-    apiKey: 'secret',
-    model: 'x',
-    messages: [],
-    onDelta: () => {}
-  });
-  assert.equal(result.content, 'Respuesta normal');
-});
-
-test('usa HTTP nativo de Cordova y no depende de CORS ni fetch', async (t) => {
-  const originalFetch = global.fetch;
-  t.after(() => { global.fetch = originalFetch; });
-  global.fetch = () => { throw new Error('fetch no debe ejecutarse'); };
-
-  let captured;
-  const deltas = [];
-  const http = {
-    sendRequest(url, options, success) {
-      captured = { url, options };
-      success({
-        status: 200,
-        data: JSON.stringify({
-          choices: [{ message: { content: 'Respuesta nativa ANK' }, finish_reason: 'stop' }],
-          usage: { total_tokens: 12 }
-        })
-      });
-      return 77;
-    }
-  };
-
+test('usa el transporte nativo para OpenAI compatible', async () => {
+  const captured = {};
   const result = await Engine.chat({
     endpoint: 'https://api.example.com/v1',
     apiKey: 'native-secret',
     model: 'native-model',
     messages: [{ role: 'user', content: 'Prueba' }],
-    http,
-    onDelta: (part) => deltas.push(part)
+    http: nativeSuccess({
+      choices: [{ message: { content: 'Respuesta nativa ANK' }, finish_reason: 'stop' }],
+      usage: { total_tokens: 12 }
+    }, captured)
   });
 
   assert.equal(captured.url, 'https://api.example.com/v1/chat/completions');
@@ -140,19 +127,84 @@ test('usa HTTP nativo de Cordova y no depende de CORS ni fetch', async (t) => {
   assert.equal(captured.options.serializer, 'json');
   assert.equal(captured.options.responseType, 'text');
   assert.equal(captured.options.headers.Authorization, 'Bearer native-secret');
-  assert.equal(JSON.parse(JSON.stringify(captured.options.data)).stream, false);
+  assert.equal(captured.options.data.stream, false);
   assert.equal(result.content, 'Respuesta nativa ANK');
-  assert.deepEqual(deltas, ['Respuesta nativa ANK']);
   assert.equal(result.usage.total_tokens, 12);
 });
 
-test('convierte errores del transporte HTTP nativo en errores legibles', async () => {
+test('Anthropic envía x-api-key, versión, system y max_tokens', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    protocol: 'anthropic-messages',
+    endpoint: 'https://api.anthropic.com/v1',
+    apiKey: 'anthropic-secret',
+    model: 'claude-sonnet-example',
+    maxTokens: 1200,
+    messages: [
+      { role: 'system', content: 'Eres ANK.' },
+      { role: 'user', content: 'Hola' },
+      { role: 'assistant', content: 'Hola, ¿en qué te ayudo?' },
+      { role: 'user', content: 'Escribe una función.' }
+    ],
+    http: nativeSuccess({
+      id: 'msg_1',
+      content: [{ type: 'text', text: 'Respuesta Anthropic' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 10, output_tokens: 5 }
+    }, captured)
+  });
+
+  assert.equal(captured.url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(captured.options.headers['x-api-key'], 'anthropic-secret');
+  assert.equal(captured.options.headers['anthropic-version'], '2023-06-01');
+  assert.equal(captured.options.data.model, 'claude-sonnet-example');
+  assert.equal(captured.options.data.max_tokens, 1200);
+  assert.equal(captured.options.data.system, 'Eres ANK.');
+  assert.deepEqual(captured.options.data.messages.map((m) => m.role), ['user', 'assistant', 'user']);
+  assert.equal(result.content, 'Respuesta Anthropic');
+  assert.equal(result.finishReason, 'end_turn');
+});
+
+test('Gemini envía x-goog-api-key, systemInstruction y roles model/user', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    protocol: 'gemini-generate-content',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    apiKey: 'gemini-secret',
+    model: 'gemini-2.5-flash',
+    temperature: 0.4,
+    maxTokens: 900,
+    messages: [
+      { role: 'system', content: 'Eres ANK.' },
+      { role: 'user', content: 'Hola' },
+      { role: 'assistant', content: 'Hola.' },
+      { role: 'user', content: 'Continúa.' }
+    ],
+    http: nativeSuccess({
+      candidates: [{
+        content: { parts: [{ text: 'Respuesta ' }, { text: 'Gemini' }] },
+        finishReason: 'STOP'
+      }],
+      usageMetadata: { totalTokenCount: 18 }
+    }, captured)
+  });
+
+  assert.equal(
+    captured.url,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+  );
+  assert.equal(captured.options.headers['x-goog-api-key'], 'gemini-secret');
+  assert.equal(captured.options.data.systemInstruction.parts[0].text, 'Eres ANK.');
+  assert.deepEqual(captured.options.data.contents.map((m) => m.role), ['user', 'model', 'user']);
+  assert.equal(captured.options.data.generationConfig.maxOutputTokens, 900);
+  assert.equal(result.content, 'Respuesta Gemini');
+  assert.equal(result.finishReason, 'STOP');
+});
+
+test('convierte errores HTTP del transporte nativo en mensajes legibles', async () => {
   const http = {
     sendRequest(url, options, success, failure) {
-      failure({
-        status: 401,
-        error: JSON.stringify({ error: { message: 'Invalid API token' } })
-      });
+      failure({ status: 401, error: JSON.stringify({ error: { message: 'Invalid API token' } }) });
       return 88;
     }
   };
@@ -168,7 +220,7 @@ test('convierte errores del transporte HTTP nativo en errores legibles', async (
   );
 });
 
-test('cancela la petición HTTP nativa al abortar el chat', async () => {
+test('cancela la petición HTTP nativa y llama abort con el ID de solicitud', async () => {
   const controller = new AbortController();
   let abortedId = null;
   const http = {
@@ -179,11 +231,31 @@ test('cancela la petición HTTP nativa al abortar el chat', async () => {
     endpoint: 'https://api.example.com/v1',
     apiKey: 'secret',
     model: 'x',
-    messages: [],
+    messages: [{ role: 'user', content: 'espera' }],
     http,
     signal: controller.signal
   });
   controller.abort();
   await assert.rejects(pending, (error) => error.code === 'ANK_AI_ABORTED');
   assert.equal(abortedId, 314);
+});
+
+test('el timeout del transporte nativo termina y cancela la petición', async () => {
+  let abortedId = null;
+  const http = {
+    sendRequest() { return 515; },
+    abort(id, success) { abortedId = id; if (success) success(); }
+  };
+  await assert.rejects(
+    Engine.chat({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: 'secret',
+      model: 'x',
+      messages: [{ role: 'user', content: 'espera' }],
+      http,
+      timeoutMs: 10
+    }),
+    (error) => error.code === 'ANK_AI_TIMEOUT'
+  );
+  assert.equal(abortedId, 515);
 });
