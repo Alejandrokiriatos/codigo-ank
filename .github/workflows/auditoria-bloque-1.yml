@@ -100,9 +100,11 @@ jobs:
           const fs = require('fs');
           const registry = fs.readFileSync('decoded/assets/www/cordova_plugins.js', 'utf8');
           const plugin = fs.readFileSync('decoded/assets/www/plugins/cordova-plugin-advanced-http/www/advanced-http.js', 'utf8');
+          const api = fs.readFileSync('decoded/assets/www/plugins/cordova-plugin-advanced-http/www/public-interface.js', 'utf8');
           const panel = fs.readFileSync('decoded/assets/www/ank/ai.js', 'utf8');
           if (!registry.includes('"cordova.plugin.http"')) throw new Error('Cordova no registra cordova.plugin.http');
-          if (!plugin.includes('sendRequest') || !plugin.includes('abort')) throw new Error('El plugin HTTP no expone envío/cancelación');
+          if (!plugin.includes("require(pluginId + '.public-interface')")) throw new Error('El plugin HTTP no carga su interfaz pública');
+          if (!api.includes('sendRequest: sendRequest') || !api.includes('function abort(')) throw new Error('La interfaz HTTP no expone envío/cancelación');
           if (!panel.includes('function clienteHttpNativo()') || !panel.includes('http: clienteHttpNativo()')) throw new Error('El panel no conecta el transporte nativo');
           if (!panel.includes("return st.apiConfigured;")) throw new Error('No se pudo verificar la carga de configuración API');
           console.log('Plugin HTTP Cordova registrado y conectado al asistente.');
