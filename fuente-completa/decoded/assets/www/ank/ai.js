@@ -1145,14 +1145,23 @@
       var data = JSON.parse(raw);
       st.protocol = window.ANKAIEngine.protocolName(data.protocol || API_PROTOCOL_DEFAULT);
       st.endpoint = String(data.endpoint || endpointPredeterminado(st.protocol));
-      st.model = String(data.model || '');
+      st.model = window.ANKAIEngine.normalizarModelo(String(data.model || ''));
       st.apiKey = String(data.apiKey || '');
       st.customAuthHeader = String(data.customAuthHeader == null ? 'Authorization' : data.customAuthHeader);
       st.customAuthPrefix = String(data.customAuthPrefix == null ? 'Bearer' : data.customAuthPrefix);
       st.customHeaders = String(data.customHeaders || '{}');
       st.customBodyTemplate = String(data.customBodyTemplate || CUSTOM_BODY_DEFAULT);
       st.customResponsePath = String(data.customResponsePath || 'choices.0.message.content');
-      st.apiConfigured = !!(st.endpoint && st.model && (st.apiKey || (st.protocol === 'custom-json' && !st.customAuthHeader.trim())));
+      var authReady = !!(st.apiKey || (st.protocol === 'custom-json' && !st.customAuthHeader.trim()));
+      st.apiConfigured = false;
+      if (st.endpoint && st.model && authReady) {
+        try {
+          window.ANKAIEngine.endpointUrl(st.endpoint, st.protocol, st.model);
+          st.apiConfigured = true;
+        } catch (validationError) {
+          log('w', 'La conexión guardada necesita revisión: ' + (validationError.message || validationError));
+        }
+      }
       st.credencial = st.apiConfigured ? 'listo' : 'falta';
       return st.apiConfigured;
     }).catch(function () {
@@ -1180,7 +1189,12 @@
       return aviso(protocolError.message || 'Selecciona un protocolo compatible.');
     }
     var endpoint = String((q('#ank-ai-endpoint') && q('#ank-ai-endpoint').value) || st.endpoint || endpointPredeterminado(protocol)).trim();
-    var model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
+    var model;
+    try {
+      model = limpioModelo((q('#ank-ai-modelo') && q('#ank-ai-modelo').value) || st.model);
+    } catch (modelError) {
+      return aviso(modelError.message || 'El ID del modelo no es válido.');
+    }
     var enteredKey = String((q('#ank-ai-key') && q('#ank-ai-key').value) || '').trim();
     var apiKey = enteredKey || st.apiKey;
     var customAuthHeaderEl = q('#ank-ai-custom-auth-header');
@@ -4544,7 +4558,12 @@
       return;
     }
     if (e.target.id === 'ank-ai-modelo') {
-      st.model = limpioModelo(e.target.value);
+      try { st.model = limpioModelo(e.target.value); }
+      catch (modelError) {
+        e.target.value = st.model || '';
+        aviso(modelError.message || 'El ID del modelo no es válido.');
+        return;
+      }
       guardar('ank.ai.model', st.model);
       var label = q('#ank-ai-chat-modelo');
       if (label) label.textContent = st.model || 'Sin modelo';
