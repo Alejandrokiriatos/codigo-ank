@@ -2108,6 +2108,127 @@
     return salida;
   }
 
+  function bloqueComando(titulo, comando) {
+    var id = 'c' + (++st.comandosN);
+    var policy = window.ANKAIEngine && typeof window.ANKAIEngine.validateCommand === 'function'
+      ? window.ANKAIEngine.validateCommand(comando)
+      : { ok: false, reason: 'La política de comandos todavía no está cargada.' };
+    st.comandos[id] = {
+      titulo: String(titulo || 'Comando del proyecto'),
+      comando: String(comando || '').trim(),
+      estado: policy.ok ? 'pendiente' : 'bloqueado',
+      motivo: policy.reason || '',
+      salida: '',
+      codigo: null,
+      descartado: false
+    };
+    var caja = document.createElement('div');
+    caja.className = 'ank-ai-command' + (policy.ok ? '' : ' blocked');
+    caja.setAttribute('data-comando', id);
+    caja.innerHTML =
+      '<div class="ank-ai-command-head">' +
+        '<b class="ank-ai-command-title"></b>' +
+        '<span class="ank-ai-command-status"></span>' +
+      '</div>' +
+      '<pre class="ank-ai-command-code"></pre>' +
+      '<pre class="ank-ai-command-output" hidden></pre>' +
+      '<div class="ank-ai-command-actions">' +
+        '<button type="button" class="ank-ai-act" data-accion="ejecutar-comando" data-valor="' + id + '"' + (policy.ok ? '' : ' disabled') + '>Ejecutar en terminal</button>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="descartar-comando" data-valor="' + id + '">Descartar</button>' +
+      '</div>';
+    q('.ank-ai-command-title', caja).textContent = st.comandos[id].titulo;
+    q('.ank-ai-command-code', caja).textContent = st.comandos[id].comando;
+    q('.ank-ai-command-status', caja).textContent = policy.ok
+      ? 'Requiere tu aprobación'
+      : 'Bloqueado: ' + policy.reason;
+    return caja;
+  }
+
+  function actualizarComandoUI(id) {
+    var item = st.comandos[id];
+    var caja = q('[data-comando="' + id + '"]');
+    if (!item || !caja) return;
+    var status = q('.ank-ai-command-status', caja);
+    var output = q('.ank-ai-command-output', caja);
+    var run = q('[data-accion="ejecutar-comando"]', caja);
+    var discard = q('[data-accion="descartar-comando"]', caja);
+    if (status) {
+      if (item.estado === 'preparando') status.textContent = 'Preparando terminal…';
+      else if (item.estado === 'ejecutando') status.textContent = 'Ejecutando en el proyecto…';
+      else if (item.estado === 'completado') status.textContent = 'Completado · código ' + item.codigo;
+      else if (item.estado === 'error') status.textContent = 'Terminó con error · código ' + item.codigo;
+      else if (item.estado === 'descartado') status.textContent = 'Descartado';
+      else if (item.estado === 'bloqueado') status.textContent = 'Bloqueado: ' + item.motivo;
+      else status.textContent = 'Requiere tu aprobación';
+    }
+    if (run) {
+      run.disabled = item.estado === 'preparando' || item.estado === 'ejecutando' ||
+        item.estado === 'completado' || item.estado === 'descartado' || item.estado === 'bloqueado';
+      run.textContent = item.estado === 'error' ? 'Reintentar' : 'Ejecutar en terminal';
+    }
+    if (discard) discard.disabled = item.estado === 'descartado' || item.estado === 'completado' ||
+      item.estado === 'ejecutando' || item.estado === 'preparando';
+    if (output) {
+      output.hidden = !item.salida;
+      output.textContent = item.salida;
+    }
+    caja.classList.toggle('blocked', item.estado === 'bloqueado');
+    caja.classList.toggle('running', item.estado === 'ejecutando' || item.estado === 'preparando');
+    caja.classList.toggle('done', item.estado === 'completado');
+    caja.classList.toggle('failed', item.estado === 'error');
+    caja.classList.toggle('discarded', item.estado === 'descartado');
+  }
+
+  function descartarComando(id) {
+    var item = st.comandos[id];
+    if (!item || item.estado === 'ejecutando' || item.estado === 'completado') return;
+    item.descartado = true;
+    item.estado = 'descartado';
+    actualizarComandoUI(id);
+    log('i', 'Propuesta de comando descartada: ' + recortar(item.comando, 100));
+  }
+
+  function ejecutarComandoPropuesto(id) {
+    var item = st.comandos[id];
+    if (!item || item.descartado || item.estado === 'ejecutando' || item.estado === 'preparando' ||
+        item.estado === 'completado' || !window.ANKAIEngine) return;
+    var policy = window.ANKAIEngine.validateCommand(item.comando);
+    if (!policy.ok) {
+      item.estado = 'bloqueado';
+      item.motivo = policy.reason;
+      actualizarComandoUI(id);
+      aviso('Comando bloqueado por seguridad: ' + policy.reason);
+      return;
+    }
+    var proyecto = limpioRuta(st.project) || 'ank';
+    var carpeta = st.prefix + '/public/proyectos/' + proyecto;
+    item.estado = 'preparando';
+    item.salida = '';
+    actualizarComandoUI(id);
+    log('i', 'Comando aprobado por el usuario: ' + item.comando);
+    var preparar = st.prefix ? Promise.resolve() : dirsIniciales();
+    preparar.then(function () {
+      return asegurarSandbox();
+    }).then(function () {
+      item.estado = 'ejecutando';
+      actualizarComandoUI(id);
+      var guion = 'cd ' + comilla(carpeta) + ' && ' + policy.command;
+      return shell(guion, false);
+    }).then(function (result) {
+      item.codigo = result.rc == null ? -1 : result.rc;
+      item.salida = String(result.salida || '(sin salida)').slice(-12000);
+      item.estado = result.rc === 0 ? 'completado' : 'error';
+      actualizarComandoUI(id);
+      log(result.rc === 0 ? 'i' : 'e', 'Comando finalizado con código ' + item.codigo + ': ' + item.comando);
+    }).catch(function (error) {
+      item.estado = 'error';
+      item.codigo = -1;
+      item.salida = String(error && error.message ? error.message : error).slice(0, 4000);
+      actualizarComandoUI(id);
+      log('e', 'No se pudo ejecutar el comando: ' + item.salida);
+    });
+  }
+
   function bloqueArchivo(ruta, contenido) {
     var id = 'a' + (++st.archivosN);
     st.archivos[id] = { ruta: ruta, contenido: contenido, existe: false, actual: '', aplicado: false, descartado: false };
