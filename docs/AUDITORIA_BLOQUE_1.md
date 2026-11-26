@@ -110,9 +110,21 @@ El árbol importado contiene `decoded/AndroidManifest.xml`, `apktool.yml`, recur
 
 El manifiesto reconstruido indica paquete final `com.ank.codigoank`, `versionCode 1027`, `versionName 1.7.0`, `minSdk 26`, `targetSdk 28` y `compileSdkVersion 36` reflejado por Apktool. El nombre `acode.apk` en `apktool.yml` es metadata, no demuestra que el APK original esté incluido.
 
-**Consecuencia:** hoy no se puede afirmar que exista una compilación Android reproducible desde esta copia. Tampoco se puede garantizar una actualización encima de la instalación existente sin conservar la identidad de firma de la versión distribuida. El keystore y sus contraseñas nunca deben subirse a un repositorio público.
+**Consecuencia:** el proyecto Android original de Gradle no está incluido, pero sí se pudo comprobar que la reconstrucción técnica de la capa descompilada es posible. No se puede garantizar una actualización encima de la instalación existente sin conservar la identidad de firma de la versión distribuida. El keystore y sus contraseñas nunca deben subirse a un repositorio público.
 
-Se añadió un segundo job de CI que intenta reconstruir `decoded/` con Apktool 2.11.1 y genera un APK sin firmar. Ese ensayo puede demostrar si la reconstrucción técnica desde Smali/recursos es viable; no reemplaza el proyecto fuente Gradle ni resuelve la firma release. El resultado queda pendiente hasta que termine la ejecución.
+#### Resultado real de reconstrucción
+
+El job de CI con Apktool 2.11.1 terminó correctamente y generó un APK sin firmar de **15.475.779 bytes**. Esto demuestra que Apktool recompone el Smali y los recursos de esta copia. No demuestra que ese APK sea funcional ni que corresponda al APK publicado de ~97 MB.
+
+Encontré el motivo: `fuente-completa/.gitignore` excluye deliberadamente estos directorios:
+
+- `decoded/assets/opencode/`
+- `decoded/assets/alpine_assets/`
+- `decoded/assets/dexopt/`
+
+El README indica que el paquete de OpenCode ARM64 ocupa aproximadamente 77,7 MB y que Alpine/proot/addons también viajan dentro del APK. Esos directorios no aparecen en el árbol Git reconstruido. Por tanto, el APK de 15,5 MB generado por CI es solo un **cascarón reconstruido para diagnóstico**, sin el binario OpenCode ni los paquetes de Alpine descritos por el README. **No se debe instalar ni distribuir.**
+
+Para cerrar la compilación hace falta recuperar los assets originales de forma controlada, verificar sus hashes/licencias y comprobar cómo se incorporan al APK. No se deben subir credenciales, claves privadas ni el keystore de firma al repositorio público.
 
 ## 6. Seguridad Android a revisar
 
@@ -179,8 +191,10 @@ El soporte universal nunca será literalmente cualquier endpoint arbitrario: cad
 - [x] Corrección del test de versión obsoleto en el bot.
 - [x] Workflow de sintaxis y pruebas automatizadas preparado.
 - [x] Workflow de CI en verde (330 archivos JS/MJS y 24 pruebas del bot).
-- [ ] Proyecto Android original o procedimiento Apktool reproducible verificado (job Apktool añadido; resultado pendiente).
-- [ ] APK base y huella del certificado de firma identificados para preservar instalación y datos.
+- [x] Reconstrucción técnica de `decoded/` con Apktool 2.11.1 (APK diagnóstico sin firma generado).
+- [ ] Recuperar y validar los assets excluidos de Alpine/OpenCode para una compilación funcional.
+- [ ] Recuperar o documentar el proyecto Android original de Gradle y dejar un proceso de build mantenible.
+- [ ] APK base original y huella del certificado de firma identificados para preservar instalación y datos.
 - [ ] Prueba real de instalación/arranque en un dispositivo Android.
 
 **No se inicia el bloque 2** hasta resolver los puntos pendientes o documentar explícitamente qué parte no se puede reconstruir con los artefactos disponibles.
