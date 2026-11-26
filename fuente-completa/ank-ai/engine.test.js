@@ -104,3 +104,66 @@ test('acepta respuesta JSON sin streaming cuando el servidor no ofrece SSE', asy
   });
   assert.equal(result.content, 'Respuesta normal');
 });
+
+test('usa HTTP nativo de Cordova y no depende de CORS ni fetch', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  global.fetch = () => { throw new Error('fetch no debe ejecutarse'); };
+
+  let captured;
+  const deltas = [];
+  const http = {
+    sendRequest(url, options, success) {
+      captured = { url, options };
+      success({
+        status: 200,
+        data: JSON.stringify({
+          choices: [{ message: { content: 'Respuesta nativa ANK' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 12 }
+        })
+      });
+      return 77;
+    }
+  };
+
+  const result = await Engine.chat({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'native-secret',
+    model: 'native-model',
+    messages: [{ role: 'user', content: 'Prueba' }],
+    http,
+    onDelta: (part) => deltas.push(part)
+  });
+
+  assert.equal(captured.url, 'https://api.example.com/v1/chat/completions');
+  assert.equal(captured.options.method, 'post');
+  assert.equal(captured.options.serializer, 'json');
+  assert.equal(captured.options.responseType, 'text');
+  assert.equal(captured.options.headers.Authorization, 'Bearer native-secret');
+  assert.equal(JSON.parse(JSON.stringify(captured.options.data)).stream, false);
+  assert.equal(result.content, 'Respuesta nativa ANK');
+  assert.deepEqual(deltas, ['Respuesta nativa ANK']);
+  assert.equal(result.usage.total_tokens, 12);
+});
+
+test('convierte errores del transporte HTTP nativo en errores legibles', async () => {
+  const http = {
+    sendRequest(url, options, success, failure) {
+      failure({
+        status: 401,
+        error: JSON.stringify({ error: { message: 'Invalid API token' } })
+      });
+      return 88;
+    }
+  };
+  await assert.rejects(
+    Engine.chat({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: 'bad-token',
+      model: 'model',
+      messages: [],
+      http
+    }),
+    /API HTTP 401: Invalid API token/
+  );
+});
