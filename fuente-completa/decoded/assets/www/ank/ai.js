@@ -4592,6 +4592,8 @@
       case 'otro-modelo': reintentar(true); break;
       case 'aplicar-archivo': aplicarArchivo(t.getAttribute('data-valor')); break;
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
+      case 'ejecutar-comando': ejecutarComandoPropuesto(t.getAttribute('data-valor')); break;
+      case 'descartar-comando': descartarComando(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
       case 'diag': compartirDiagnostico(); break;
       case 'novedades': verNovedades(); break;
