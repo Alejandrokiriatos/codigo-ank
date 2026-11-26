@@ -517,7 +517,7 @@
     function no(reason) { return { ok: false, command: raw, reason: reason }; }
     if (!raw) return no('El comando está vacío.');
     if (raw.length > 240) return no('El comando supera el límite de 240 caracteres.');
-    if (/[\\r\\n\\x00-\\x1f\\x7f]/.test(raw)) return no('Solo se permite un comando de una línea.');
+    if (/[\r\n\x00-\x1f\x7f]/.test(raw)) return no('Solo se permite un comando de una línea.');
     // Se excluyen operadores y expansiones del shell. ANK añade por separado
     // el directorio del proyecto y el marcador de código de salida.
     if (!/^[A-Za-z0-9_./:@=,+-]+(?:\s+[A-Za-z0-9_./:@=,+-]+)*$/.test(raw)) {
