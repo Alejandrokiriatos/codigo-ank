@@ -2199,10 +2199,15 @@
    * ------------------------------------------------------------------ */
 
   function rutaHerramientaProyecto(rel, permitirRaiz) {
-    var raw = String(rel == null ? '' : rel).trim();
-    if (permitirRaiz && (!raw || raw === '.')) {
-      return st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank');
+    var project = limpioRuta(st.project) || 'ank';
+    var projectParts = project.split('/');
+    if (!project || project.charAt(0) === '/' ||
+        projectParts.some(function (part) { return !part || part === '.' || part === '..'; })) {
+      throw new Error('La carpeta del proyecto actual no es válida.');
     }
+    var base = st.prefix + '/public/proyectos/' + projectParts.join('/');
+    var raw = String(rel == null ? '' : rel).trim();
+    if (permitirRaiz && (!raw || raw === '.')) return base;
     if (!raw || raw.length > 240 || raw.charAt(0) === '/' || raw.indexOf('\\') !== -1 ||
         /[\u0000-\u001f\u007f]/.test(raw)) {
       throw new Error('Ruta de proyecto no válida.');
@@ -2211,7 +2216,6 @@
     if (parts.some(function (part) { return !part || part === '.' || part === '..'; })) {
       throw new Error('La ruta no puede contener segmentos vacíos, . o ..');
     }
-    var base = st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank');
     return base + '/' + parts.join('/');
   }
 
@@ -2254,7 +2258,14 @@
           }
           if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
           var reader = new window.FileReader();
-          reader.onload = function () { resolve(String(reader.result || '')); };
+          reader.onload = function () {
+            var content = String(reader.result || '');
+            if (content.indexOf('\u0000') !== -1) {
+              reject(new Error('El archivo parece binario y no se leerá como texto.'));
+              return;
+            }
+            resolve(content);
+          };
           reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
           reader.readAsText(file);
         }, reject);
