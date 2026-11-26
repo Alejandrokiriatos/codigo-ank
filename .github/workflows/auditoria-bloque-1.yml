@@ -134,8 +134,10 @@ jobs:
           for (const token of ['function leerArchivoDetallado(', 'function eliminarArchivoDetallado(', 'function revertirArchivo(', 'case \'rollback-archivo\'', 'data-accion="rollback-archivo"']) {
             if (!panel.includes(token)) throw new Error('Falta el sistema de backup/reversión de archivos: ' + token);
           }
-          if (!panel.includes('actual.contenido !== a.contenido')) {
-            throw new Error('La reversión no comprueba cambios posteriores antes de restaurar/eliminar');
+          if (!panel.includes('actual.contenido !== a.contenido') ||
+              !panel.includes('backup.contenido !== a.actual') ||
+              !panel.includes('var respaldo = ruta +')) {
+            throw new Error('La reversión no comprueba cambios posteriores ni conserva copias de seguridad');
           }
           if (!panel.includes('validateCommand(comando)') || !panel.includes('policy.command')) {
             throw new Error('El panel no valida el comando antes de enviarlo al terminal');
