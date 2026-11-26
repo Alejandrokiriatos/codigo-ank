@@ -3681,9 +3681,9 @@
         if (!item || !item.compartido) return;
         history.push({
           role: 'assistant',
-          content: '[Resultado de una herramienta ejecutada con aprobación del usuario]\\nComando: ' +
-            item.comando + '\\nEstado: ' + item.estado + '\\nCódigo de salida: ' + item.codigo +
-            '\\nSalida:\\n' + String(item.salida || '').slice(0, 6000)
+          content: '[Resultado de una herramienta ejecutada con aprobación del usuario]\nComando: ' +
+            item.comando + '\nEstado: ' + item.estado + '\nCódigo de salida: ' + item.codigo +
+            '\nSalida:\n' + String(item.salida || '').slice(0, 6000)
         });
       });
       history = history.slice(-48);
