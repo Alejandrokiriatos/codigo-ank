@@ -166,16 +166,26 @@ almacenamiento del teléfono.
 La ventana **Ayuda** de la pestaña Apps explica todo esto dentro de la app, con
 ejemplos de pedido, del manifiesto y de la API que se pueden copiar.
 
-## Novedades 1.5.2
+## Historial de versiones anteriores
 
-- **Actualizaciones firmadas.** Cada paquete que se publica en GitHub lleva una
-  firma HMAC-SHA256 (`sig` en `version.json`) calculada sobre la versión y los
-  dos archivos del panel. La app verifica la firma antes de aplicar nada: si no
-  coincide, descarta el paquete y sigue con la copia incluida en el APK. Así,
-  alguien con acceso al repositorio no puede inyectar código en los teléfonos.
-- La clave de firma vive en `tools/update-key.txt` (nunca se publica) y va
-  compilada dentro de `upd.js`.
-- El script `tools/publicar-github.ps1` firma, commitea y sube en un solo paso.
+Las notas desde la versión 1.5.2 describen el diseño antiguo y se conservan
+como referencia histórica. No representan el funcionamiento del motor actual.
+OpenCode se retiró del panel activo en el bloque 2.
+
+El mecanismo HMAC de las versiones anteriores está **retirado**: la clave de
+verificación quedó incluida en el cliente y, por tanto, no protege frente a
+una publicación maliciosa. No debe utilizarse para firmar nuevas versiones.
+El bloque de seguridad lo sustituirá por verificación Ed25519 con clave
+privada fuera del repositorio y clave pública en la app.
+
+## Novedades 1.5.2 (histórico)
+
+- En esta versión se usó HMAC-SHA256 (`sig` en `version.json`) para comprobar
+  la integridad de los archivos del panel. Ese esquema quedó comprometido por
+  la clave de verificación incluida en `upd.js`; se conserva aquí solo como
+  registro del diseño anterior.
+- El script `tools/publicar-github.ps1` pertenece al flujo antiguo y no debe
+  emplearse para publicar la nueva versión hasta completar el bloque 7.
 
 ## Novedades 1.5.1
 
