@@ -1,0 +1,70 @@
+name: Auditoría estática ANK · Bloque 1
+
+on:
+  push:
+    branches:
+      - "ank/**"
+    paths:
+      - ".github/workflows/auditoria-bloque-1.yml"
+      - "fuente-completa/bot/**"
+      - "fuente-completa/tools/**"
+      - "fuente-completa/preview/**"
+      - "fuente-completa/web/**"
+      - "fuente-completa/decoded/assets/www/ank/**"
+      - "fuente-completa/update/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-audit:
+    name: Sintaxis JS y pruebas aisladas del bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar rama de auditoría
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Comprobar sintaxis JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find \
+            fuente-completa/decoded/assets/www/ank \
+            fuente-completa/bot \
+            fuente-completa/tools \
+            fuente-completa/preview \
+            fuente-completa/web \
+            -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | sort -z)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No se encontraron archivos JavaScript propios."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            node --check "$file"
+          done
+          echo "Sintaxis correcta en ${#files[@]} archivos JavaScript/MJS."
+          echo "### Sintaxis JavaScript" >> "$GITHUB_STEP_SUMMARY"
+          echo "Correctos: ${#files[@]} archivos." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ejecutar pruebas del bot con API simulada
+        working-directory: fuente-completa
+        run: node bot/pruebas/prueba.js
+
+      - name: Verificar que el canal de actualización y el código fuente estén presentes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s fuente-completa/update/version.json
+          test -s fuente-completa/update/ank/ai.js
+          test -s fuente-completa/update/ank/ai.css
+          test -s fuente-completa/decoded/assets/www/ank/upd.js
+          test -s fuente-completa/decoded/assets/www/ank/boot-ai.js
+          test -s fuente-completa/decoded/assets/www/ank/ai.js
+          node -e "const v=require('./fuente-completa/update/version.json'); if(!v.web || !v.ai || !v.css || !v.sig) process.exit(1); console.log('Canal del panel:', v.web)"
