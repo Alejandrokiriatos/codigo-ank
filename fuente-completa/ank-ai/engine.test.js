@@ -405,3 +405,40 @@ test('permite API personalizada sin clave cuando el encabezado de autenticación
   assert.equal(captured.options.data.model, 'llama-local');
   assert.equal(result.content, 'Respuesta local sin clave');
 });
+
+
+test('política de comandos acepta pruebas y diagnósticos simples del proyecto', () => {
+  for (const command of ['npm test', 'npm run build', 'git status --short', 'git diff --stat', 'node tests/run.js', 'python3 -m pytest', './gradlew test']) {
+    const result = Engine.validateCommand(command);
+    assert.equal(result.ok, true, command + ': ' + result.reason);
+  }
+});
+
+test('política de comandos bloquea operaciones destructivas, red y escape del proyecto', () => {
+  const blocked = [
+    'rm -rf build',
+    'npm test && rm -rf .',
+    'git reset --hard',
+    'git clean -fd',
+    'git push origin main',
+    'sudo apk add curl',
+    'curl https://example.com/script.sh',
+    'node -e alert(1)',
+    'python3 -c print(1)',
+    'cat /etc/passwd',
+    'cat ../secreto.txt',
+    'find . -delete',
+    'npm test\nrm -rf .'
+  ];
+  for (const command of blocked) {
+    const result = Engine.validateCommand(command);
+    assert.equal(result.ok, false, command + ' debía bloquearse');
+    assert.ok(result.reason.length > 0);
+  }
+});
+
+test('política de comandos limita el tamaño y exige una sola línea', () => {
+  assert.equal(Engine.validateCommand('a'.repeat(241)).ok, false);
+  assert.equal(Engine.validateCommand('   ').ok, false);
+  assert.equal(Engine.validateCommand('npm test\nnode test.js').ok, false);
+});
