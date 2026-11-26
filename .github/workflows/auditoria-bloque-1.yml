@@ -96,9 +96,20 @@ jobs:
           }
           console.log('Canal de actualización cerrado de forma segura:', manifest.web, '<', match[1]);
           NODE
+          node - <<'NODE'
+          const fs = require('fs');
+          const registry = fs.readFileSync('decoded/assets/www/cordova_plugins.js', 'utf8');
+          const plugin = fs.readFileSync('decoded/assets/www/plugins/cordova-plugin-advanced-http/www/advanced-http.js', 'utf8');
+          const panel = fs.readFileSync('decoded/assets/www/ank/ai.js', 'utf8');
+          if (!registry.includes('"cordova.plugin.http"')) throw new Error('Cordova no registra cordova.plugin.http');
+          if (!plugin.includes('sendRequest') || !plugin.includes('abort')) throw new Error('El plugin HTTP no expone envío/cancelación');
+          if (!panel.includes('function clienteHttpNativo()') || !panel.includes('http: clienteHttpNativo()')) throw new Error('El panel no conecta el transporte nativo');
+          if (!panel.includes("return st.apiConfigured;")) throw new Error('No se pudo verificar la carga de configuración API');
+          console.log('Plugin HTTP Cordova registrado y conectado al asistente.');
+          NODE
           test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Terminal.js
           test -s decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Executor.js
-          echo "Motor API verificado; bundle de publicación sincronizado; canal remoto bloqueado hasta re-firma; terminal/Executor conservados." >> "$GITHUB_STEP_SUMMARY"
+          echo "Motor API verificado; plugin HTTP nativo registrado; bundle de publicación sincronizado; canal remoto bloqueado hasta re-firma; terminal/Executor conservados." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verificar que el canal de actualización y el código fuente estén presentes
         shell: bash
