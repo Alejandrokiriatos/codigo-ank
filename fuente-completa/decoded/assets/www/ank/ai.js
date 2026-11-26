@@ -413,8 +413,8 @@
     pub: '',
     work: '/public/proyectos',
     project: leer('ank.ai.project', 'ank'),
-    model: leer('ank.ai.model', ''),
-    endpoint: leer('ank.ai.endpoint', API_ENDPOINT_DEFAULT),
+    model: '',
+    endpoint: API_ENDPOINT_DEFAULT,
     apiKey: '',
     apiConfigured: false,
     modo: leer('ank.ai.modo', 'build'),
@@ -859,15 +859,13 @@
       st.apiKey = String(data.apiKey || '');
       st.apiConfigured = !!(st.endpoint && st.model && st.apiKey);
       st.credencial = st.apiConfigured ? 'listo' : 'falta';
-      try {
-        localStorage.setItem('ank.ai.model', st.model);
-        localStorage.setItem('ank.ai.endpoint', st.endpoint);
-      } catch (e) {}
       return st.apiConfigured;
     }).catch(function () {
       st.apiKey = '';
       st.apiConfigured = false;
       st.credencial = 'falta';
+      st.model = '';
+      st.endpoint = API_ENDPOINT_DEFAULT;
       return false;
     });
   }
@@ -888,10 +886,6 @@
     }).then(function () {
       st.endpoint = endpoint; st.model = model; st.apiKey = apiKey;
       st.apiConfigured = true; st.credencial = 'listo';
-      try {
-        localStorage.setItem('ank.ai.model', model);
-        localStorage.setItem('ank.ai.endpoint', endpoint);
-      } catch (e) {}
       if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
       log('i', 'Configuración API guardada en el almacenamiento privado de ANK.');
       aviso('Conexión API configurada.');
