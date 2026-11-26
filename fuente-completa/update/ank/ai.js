@@ -1569,6 +1569,44 @@
     });
   }
 
+  function leerArchivoDetallado(ruta) {
+    var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+    if (typeof resolver !== 'function') return Promise.reject(new Error('El lector de archivos de la app no está disponible.'));
+    var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+    return new Promise(function (resolve, reject) {
+      resolver(uri, function (entry) {
+        if (!entry || typeof entry.file !== 'function') return reject(new Error('La ruta no es un archivo.'));
+        entry.file(function (file) {
+          if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
+          var reader = new window.FileReader();
+          reader.onload = function () { resolve({ existe: true, contenido: String(reader.result == null ? '' : reader.result) }); };
+          reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
+          reader.readAsText(file);
+        }, reject);
+      }, function (error) {
+        var notFound = window.FileError && window.FileError.NOT_FOUND_ERR || 1;
+        if (error && error.code === notFound) resolve({ existe: false, contenido: '' });
+        else reject(error || new Error('No se pudo consultar el archivo.'));
+      });
+    });
+  }
+
+  function eliminarArchivoDetallado(ruta) {
+    var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+    if (typeof resolver !== 'function') return Promise.reject(new Error('El eliminador de archivos no está disponible.'));
+    var uri = /^file:\/\//i.test(ruta) ? ruta : 'file://' + (String(ruta).charAt(0) === '/' ? '' : '/') + ruta;
+    return new Promise(function (resolve, reject) {
+      resolver(uri, function (entry) {
+        if (!entry || typeof entry.remove !== 'function') return reject(new Error('El elemento no permite borrado.'));
+        entry.remove(function () { resolve(true); }, reject);
+      }, function (error) {
+        var notFound = window.FileError && window.FileError.NOT_FOUND_ERR || 1;
+        if (error && error.code === notFound) resolve(false);
+        else reject(error || new Error('No se pudo localizar el archivo.'));
+      });
+    });
+  }
+
   function hoy() {
     var d = new Date();
     function dos(n) { return ('0' + n).slice(-2); }
@@ -2301,7 +2339,19 @@
 
   function bloqueArchivo(ruta, contenido) {
     var id = 'a' + (++st.archivosN);
-    st.archivos[id] = { ruta: ruta, contenido: contenido, existe: false, actual: '', aplicado: false, descartado: false };
+    st.archivos[id] = {
+      ruta: ruta,
+      contenido: contenido,
+      existe: false,
+      actual: '',
+      errorLectura: '',
+      aplicado: false,
+      descartado: false,
+      revertido: false,
+      revirtiendo: false,
+      creado: false,
+      respaldo: ''
+    };
     var caja = document.createElement('div');
     caja.className = 'ank-ai-file';
     caja.setAttribute('data-archivo', id);
@@ -2312,12 +2362,33 @@
       '</div>' +
       '<pre class="ank-ai-file-diff" hidden></pre>' +
       '<div class="ank-ai-file-acc">' +
-        '<button type="button" class="ank-ai-act" data-accion="aplicar-archivo" data-valor="' + id + '">Aplicar</button>' +
+        '<button type="button" class="ank-ai-act" data-accion="aplicar-archivo" data-valor="' + id + '" disabled>Aplicar</button>' +
         '<button type="button" class="ank-ai-act ghost" data-accion="descartar-archivo" data-valor="' + id + '">Descartar</button>' +
+        '<button type="button" class="ank-ai-act ghost" data-accion="rollback-archivo" data-valor="' + id + '" hidden disabled>Revertir</button>' +
       '</div>';
     q('.ank-ai-file-ruta', caja).textContent = ruta;
     leerParaDiff(id, caja);
     return caja;
+  }
+
+  function actualizarArchivoUI(id) {
+    var a = st.archivos[id];
+    var caja = q('[data-archivo="' + id + '"]');
+    if (!a || !caja) return;
+    var aplicar = q('[data-accion="aplicar-archivo"]', caja);
+    var descartar = q('[data-accion="descartar-archivo"]', caja);
+    var revertir = q('[data-accion="rollback-archivo"]', caja);
+    if (aplicar) aplicar.disabled = !!(a.aplicado || a.descartado || a.errorLectura || a.sinCambios);
+    if (descartar) descartar.disabled = !!(a.aplicado || a.descartado);
+    if (revertir) {
+      revertir.hidden = !a.aplicado || !!a.revertido;
+      revertir.disabled = !a.aplicado || !!a.revertido || !!a.revirtiendo;
+      if (a.revirtiendo) revertir.textContent = 'Revirtiendo…';
+      else revertir.textContent = 'Revertir';
+    }
+    caja.classList.toggle('aplicado', !!a.aplicado && !a.revertido);
+    caja.classList.toggle('revertido', !!a.revertido);
+    caja.classList.toggle('descartado', !!a.descartado);
   }
 
   function leerParaDiff(id, caja) {
@@ -2325,15 +2396,17 @@
     if (!a) return;
     var ruta = rutaAbsolutaArchivo(a.ruta);
     if (!ruta) { pintarDiff(id, caja); return; }
-    leerTexto(ruta)
-      .then(function (txt) {
-        a.actual = String(txt || '');
-        a.existe = !!a.actual;
+    leerArchivoDetallado(ruta)
+      .then(function (resultado) {
+        a.actual = resultado.contenido;
+        a.existe = resultado.existe;
+        a.errorLectura = '';
         pintarDiff(id, caja);
       })
-      .catch(function () {
+      .catch(function (error) {
         a.actual = '';
         a.existe = false;
+        a.errorLectura = error && error.message ? error.message : 'No se pudo leer el archivo.';
         pintarDiff(id, caja);
       });
   }
@@ -2341,18 +2414,31 @@
   function pintarDiff(id, caja) {
     var a = st.archivos[id];
     if (!a || !caja) return;
+    if (a.descartado || a.aplicado || a.revertido) {
+      actualizarArchivoUI(id);
+      return;
+    }
     var est = q('.ank-ai-file-est', caja);
     var pre = q('.ank-ai-file-diff', caja);
+    var aplicar = q('[data-accion="aplicar-archivo"]', caja);
     if (!rutaAbsolutaArchivo(a.ruta)) {
       if (est) est.textContent = 'ruta no válida';
       caja.classList.add('mal');
+      if (aplicar) aplicar.disabled = true;
       if (pre) { pre.hidden = false; pre.textContent = a.contenido; }
+      return;
+    }
+    if (a.errorLectura) {
+      if (est) est.textContent = 'error al leer: ' + a.errorLectura;
+      caja.classList.add('mal');
+      if (aplicar) aplicar.disabled = true;
       return;
     }
     if (!a.existe) {
       if (est) est.textContent = 'archivo nuevo';
       caja.classList.add('nuevo');
       if (pre) { pre.hidden = false; pre.textContent = a.contenido; }
+      if (aplicar) aplicar.disabled = false;
       return;
     }
     var lineas = diffLineas(a.actual, a.contenido);
@@ -2362,12 +2448,13 @@
       else if (l.charAt(0) === '-') restas++;
     });
     if (!sumas && !restas) {
+      a.sinCambios = true;
       if (est) est.textContent = 'sin cambios';
-      var b = q('[data-accion="aplicar-archivo"]', caja);
-      if (b) b.disabled = true;
+      if (aplicar) aplicar.disabled = true;
       return;
     }
     if (est) est.textContent = '+' + sumas + ' −' + restas;
+    if (aplicar) aplicar.disabled = false;
     if (pre) {
       pre.hidden = false;
       var tope = 300;
@@ -2385,7 +2472,7 @@
 
   function aplicarArchivo(id) {
     var a = st.archivos[id];
-    if (!a || a.aplicado || a.descartado) return;
+    if (!a || a.aplicado || a.descartado || a.errorLectura || a.sinCambios) return;
     var ruta = rutaAbsolutaArchivo(a.ruta);
     var caja = q('[data-archivo="' + id + '"]');
     var est = caja ? q('.ank-ai-file-est', caja) : null;
@@ -2393,33 +2480,94 @@
       aviso('Ruta no válida: ' + a.ruta);
       return;
     }
-    if (est) est.textContent = 'aplicando…';
+    if (est) est.textContent = 'comprobando archivo…';
     var carpeta = ruta.replace(/\/[^\/]+$/, '');
+    var respaldo = ruta + '.' + selloFecha() + '.' + id + '.bak';
     conSistema('mkdirs', carpeta)
       .catch(function () {})
-      .then(function () { return leerTexto(ruta); })
+      .then(function () { return leerArchivoDetallado(ruta); })
       .then(function (actual) {
-        if (!actual) return null;
-        return escribir(ruta + '.' + selloFecha() + '.bak', actual);
+        // No sobrescribir un archivo si cambió después de mostrar el diff.
+        if (actual.existe !== a.existe || actual.contenido !== a.actual) {
+          throw new Error('El archivo cambió desde que se mostró el diff. Vuelve a generar la propuesta.');
+        }
+        if (!actual.existe) {
+          a.creado = true;
+          a.respaldo = '';
+          return null;
+        }
+        return escribir(respaldo, actual.contenido).then(function () {
+          a.creado = false;
+          a.respaldo = respaldo;
+          return respaldo;
+        });
       })
-      .then(function () { return escribir(ruta, a.contenido); })
+      .then(function () {
+        if (est) est.textContent = 'aplicando…';
+        return escribir(ruta, a.contenido);
+      })
       .then(function () {
         a.aplicado = true;
-        if (caja) {
-          caja.classList.add('aplicado');
-          var b = q('[data-accion="aplicar-archivo"]', caja);
-          var d = q('[data-accion="descartar-archivo"]', caja);
-          if (b) b.disabled = true;
-          if (d) d.disabled = true;
-        }
-        if (est) est.textContent = 'aplicado';
+        a.revertido = false;
+        actualizarArchivoUI(id);
+        if (est) est.textContent = a.creado ? 'aplicado · archivo nuevo' : 'aplicado · copia de seguridad creada';
         aviso('Aplicado: ' + a.ruta);
-        log('i', 'Archivo aplicado: ' + a.ruta);
+        log('i', 'Archivo aplicado: ' + a.ruta + (a.respaldo ? ' · respaldo ' + a.respaldo : ' · nuevo'));
       })
       .catch(function (e) {
         if (est) est.textContent = 'error';
         aviso('No se pudo aplicar el archivo.');
         log('e', 'Aplicar ' + a.ruta + ': ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  function revertirArchivo(id) {
+    var a = st.archivos[id];
+    if (!a || !a.aplicado || a.revertido || a.revirtiendo) return;
+    var ruta = rutaAbsolutaArchivo(a.ruta);
+    var caja = q('[data-archivo="' + id + '"]');
+    var est = caja ? q('.ank-ai-file-est', caja) : null;
+    if (!ruta) return aviso('No se puede revertir: ruta no válida.');
+    if (typeof window.confirm === 'function' &&
+        !window.confirm('¿Revertir "' + a.ruta + '" al contenido anterior?')) return;
+    a.revirtiendo = true;
+    actualizarArchivoUI(id);
+    if (est) est.textContent = 'revirtiendo…';
+
+    leerArchivoDetallado(ruta)
+      .then(function (actual) {
+        if (a.creado) {
+          if (!actual.existe) return false;
+          if (actual.contenido !== a.contenido) {
+            throw new Error('El archivo fue modificado después de aplicarlo. No se borrará para evitar perder cambios.');
+          }
+          return eliminarArchivoDetallado(ruta);
+        }
+        if (!actual.existe) throw new Error('El archivo original ya no existe.');
+        if (actual.contenido !== a.contenido) {
+          throw new Error('El archivo fue modificado después de aplicarlo. No se sobrescribirá.');
+        }
+        if (!a.respaldo) throw new Error('No se encontró la ruta de la copia de seguridad.');
+        return leerArchivoDetallado(a.respaldo).then(function (backup) {
+          if (!backup.existe) throw new Error('La copia de seguridad no existe.');
+          if (backup.contenido !== a.actual) throw new Error('La copia de seguridad no coincide con el contenido original guardado en el diff.');
+          return escribir(ruta, backup.contenido);
+        });
+      })
+      .then(function () {
+        a.revirtiendo = false;
+        a.revertido = true;
+        actualizarArchivoUI(id);
+        if (est) est.textContent = a.creado ? 'archivo nuevo eliminado' : 'contenido anterior restaurado';
+        aviso('Cambios revertidos: ' + a.ruta);
+        log('i', 'Archivo revertido: ' + a.ruta + (a.respaldo ? ' · respaldo conservado' : ''));
+      })
+      .catch(function (error) {
+        a.revirtiendo = false;
+        if (est) est.textContent = 'no se pudo revertir';
+        actualizarArchivoUI(id);
+        aviso('No se pudo revertir el archivo. Revisa el registro.');
+        log('e', 'Revertir ' + a.ruta + ': ' + (error && error.message ? error.message : error));
       });
   }
 
@@ -4662,6 +4810,7 @@
       case 'otro-modelo': reintentar(true); break;
       case 'aplicar-archivo': aplicarArchivo(t.getAttribute('data-valor')); break;
       case 'descartar-archivo': descartarArchivo(t.getAttribute('data-valor')); break;
+      case 'rollback-archivo': revertirArchivo(t.getAttribute('data-valor')); break;
       case 'ejecutar-comando': ejecutarComandoPropuesto(t.getAttribute('data-valor')); break;
       case 'descartar-comando': descartarComando(t.getAttribute('data-valor')); break;
       case 'exportar': exportarChat(); break;
