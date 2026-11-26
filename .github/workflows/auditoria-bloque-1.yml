@@ -6,6 +6,7 @@ on:
       - "ank/**"
     paths:
       - ".github/workflows/auditoria-bloque-1.yml"
+      - "docs/**"
       - "fuente-completa/bot/**"
       - "fuente-completa/tools/**"
       - "fuente-completa/preview/**"
