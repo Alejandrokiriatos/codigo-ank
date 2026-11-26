@@ -405,3 +405,29 @@ test('permite API personalizada sin clave cuando el encabezado de autenticación
   assert.equal(captured.options.data.model, 'llama-local');
   assert.equal(result.content, 'Respuesta local sin clave');
 });
+
+
+test('conserva identificadores de modelo usados por proveedores y gateways', () => {
+  assert.equal(Engine.normalizarModelo(' meta-llama/llama-3.1-8b-instruct:free '), 'meta-llama/llama-3.1-8b-instruct:free');
+  assert.equal(Engine.normalizarModelo('anthropic.claude-3-5-sonnet-20241022-v2:0'), 'anthropic.claude-3-5-sonnet-20241022-v2:0');
+  assert.equal(Engine.normalizarModelo('org/model@2026+latest'), 'org/model@2026+latest');
+  assert.equal(Engine.normalizarModelo('gemini-2.5-flash'), 'gemini-2.5-flash');
+});
+
+test('rechaza identificadores de modelo con controles o longitud excesiva', () => {
+  assert.throws(
+    () => Engine.normalizarModelo('modelo\\nAuthorization: Bearer leaked'),
+    (error) => error.code === 'ANK_AI_MODEL_INVALID'
+  );
+  assert.throws(
+    () => Engine.normalizarModelo('x'.repeat(257)),
+    (error) => error.code === 'ANK_AI_MODEL_TOO_LONG'
+  );
+});
+
+test('Gemini codifica el ID completo del modelo sin eliminar variantes', () => {
+  assert.equal(
+    Engine.endpointUrl('https://generativelanguage.googleapis.com/v1beta', 'gemini', 'modelo:test+stable'),
+    'https://generativelanguage.googleapis.com/v1beta/models/modelo%3Atest%2Bstable:generateContent'
+  );
+});
