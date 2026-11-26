@@ -110,10 +110,14 @@ Los resultados y el código de salida vuelven a la tarjeta del chat.
 
 La aprobación es importante: comandos como `npm test` o `node tests/run.js`
 pueden ejecutar scripts que formen parte del propio proyecto. El usuario debe
-revisar la línea propuesta antes de aprobarla. Esta primera etapa no es un
-sandbox de seguridad para ejecutar proyectos de terceros no confiables; el
-aislamiento de herramientas, permisos más granulares, snapshots y rollback
-quedan para las siguientes fases.
+revisar la línea propuesta antes de aprobarla. Las propuestas de archivos se
+siguen aplicando mediante diff y confirmación; los reemplazos guardan una copia
+`.bak` y la tarjeta permite **Revertir**. Los archivos nuevos se eliminan al
+revertir. ANK comprueba que el archivo no haya cambiado desde el diff antes de
+aplicar y que el resultado no haya sido modificado manualmente antes de
+revertir. Esto no equivale a snapshots completos ni a un sandbox de seguridad
+para proyectos de terceros no confiables; los permisos por herramienta y el
+aislamiento más estricto quedan para fases posteriores.
 
 ### Qué se conserva
 
