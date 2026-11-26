@@ -79,22 +79,14 @@ jobs:
           const updater = fs.readFileSync('decoded/assets/www/ank/upd.js', 'utf8');
           const boot = fs.readFileSync('decoded/assets/www/ank/boot-ai.js', 'utf8');
           const match = ai.match(/PANEL_VERSION = '([^']+)'/);
-          const included = updater.match(/INCLUIDA = '([^']+)'/);
-          if (!match || !included) throw new Error('No se pudo leer la versión incluida del panel/actualizador');
-          if (match[1] !== included[1]) throw new Error('PANEL_VERSION e INCLUIDA deben coincidir');
+          if (!match) throw new Error('No se pudo leer la versión del panel');
           if (!boot.includes('ANK_AI_ENGINE_BUNDLE_BEGIN')) throw new Error('El arranque no valida el panel nuevo');
-          const cmp = (a,b) => {
-            const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
-            for (let i=0;i<Math.max(x.length,y.length);i++) {
-              const p=x[i]||0, q=y[i]||0;
-              if (p!==q) return p-q;
-            }
-            return 0;
-          };
-          if (cmp(manifest.web, match[1]) >= 0) {
-            throw new Error('El manifiesto remoto debe seguir por debajo de la versión incluida hasta re-firmar el paquete en el bloque de seguridad.');
+          if (!updater.includes('Actualizaciones web desactivadas temporalmente') ||
+              !updater.includes('activo: function () { return false; }') ||
+              /CLAVE_HEX|function hmac\\(/.test(updater)) {
+            throw new Error('El actualizador antiguo con HMAC comprometido no está completamente retirado');
           }
-          console.log('Canal de actualización cerrado de forma segura:', manifest.web, '<', match[1]);
+          console.log('Canal remoto desactivado sin clave HMAC; panel incluido:', match[1], 'manifiesto antiguo:', manifest.web);
           NODE
           node - <<'NODE'
           const fs = require('fs');
