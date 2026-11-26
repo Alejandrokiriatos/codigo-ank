@@ -16,7 +16,7 @@ concurrency:
 jobs:
   extraer:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -26,9 +26,9 @@ jobs:
       - name: Instalar extractor 7z
         run: |
           sudo apt-get update
-          sudo apt-get install -y p7zip-full
+          sudo apt-get install -y p7zip-full rsync
 
-      - name: Descomprimir dentro del repositorio
+      - name: Descomprimir y localizar la raíz real
         shell: bash
         run: |
           set -euo pipefail
@@ -36,26 +36,36 @@ jobs:
           mkdir -p "$DEST"
           7z x codigo-ank-fuente.7z "-o$DEST" -y
 
-          SRC="$DEST/codigo-ank-fuente"
-          if [ ! -f "$SRC/README.md" ]; then
-            SRC="$(find "$DEST" -mindepth 1 -maxdepth 3 -type f -name README.md -printf '%h\n' | head -n 1)"
-          fi
-          if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
-            echo "No se encontró la carpeta raíz del código descomprimido."
+          echo "Contenido extraído (primeros dos niveles):"
+          find "$DEST" -mindepth 1 -maxdepth 2 -printf '%y %P\n' | sort | head -250
+
+          MANIFEST="$(find "$DEST" -type f -path '*/decoded/AndroidManifest.xml' -print -quit)"
+          if [ -z "$MANIFEST" ]; then
+            echo "ERROR: el archivo no contiene decoded/AndroidManifest.xml; no se copiará una subcarpeta parcial."
             exit 1
           fi
 
+          SRC="$(dirname "$(dirname "$MANIFEST")")"
+          if [ ! -d "$SRC/bot" ] || [ ! -d "$SRC/tools" ]; then
+            echo "ERROR: raíz inesperada. Se requieren decoded/, bot/ y tools/ en el mismo nivel."
+            echo "Raíz detectada: $SRC"
+            exit 1
+          fi
+
+          echo "Raíz real detectada: $SRC"
           mkdir -p fuente-completa
-          rsync -a --delete --exclude='.git/' "$SRC/" fuente-completa/
+          rsync -a --delete --exclude='.git/' --exclude='*/.git/' "$SRC/" fuente-completa/
 
           ARCHIVOS="$(find fuente-completa -type f | wc -l | tr -d ' ')"
+          CARPETAS="$(find fuente-completa -type d | wc -l | tr -d ' ')"
           BYTES="$(du -sb fuente-completa | cut -f1)"
           echo "Archivos extraídos: $ARCHIVOS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Carpetas extraídas: $CARPETAS" >> "$GITHUB_STEP_SUMMARY"
           echo "Bytes extraídos: $BYTES" >> "$GITHUB_STEP_SUMMARY"
           echo "Carpeta destino: fuente-completa/" >> "$GITHUB_STEP_SUMMARY"
-          echo "Se excluyó únicamente .git/ anidado para no incrustar otro repositorio."
+          echo "Se excluyó la metadata Git anidada (.git/), no el código."
 
-      - name: Guardar la fuente en GitHub
+      - name: Guardar la fuente completa en GitHub
         shell: bash
         run: |
           set -euo pipefail
@@ -66,5 +76,5 @@ jobs:
             echo "La fuente ya está actualizada."
             exit 0
           fi
-          git commit -m "Añadir fuente completa descomprimida"
+          git commit -m "Importar fuente completa del proyecto ANK"
           git push origin HEAD:main
