@@ -116,6 +116,25 @@ jobs:
           if (!css.includes('.ank-ai-field textarea') || !css.includes('.ank-ai-custom')) {
             throw new Error('Faltan estilos para los ajustes de API personalizada');
           }
+          if (!engine.includes('function validarComando(command)') || !engine.includes('validateCommand: validarComando')) {
+            throw new Error('El motor no expone la política de validación de comandos');
+          }
+          if (!panel.includes('PROTOCOLO_COMANDO') || !panel.includes('ank:comando')) {
+            throw new Error('Falta el protocolo de propuestas de comandos');
+          }
+          for (const token of ['function bloqueComando(', 'function ejecutarComandoPropuesto(', 'function descartarComando(', 'case \'ejecutar-comando\'', 'case \'descartar-comando\'']) {
+            if (!panel.includes(token)) throw new Error('Falta el flujo de aprobación de comandos: ' + token);
+          }
+          if (!panel.includes('validateCommand(comando)') || !panel.includes('policy.command')) {
+            throw new Error('El panel no valida el comando antes de enviarlo al terminal');
+          }
+          if (!panel.includes("var carpeta = '/public/proyectos/' + proyecto;") ||
+              !panel.includes("var guion = 'cd ' + comilla(carpeta) + ' && ' + policy.command;")) {
+            throw new Error('El comando no está limitado a la carpeta del proyecto');
+          }
+          if (!css.includes('.ank-ai-command') || !css.includes('.ank-ai-command-actions')) {
+            throw new Error('Faltan estilos para las tarjetas de aprobación de comandos');
+          }
           const configCheck = panel.indexOf('function chequearTodo()');
           const configLoad = panel.indexOf('return cargarConfigApi();', configCheck);
           const readyGate = panel.indexOf("document.addEventListener('deviceready'", panel.indexOf('function iniciar()'));
