@@ -88,3 +88,18 @@ El protocolo que existe hoy es solo el compatible con OpenAI Chat Completions. L
 ## Criterio de cierre del bloque 2
 
 El código activo de OpenCode está retirado, el motor API inicial está conectado y el terminal se conserva. La verificación estática y de CI pasó. **El bloque 2 queda implementado a nivel de fuente, pero no se declara cerrado para distribución** hasta recuperar los recursos necesarios, generar una compilación completa y firmada con el método legítimo de la app, y superar la prueba Android física. No se pasa al bloque 3 antes de ese cierre.
+
+## Revisión adicional del 26/11/2026
+
+- Se retiró por completo el antiguo actualizador web basado en HMAC. El archivo `upd.js` ahora expone una interfaz inerte y rechaza consultas, descargas y aplicaciones remotas. No contiene la clave antigua ni funciones HMAC. El canal permanecerá desactivado hasta desplegar verificación Ed25519.
+- La restauración de la configuración API se realiza dentro de `chequearTodo()`, que se invoca después de `deviceready` en Android. Así se evita llamar al plugin nativo `system` antes de que Cordova termine de inicializarse.
+- La lectura de configuración usa el plugin File de Cordova (`resolveLocalFileSystemURL` + `FileReader`) y la escritura usa `system.writeText`; el directorio `ank-ai` se crea bajo el directorio privado devuelto por `system.getFilesDir`.
+- Verificación del transporte HTTP: el plugin `cordova-plugin-advanced-http` registra `cordova.plugin.http`; `sendRequest` devuelve un ID numérico y `abort(requestId, success, failure)` pasa ese ID al puente nativo. El motor utiliza POST con serializador JSON y respuesta de texto; las pruebas cubren respuesta, error 401 y cancelación.
+- CI: la ejecución `45855475007` terminó correctamente después de retirar HMAC y comprobar la restauración de configuración. Una nueva auditoría se ejecuta para validar la corrección adicional de inicialización post-`deviceready`.
+- Los recursos Linux siguen ausentes del árbol Git: no están `assets/opencode/opencode-arm64.tar.gz`, `assets/alpine_assets`, `axs` ni `proot`. Los archivos `Terminal.js` y `Executor.js` sí permanecen. Por eso no se puede producir un APK funcional completo con esta copia.
+- La configuración de API se guarda actualmente como JSON en el almacenamiento privado de la app, pero la clave sigue sin cifrado a nivel de aplicación. No debe considerarse almacenamiento endurecido; el cifrado/Keystore queda para el bloque de seguridad.
+- No se ha realizado prueba en dispositivo físico. La verificación actual es de código y CI; no demuestra compatibilidad en ejecución en un teléfono.
+
+### Criterio de cierre
+
+El retiro del runtime OpenCode y la sustitución inicial del chat por API compatible están implementados a nivel de código y pasan pruebas automatizadas. El bloque 2 permanece **abierto para distribución** hasta recuperar los assets requeridos, reconstruir/firmar el APK con la cadena original y probar en Android la persistencia, conexión API, cancelación y conservación de terminal/Alpine. No iniciar el bloque 3 antes de resolver esos puntos o acordar expresamente una base de reconstrucción distinta.
