@@ -55,9 +55,31 @@ El motor ya convierte el catálogo a los formatos de proveedor y normaliza las l
 - Los argumentos devueltos por el proveedor se vuelven a validar contra el registro local; se rechazan herramientas desconocidas, JSON inválido, rutas privadas y traversal.
 - El protocolo JSON personalizado queda excluido del tool calling nativo porque no define un contrato universal.
 
+## Orquestador de rondas y autorización
+
+Se incorporó `ANKAIEngine.runAgent(options)` como orquestador reutilizable. El ciclo implementado es:
+
+1. Envía conversación y catálogo de herramientas al proveedor.
+2. Recibe y vuelve a validar las llamadas normalizadas.
+3. Solicita permiso a través de `requestPermission` cuando no existe un permiso concedido por el host.
+4. Solicita confirmación individual a través de `confirmTool` para escritura, borrado, restauración y terminal.
+5. Para escritura y borrado exige que `createBackup` devuelva una copia creada explícitamente.
+6. Solo entonces llama a `executeTool`, inyectado por la aplicación anfitriona.
+7. Agrega el resultado como mensaje de herramienta en el formato de OpenAI, Anthropic o Gemini y permite otra ronda.
+8. Devuelve respuesta final, rondas, cantidad realmente ejecutada y bitácora de metadatos.
+
+Controles del orquestador:
+- Denegación predeterminada: si no hay concesión ni callback de permiso, no ejecuta.
+- La confirmación no se puede suministrar desde los argumentos del modelo.
+- La escritura/borrado no llegan al ejecutor si el respaldo no está confirmado.
+- Límite de 8 rondas, 20 llamadas por ejecución y 32 KiB por resultado de herramienta.
+- Cancela entre rondas y antes de entrar en una operación.
+- Distingue llamadas solicitadas de operaciones realmente ejecutadas.
+- La bitácora no guarda argumentos, contenido, comandos, claves ni respuestas del proveedor.
+
 ## Lo que todavía no se declara terminado
 
-Aunque el motor ya puede describir herramientas a los tres proveedores y normalizar sus llamadas, todavía no ejecuta el bucle autónomo modelo → herramienta → resultado → modelo. Tampoco presenta la pantalla para administrar permisos ni contiene ejecutores completos para listado, búsqueda, backup/restore y terminal. Por eso una llamada recibida todavía no dispara una operación del teléfono. La aplicación conserva el flujo existente de propuestas de archivo con aplicación manual.
+El orquestador ya realiza el ciclo modelo → herramienta → resultado → modelo mediante callbacks de confianza, pero la interfaz ANK todavía no invoca `runAgent` ni aporta esos callbacks. Tampoco están conectados los ejecutores reales de listado, búsqueda, backup/restore, lectura/escritura y terminal. Por ello el panel de usuario sigue usando propuestas de archivo con aplicación manual y no ofrece todavía acciones autónomas desde el chat. La siguiente subfase debe implementar esos ejecutores en la aplicación anfitriona y la pantalla de permisos, sin entregar al modelo acceso directo al sistema de archivos ni al shell.
 
 Siguientes subfases:
 1. Adaptar las respuestas de tool/function calling de OpenAI-compatible, Anthropic y Gemini a una estructura común, con límites de rondas y cancelación.
@@ -70,7 +92,7 @@ Siguientes subfases:
 
 ## Pruebas
 
-La ejecución CI `45994215921` terminó correctamente: 48 tests, 48 aprobados, 0 fallidos; sintaxis del motor y del panel, comprobación del bundle y auditoría estática también terminaron correctamente. Incluye cobertura del catálogo y política de permisos, adaptadores OpenAI/Anthropic/Gemini, argumentos inválidos, rutas privadas y respuestas de tool calling. Esta validación es de motor JavaScript y bundle, no prueba todavía el bucle de ejecución real de herramientas en Android.
+La ejecución CI `45995437656` terminó correctamente: 55 tests, 55 aprobados, 0 fallidos; sintaxis del motor y del panel, comprobación del bundle y auditoría estática también terminaron correctamente. Incluye catálogo, rutas/argumentos, política de permisos, adaptadores OpenAI/Anthropic/Gemini, rondas multi-API, denegación predeterminada, confirmación, respaldo obligatorio, contador de operaciones, límites y privacidad de la bitácora. Esta validación es del motor JavaScript y bundle; no prueba todavía los ejecutores de herramientas conectados a Android.
 
 ## Restricciones de distribución
 
