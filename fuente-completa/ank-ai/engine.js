@@ -789,12 +789,15 @@
 
     var timeoutMs = Number(options.timeoutMs) || DEFAULT_TIMEOUT;
     var control = crearControl(options.signal, nativeHttp ? 0 : timeoutMs);
+    var requestOptions = Object.assign({}, options, { apiKey: apiKey, model: model });
     var request;
-    try { request = crearSolicitud(Object.assign({}, options, { apiKey: apiKey, model: model }), protocol); }
-    catch (error) { control.dispose(); return Promise.reject(error); }
+    try {
+      requestOptions.toolNameMap = normalizarHerramientasProveedor(options.tools, protocol).names;
+      request = crearSolicitud(requestOptions, protocol);
+    } catch (error) { control.dispose(); return Promise.reject(error); }
 
     var pending = nativeHttp
-      ? chatNativo(nativeHttp, Object.assign({}, options, { apiKey: apiKey }), url, request, timeoutMs, protocol)
+      ? chatNativo(nativeHttp, requestOptions, url, request, timeoutMs, protocol)
       : fetch(url, {
           method: 'POST',
           headers: request.headers,
@@ -806,7 +809,7 @@
           }
           if (protocol === PROTOCOLS.openai && request.stream) return parsearSSE(response, options.onDelta, control.signal);
           return response.json().then(function (data) {
-            var result = respuestaNormalizada(data, protocol, options);
+            var result = respuestaNormalizada(data, protocol, requestOptions);
             if (result.content && options.onDelta) options.onDelta(result.content);
             return result;
           });
