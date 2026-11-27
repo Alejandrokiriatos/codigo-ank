@@ -986,7 +986,7 @@
     },
     {
       name: 'project.create_backup',
-      description: 'Crea una copia de seguridad del proyecto o de una ruta antes de modificarla.',
+      description: 'Crea una copia de seguridad de un archivo del proyecto.',
       permission: 'backup',
       risk: 'backup',
       requiresConfirmation: false,
@@ -994,9 +994,10 @@
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Ruta relativa que se incluirá en la copia.' },
+          path: { type: 'string', description: 'Archivo relativo al proyecto que se incluirá en la copia.' },
           reason: { type: 'string', maxLength: 240 }
         },
+        required: ['path'],
         additionalProperties: false
       }
     },
@@ -1041,7 +1042,7 @@
       permission: 'destructive',
       risk: 'destructive',
       requiresConfirmation: true,
-      requiresBackup: false,
+      requiresBackup: true,
       parameters: {
         type: 'object',
         properties: {
@@ -1169,7 +1170,7 @@
       }
     } else if (name === 'project.create_backup') {
       only(['path', 'reason']);
-      output.path = normalizarRutaProyecto(safe.path, true);
+      output.path = normalizarRutaProyecto(safe.path, false);
       if (safe.reason != null && typeof safe.reason !== 'string') throw fail('reason debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
       output.reason = String(safe.reason || '').trim().slice(0, 240);
     } else if (name === 'project.write_file') {
@@ -3433,6 +3434,368 @@
     return st.prefix + '/public/proyectos/' + (limpioRuta(st.project) || 'ank') + '/' + r;
   }
 
+  /* ------------------------------------------------------------------ *
+   * herramientas del agente · ejecutor Cordova con alcance de proyecto
+   * ------------------------------------------------------------------ */
+
+  function nombreProyectoHerramientas() {
+    return window.ANKAIEngine.normalizarRutaProyecto(limpioRuta(st.project) || 'ank', false);
+  }
+
+  function rutaLocalHerramienta(relative, allowRoot) {
+    var clean = window.ANKAIEngine.normalizarRutaProyecto(relative, !!allowRoot);
+    var root = st.prefix + '/public/proyectos/' + nombreProyectoHerramientas();
+    return { relative: clean, absolute: clean === '.' ? root : root + '/' + clean };
+  }
+
+  function uriArchivoHerramienta(path) {
+    var value = String(path || '').replace(/^file:\/\//i, '');
+    var encoded = value.split('/').map(function (part) {
+      return encodeURIComponent(part);
+    }).join('/');
+    return 'file://' + (encoded.charAt(0) === '/' ? '' : '/') + encoded;
+  }
+
+  function resolverEntradaHerramienta(path) {
+    return new Promise(function (resolve, reject) {
+      var resolver = window.resolveLocalFileSystemURL || window.resolveLocalFileSystemURI;
+      if (typeof resolver !== 'function') return reject(new Error('El sistema de archivos Cordova no está disponible.'));
+      resolver(uriArchivoHerramienta(path), resolve, reject);
+    });
+  }
+
+  function esArchivoNoEncontrado(error) {
+    if (!error) return false;
+    return error.code === 1 || error.code === 8 ||
+      error.name === 'NotFoundError' || error.name === 'NOT_FOUND_ERR';
+  }
+
+  function leerEntradaArchivoHerramienta(entry, maxBytes) {
+    return new Promise(function (resolve, reject) {
+      if (!entry || !entry.isFile) return reject(new Error('La ruta no señala un archivo.'));
+      entry.file(function (file) {
+        var limit = Math.max(1, Math.min(320000, Number(maxBytes) || 262144));
+        if (file.size > limit) return reject(new Error('El archivo supera el límite de lectura de ' + limit + ' bytes.'));
+        if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
+        var reader = new window.FileReader();
+        reader.onload = function () {
+          resolve({ exists: true, content: String(reader.result == null ? '' : reader.result), size: file.size });
+        };
+        reader.onerror = function () { reject(reader.error || new Error('No se pudo leer el archivo.')); };
+        reader.readAsText(file);
+      }, reject);
+    });
+  }
+
+  function leerEstadoArchivoHerramienta(path, maxBytes) {
+    return resolverEntradaHerramienta(path).then(function (entry) {
+      return leerEntradaArchivoHerramienta(entry, maxBytes);
+    }).catch(function (error) {
+      if (esArchivoNoEncontrado(error)) return { exists: false, content: '', size: 0 };
+      throw error;
+    });
+  }
+
+  function leerTextoEstrictoHerramienta(path, maxBytes) {
+    return resolverEntradaHerramienta(path).then(function (entry) {
+      return leerEntradaArchivoHerramienta(entry, maxBytes);
+    }).then(function (state) {
+      if (!state.exists) throw new Error('No existe el archivo solicitado.');
+      return state.content;
+    });
+  }
+
+  function leerLoteDirectorioHerramienta(entry) {
+    return new Promise(function (resolve, reject) {
+      if (!entry || !entry.isDirectory) return reject(new Error('La ruta no señala una carpeta.'));
+      var reader = entry.createReader();
+      var all = [];
+      function next() {
+        reader.readEntries(function (items) {
+          if (!items || !items.length) return resolve(all);
+          Array.prototype.push.apply(all, items);
+          if (all.length >= 2000) return resolve(all.slice(0, 2000));
+          next();
+        }, reject);
+      }
+      next();
+    });
+  }
+
+  function listarArchivosProyectoHerramienta(relative, maxDepth) {
+    var base = rutaLocalHerramienta(relative, true);
+    var depthLimit = Math.max(1, Math.min(4, Number(maxDepth) || 2));
+    var results = [];
+    var truncated = false;
+    return resolverEntradaHerramienta(base.absolute).then(function (root) {
+      if (!root.isDirectory) throw new Error('La ruta solicitada no es una carpeta.');
+      function walk(directory, rel, depth) {
+        return leerLoteDirectorioHerramienta(directory).then(function (entries) {
+          return entries.reduce(function (chain, entry) {
+            return chain.then(function () {
+              if (results.length >= 400) { truncated = true; return; }
+              var name = String(entry.name || '');
+              if (!name || name.charAt(0) === '.' || name === 'node_modules' || name === 'vendor') return;
+              var child = rel === '.' ? name : (rel ? rel + '/' + name : name);
+              try { window.ANKAIEngine.normalizarRutaProyecto(child, false); }
+              catch (_) { return; }
+              if (entry.isFile) {
+                results.push({ path: child, type: 'file' });
+                return;
+              }
+              if (entry.isDirectory) {
+                results.push({ path: child, type: 'directory' });
+                if (depth < depthLimit) return walk(entry, child, depth + 1);
+              }
+            });
+          }, Promise.resolve());
+        });
+      }
+      return walk(root, base.relative, 1);
+    }).then(function () {
+      results.sort(function (a, b) { return a.path.localeCompare(b.path); });
+      return { files: results, truncated: truncated };
+    });
+  }
+
+  function hashTextoHerramienta(value) {
+    var text = String(value == null ? '' : value);
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return 'fnv1a32-' + (hash >>> 0).toString(16).padStart(8, '0');
+  }
+
+  function sanitizarContenidoHerramienta(value) {
+    var text = String(value == null ? '' : value);
+    var redacted = false;
+    text = text.replace(/((?:["']?)[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password|passwd|authorization)[A-Za-z0-9_-]*(?:["']?)\s*[:=]\s*)(["'])(.*?)\2/gi,
+      function (_match, prefix, quote) {
+        redacted = true;
+        return prefix + quote + '[CLAVE OCULTA]' + quote;
+      });
+    text = text.replace(/((?:API|ACCESS|REFRESH|GITHUB|AWS|STRIPE|DATABASE|DB)[A-Z0-9_-]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*)([^\r\n]+)/gi,
+      function (_match, prefix) {
+        redacted = true;
+        return prefix + '[CLAVE OCULTA]';
+      });
+    text = text.replace(/(Bearer\s+)[A-Za-z0-9._~+/-]{8,}/gi, function (_match, prefix) {
+      redacted = true;
+      return prefix + '[CLAVE OCULTA]';
+    });
+    text = text.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+      function () {
+        redacted = true;
+        return '[CLAVE PRIVADA OCULTA]';
+      });
+    return { content: text, redacted: redacted };
+  }
+
+  function rutaRaizBackupsHerramienta() {
+    return st.prefix + '/ank-ai/backups/' + nombreProyectoHerramientas();
+  }
+
+  function rutaBackupHerramienta(id) {
+    var value = String(id || '').trim();
+    if (!/^[A-Za-z0-9._-]{1,100}$/.test(value)) throw new Error('Identificador de respaldo no válido.');
+    return rutaRaizBackupsHerramienta() + '/' + value + '.json';
+  }
+
+  function guardarSnapshotHerramienta(relative) {
+    var target = rutaLocalHerramienta(relative, false);
+    return leerEstadoArchivoHerramienta(target.absolute, 262144).then(function (state) {
+      var id = 'ankb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      var snapshot = {
+        id: id,
+        project: nombreProyectoHerramientas(),
+        path: target.relative,
+        exists: !!state.exists,
+        content: state.exists ? state.content : '',
+        createdAt: new Date().toISOString()
+      };
+      var root = rutaRaizBackupsHerramienta();
+      return conSistema('mkdirs', root).then(function () {
+        return escribir(rutaBackupHerramienta(id), JSON.stringify(snapshot));
+      }).then(function () {
+        return { created: true, id: id, path: target.relative, existed: !!state.exists };
+      });
+    });
+  }
+
+  function leerSnapshotHerramienta(id) {
+    var path = rutaBackupHerramienta(id);
+    return leerTextoEstrictoHerramienta(path, 300000).then(function (raw) {
+      var data;
+      try { data = JSON.parse(raw); }
+      catch (_) { throw new Error('La copia de seguridad está dañada.'); }
+      if (!data || data.id !== id || data.project !== nombreProyectoHerramientas() ||
+          typeof data.path !== 'string' || typeof data.exists !== 'boolean' ||
+          (data.exists && typeof data.content !== 'string')) {
+        throw new Error('La copia de seguridad no pertenece al proyecto activo o no es válida.');
+      }
+      data.path = window.ANKAIEngine.normalizarRutaProyecto(data.path, false);
+      return data;
+    });
+  }
+
+  function backupAntesDeHerramienta(call) {
+    var name = call.tool || call.name;
+    var args = call.arguments || {};
+    if (name === 'project.restore_backup') {
+      return leerSnapshotHerramienta(args.backupId).then(function (snapshot) {
+        return guardarSnapshotHerramienta(snapshot.path);
+      });
+    }
+    return guardarSnapshotHerramienta(args.path);
+  }
+
+  function restaurarSnapshotHerramienta(id) {
+    return leerSnapshotHerramienta(id).then(function (snapshot) {
+      var target = rutaLocalHerramienta(snapshot.path, false);
+      var folder = target.absolute.replace(/\/[^\/]+$/, '');
+      return conSistema('mkdirs', folder).then(function () {
+        if (snapshot.exists) return escribir(target.absolute, snapshot.content);
+        return conSistema('deleteFile', target.absolute).catch(function (error) {
+          if (esArchivoNoEncontrado(error)) return true;
+          throw error;
+        });
+      }).then(function () {
+        return { restored: true, path: snapshot.path, backupId: id };
+      });
+    });
+  }
+
+  function buscarArchivosProyectoHerramienta(query, relative, maxResults) {
+    var wanted = String(query || '').toLowerCase();
+    var limit = Math.max(1, Math.min(50, Number(maxResults) || 20));
+    return listarArchivosProyectoHerramienta(relative, 4).then(function (listing) {
+      var files = listing.files.filter(function (item) { return item.type === 'file'; });
+      var matches = [];
+      function next(index) {
+        if (index >= files.length || matches.length >= limit) return;
+        var path = files[index].path;
+        var target = rutaLocalHerramienta(path, false);
+        return leerEstadoArchivoHerramienta(target.absolute, 262144).then(function (state) {
+          if (state.exists) {
+            var lines = state.content.split(/\r?\n/);
+            for (var i = 0; i < lines.length && matches.length < limit; i++) {
+              if (lines[i].toLowerCase().indexOf(wanted) !== -1) {
+                matches.push({
+                  path: path,
+                  line: i + 1,
+                  text: sanitizarContenidoHerramienta(lines[i].slice(0, 500)).content
+                });
+              }
+            }
+          }
+        }).catch(function () {}).then(function () { return next(index + 1); });
+      }
+      return next(0).then(function () {
+        return { matches: matches, truncated: listing.truncated || files.length > 400 };
+      });
+    });
+  }
+
+  function ejecutarHerramientaProyecto(call) {
+    var args = call.arguments || {};
+    if (call.name === 'project.list_files') {
+      return listarArchivosProyectoHerramienta(args.path, args.maxDepth);
+    }
+    if (call.name === 'project.read_file') {
+      var readTarget = rutaLocalHerramienta(args.path, false);
+      return leerEstadoArchivoHerramienta(readTarget.absolute, args.maxBytes).then(function (state) {
+        if (!state.exists) throw new Error('No existe el archivo ' + readTarget.relative + '.');
+        var safe = sanitizarContenidoHerramienta(state.content);
+        return {
+          path: readTarget.relative,
+          content: safe.content,
+          digest: safe.redacted ? null : hashTextoHerramienta(state.content),
+          secretsRedacted: safe.redacted
+        };
+      });
+    }
+    if (call.name === 'project.search_files') {
+      return buscarArchivosProyectoHerramienta(args.query, args.path, args.maxResults);
+    }
+    if (call.name === 'project.create_backup') {
+      return guardarSnapshotHerramienta(args.path).then(function (snapshot) {
+        return { backupId: snapshot.id, path: snapshot.path, existed: snapshot.existed };
+      });
+    }
+    if (call.name === 'project.write_file') {
+      var writeTarget = rutaLocalHerramienta(args.path, false);
+      return leerEstadoArchivoHerramienta(writeTarget.absolute, 262144).then(function (current) {
+        if (args.expectedDigest && (!current.exists || hashTextoHerramienta(current.content) !== args.expectedDigest)) {
+          throw new Error('El archivo cambió desde la última lectura. Vuelve a leerlo antes de escribir.');
+        }
+        var folder = writeTarget.absolute.replace(/\/[^\/]+$/, '');
+        return conSistema('mkdirs', folder).then(function () {
+          return escribir(writeTarget.absolute, args.content);
+        }).then(function () {
+          return { written: true, path: writeTarget.relative, bytes: args.content.length };
+        });
+      });
+    }
+    if (call.name === 'project.delete_file') {
+      var deleteTarget = rutaLocalHerramienta(args.path, false);
+      return leerEstadoArchivoHerramienta(deleteTarget.absolute, 262144).then(function (current) {
+        if (!current.exists) throw new Error('El archivo que se intenta borrar ya no existe.');
+        if (args.expectedDigest && hashTextoHerramienta(current.content) !== args.expectedDigest) {
+          throw new Error('El archivo cambió desde la última lectura. No se borró.');
+        }
+        return conSistema('deleteFile', deleteTarget.absolute).then(function () {
+          return { deleted: true, path: deleteTarget.relative };
+        });
+      });
+    }
+    if (call.name === 'project.restore_backup') {
+      return restaurarSnapshotHerramienta(args.backupId);
+    }
+    return Promise.reject(new Error('Esta herramienta no está habilitada en el teléfono.'));
+  }
+
+  function permisoHerramientaPanel(info) {
+    var labels = {
+      read: 'leer o buscar archivos del proyecto',
+      write: 'modificar archivos del proyecto',
+      backup: 'crear una copia de seguridad',
+      destructive: 'borrar un archivo o restaurar una copia',
+      execute: 'ejecutar un comando de terminal'
+    };
+    var path = info.arguments && info.arguments.path ? '\nRuta: ' + info.arguments.path : '';
+    var message = 'Código ANK solicita permiso para ' +
+      (labels[info.permission] || info.permission) + '.' + path +
+      '\n\n¿Permitir esta operación?';
+    return Promise.resolve(typeof window.confirm === 'function' && window.confirm(message));
+  }
+
+  function confirmarHerramientaPanel(info) {
+    var args = info.arguments || {};
+    var detail = args.path ? '\nRuta: ' + args.path : '';
+    if (info.tool === 'project.write_file') {
+      detail += '\n\nContenido propuesto:\n' + String(args.content || '').slice(0, 1800);
+      if (String(args.content || '').length > 1800) detail += '\n… contenido recortado';
+    }
+    if (info.tool === 'project.restore_backup') detail += '\nCopia: ' + args.backupId;
+    var message = 'Confirmación necesaria: ' + info.tool + detail +
+      '\n\nSe creará un respaldo antes de modificar o borrar. ¿Continuar?';
+    return Promise.resolve(typeof window.confirm === 'function' && window.confirm(message));
+  }
+
+  function herramientasDisponiblesPanel() {
+    var tools = window.ANKAIEngine.herramientasAgente();
+    if (st.modo === 'plan') {
+      return tools.filter(function (tool) {
+        return tool.name === 'project.list_files' ||
+          tool.name === 'project.read_file' ||
+          tool.name === 'project.search_files';
+      });
+    }
+    return tools.filter(function (tool) { return tool.name !== 'terminal.run'; });
+  }
+
   /* Diff por líneas con LCS. Se acota el tamaño para no trabar el teléfono
      con archivos enormes. */
   function diffLineas(antes, despues) {
@@ -4664,8 +5027,10 @@
         'Eres el asistente de programación integrado en Código ANK.',
         'Responde en español, sé preciso y nunca inventes resultados de ejecución.',
         st.modo === 'plan'
-          ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
-          : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
+          ? 'Modo Plan: analiza y propone; solo puedes leer, listar y buscar archivos. No modifiques nada.'
+          : 'Modo Construir: puedes leer y buscar en el proyecto; para escribir, borrar o restaurar debes explicar el cambio y esperar la confirmación explícita de ANK.',
+        'Las herramientas de proyecto operan solo dentro de la carpeta del proyecto activo. No intentes leer credenciales, archivos ocultos ni salir de esa carpeta.',
+        'La terminal no está habilitada como herramienta del agente en esta versión. No inventes resultados de comandos.',
         PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
         memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
       ].join('\n');
@@ -4675,13 +5040,13 @@
         return { role: m.rol === 'user' ? 'user' : 'assistant', content: String(m.texto || '').slice(0, 30000) };
       });
       log('i', 'Enviando solicitud a la API: ' + st.model);
-      return window.ANKAIEngine.chat({
+      var requestOptions = {
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
-      customAuthHeader: st.customAuthHeader,
-      customAuthPrefix: st.customAuthPrefix,
-      customHeaders: st.customHeaders,
-      customBodyTemplate: st.customBodyTemplate,
-      customResponsePath: st.customResponsePath,
+        customAuthHeader: st.customAuthHeader,
+        customAuthPrefix: st.customAuthPrefix,
+        customHeaders: st.customHeaders,
+        customBodyTemplate: st.customBodyTemplate,
+        customResponsePath: st.customResponsePath,
         messages: [{ role: 'system', content: systemPrompt }].concat(history),
         temperature: 0.2, timeoutMs: 120000,
         signal: st.abortController ? st.abortController.signal : undefined,
@@ -4689,7 +5054,24 @@
         onDelta: function (part) {
           try { escribirBot(part); } catch (e) { log('e', 'Render: ' + (e.message || e)); }
         }
-      });
+      };
+      if (st.protocol === 'custom-json') return window.ANKAIEngine.chat(requestOptions);
+      return window.ANKAIEngine.runAgent(Object.assign({}, requestOptions, {
+        tools: herramientasDisponiblesPanel(),
+        permissions: {},
+        requestPermission: permisoHerramientaPanel,
+        confirmTool: confirmarHerramientaPanel,
+        createBackup: backupAntesDeHerramienta,
+        executeTool: ejecutarHerramientaProyecto,
+        maxToolRounds: 5,
+        maxToolCalls: 12,
+        onToolEvent: function (event) {
+          var path = event.path ? ' · ' + event.path : '';
+          log(event.status === 'failed' || event.status === 'permission_denied' ||
+              event.status === 'confirmation_denied' ? 'w' : 'i',
+            'Herramienta ' + event.tool + ': ' + event.status + path);
+        }
+      }));
     }).then(function (result) {
       st.corriendo = false; st.abortController = null;
       cerrarTurno(false); tocarChat();
