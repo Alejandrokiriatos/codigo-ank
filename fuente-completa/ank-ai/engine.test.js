@@ -1298,3 +1298,21 @@ test('Bloque 6 · transporta functionCall y functionResponse en Gemini', async (
   assert.equal(resultParts[0].functionResponse.response.result, 'contenido');
 });
 
+test('Bloque 6 · crea respaldos solo de archivos y exige respaldo al restaurar', () => {
+  assert.throws(
+    () => Engine.normalizarArgumentosHerramienta('project.create_backup', {}),
+    /Falta la ruta relativa/
+  );
+  assert.throws(
+    () => Engine.normalizarArgumentosHerramienta('project.create_backup', { path: '.' }),
+    /La ruta debe señalar un archivo/
+  );
+  assert.deepEqual(
+    Engine.normalizarArgumentosHerramienta('project.create_backup', { path: 'src/main.js' }),
+    { path: 'src/main.js', reason: '' }
+  );
+  const restore = Engine.herramientasAgente().find((tool) => tool.name === 'project.restore_backup');
+  assert.equal(restore.requiresBackup, true);
+  assert.equal(restore.requiresConfirmation, true);
+});
+
