@@ -56,6 +56,24 @@ assert.ok(panel.includes('window.ANKAIEngine.normalizarPerfiles(') &&
 assert.ok(panel.includes("if (q('#ank-ai-key')) q('#ank-ai-key').value = '';") &&
   panel.includes("label.textContent = st.model ? st.activeProfileName + ' · ' + st.model : 'Sin modelo';"),
   'El cambio de perfil debe limpiar el campo secreto y mostrar la conexión activa.');
+assert.match(panel, /profileBusy:\s*false/, 'Falta el estado de transacción de conexiones.');
+assert.ok(panel.includes('select.disabled = busy') && panel.includes('name.disabled = busy') &&
+  panel.includes('if (field) field.disabled = busy'),
+  'Los controles de configuración deben bloquearse durante una escritura del vault.');
+for (const fnName of ['seleccionarPerfilApi', 'crearPerfilApi', 'eliminarPerfilApi']) {
+  const start = panel.indexOf('function ' + fnName + '(');
+  const next = panel.indexOf('\n  function ', start + 1);
+  const body = panel.slice(start, next < 0 ? panel.length : next);
+  const clearKey = body.indexOf("q('#ank-ai-key').value = '';");
+  const repaint = body.indexOf('pintar();', clearKey);
+  const persist = body.indexOf('persistirPerfilesApi()', repaint);
+  assert.ok(clearKey >= 0 && repaint > clearKey && persist > repaint,
+    fnName + ' debe limpiar la clave y actualizar la vista antes de iniciar la escritura asíncrona.');
+  assert.ok(body.includes('st.profileBusy = true') && body.includes('st.profileBusy = false'),
+    fnName + ' debe bloquear y liberar los controles durante la transacción.');
+}
+assert.ok(panel.includes("if (st.profileBusy) { aviso('Espera a que termine el guardado de la conexión API.'); return; }"),
+  'No se deben iniciar mensajes mientras la configuración del proveedor está cambiando.');
 assert.ok(panel.includes('version: 7') && panel.includes('profiles: profiles.map(function (perfil)'),
   'Los perfiles deben persistirse en el formato v7 con límite de 12 conexiones.');
 assert.ok(panel.includes('delete safe.apiKey') && panel.includes('delete safe.customAuthPrefix') &&
