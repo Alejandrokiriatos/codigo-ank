@@ -62,7 +62,8 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Se puede crear una conexión nueva y eliminar la conexión activa; al borrar la última se genera una ficha vacía para no dejar los ajustes inutilizables.
 - Los perfiles v3 de una sola conexión se migran automáticamente a `provider.json` v7 como «Conexión principal»; los formatos v3/v4/v5 transfieren las claves, cabeceras personalizadas y plantillas JSON al almacén cifrado antes de retirar esos campos del archivo.
 - La selección activa se restaura al abrir el panel.
-- Al cambiar, crear o eliminar perfiles, se limpia el campo de clave API para que una clave escrita en un perfil no termine accidentalmente en otro.
+- Al cambiar, crear o eliminar perfiles, se limpia el campo de clave API y se actualiza la vista antes de iniciar la escritura asíncrona, para que una clave escrita en un perfil no termine accidentalmente en otro.
+- Mientras el vault guarda, los campos de conexión, selector y acciones se bloquean; también se impide iniciar una petición o prueba con un perfil que todavía está cambiando.
 - En el chat se identifica el perfil activo junto al modelo.
 - Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
 - La lógica de creación, normalización, migración, actualización y eliminación de perfiles vive en `ank-ai/engine.js`, independiente de la vista. Esto permite probar las reglas del almacén sin depender del DOM.
@@ -71,7 +72,7 @@ Las claves API, los prefijos de autenticación personalizados, las cabeceras adi
 
 Las reglas de copia de seguridad clásicas y Android 12+ excluyen `ank_api_secrets.xml` tanto de copia cloud como de transferencia entre dispositivos. El ciphertext depende de una clave Android Keystore que no puede trasladarse con el archivo cifrado.
 
-### Diseño del panel 2.6.1
+### Diseño del panel 2.6.2
 
 - El arranque del APK solo carga `./ank/ai.js`, que es el panel integrado en la aplicación. Ya no ejecuta JavaScript o CSS guardados en `localStorage`; los paquetes antiguos no firmados se eliminan al iniciar.
 - Mientras el actualizador remoto siga desactivado, no se aceptan paquetes web. La reactivación exige validación de firma Ed25519 en el arranque, antes de ejecutar el contenido.
