@@ -207,9 +207,11 @@ jobs:
           """.replace("SECRET_VALUE", secret)
           panel_path = Path("fuente-completa/decoded/assets/www/ank/ai.js")
           panel = panel_path.read_text(encoding="utf-8")
-          footer = """  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
-            else iniciar();
-          })();"""
+          footer = (
+              "  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);\n"
+              "  else iniciar();\n"
+              "})();"
+          )
           if panel.count(footer) != 1:
               raise SystemExit("No se encontró el cierre único del panel para instrumentar pruebas de herramientas.")
           test_hook = """
