@@ -136,26 +136,26 @@ jobs:
             APK="$RUNNER_TEMP/CodigoANK-vault-ci.apk"
             adb install "$APK"
             adb logcat -c
-            adb shell am start -n com.foxdebug.acode/com.foxdebug.acode.MainActivity
+            adb shell am start -n com.ank.codigoank/com.foxdebug.acode.MainActivity
             wait_marker() {
               expected="$1"
               for attempt in $(seq 1 90); do
-                if adb logcat -d -s chromium:I '*:S' | grep -F "ANK_VAULT_CI:$expected" >/dev/null; then
+                if adb logcat -d | grep -F "ANK_VAULT_CI:$expected" >/dev/null; then
                   echo "Android WebView reportó $expected"
                   return 0
                 fi
                 if adb logcat -d | grep -F "ANK_VAULT_CI:FAIL_" >/dev/null; then
-                  adb logcat -d -s chromium:I '*:S' | grep -F "ANK_VAULT_CI:"
+                  adb logcat -d | grep -F "ANK_VAULT_CI:"
                   return 1
                 fi
                 sleep 2
               done
-              adb logcat -d -s chromium:I '*:S' | tail -n 120
+              adb logcat -d | grep -F 'ANK_VAULT_CI:' | tail -n 120
               echo "No se recibió marcador $expected"
               return 1
             }
             wait_marker STAGE1_OK
-            adb shell am force-stop com.foxdebug.acode
-            adb shell am start -n com.foxdebug.acode/com.foxdebug.acode.MainActivity
+            adb shell am force-stop com.ank.codigoank
+            adb shell am start -n com.ank.codigoank/com.foxdebug.acode.MainActivity
             wait_marker STAGE2_OK
             echo "PASS: put/get, persistencia tras force-stop, remove y lectura vacía en ApiVault real." >> "$GITHUB_STEP_SUMMARY"
