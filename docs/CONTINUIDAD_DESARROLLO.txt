@@ -301,3 +301,15 @@ emulador/dispositivo que escriba, cierre, reinicie, lea y borre una clave
 desechable a través del puente Cordova real.
 
 FIN DE LA ACTUALIZACIÓN
+
+Resultado CI del refuerzo:
+  https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45986522981
+
+34/34 pruebas unitarias multi-API aprobadas, bundle Android verificado y
+auditoría estática reforzada superada. La CI encontró y permitió corregir
+defectos de las nuevas aserciones de test antes de aceptar el cambio. No hubo
+fallos en las 34 pruebas del motor.
+
+Sigue pendiente una ejecución Android real de ApiVault para probar el ciclo
+put/get/remove y persistencia después de cierre forzado y reinicio.
+
