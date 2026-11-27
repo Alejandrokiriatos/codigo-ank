@@ -728,7 +728,7 @@ test('valida estrictamente argumentos de lectura y escritura', () => {
   );
   assert.deepEqual(
     Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/main.js' }),
-    { path: 'src/main.js', maxBytes: 65536 }
+    { path: 'src/main.js', maxBytes: 24576 }
   );
   assert.throws(() => Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/main.js', extra: true }), /Argumento no reconocido/);
   assert.throws(() => Engine.normalizarArgumentosHerramienta('project.search_files', { query: { text: 'x' } }), /consulta debe ser texto/);
