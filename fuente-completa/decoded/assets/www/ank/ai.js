@@ -3705,7 +3705,7 @@
     }
     if (call.name === 'project.read_file') {
       var readTarget = rutaLocalHerramienta(args.path, false);
-      return leerEstadoArchivoHerramienta(readTarget.absolute, args.maxBytes).then(function (state) {
+      return leerEstadoArchivoHerramienta(readTarget.absolute, Math.min(24576, args.maxBytes || 24576)).then(function (state) {
         if (!state.exists) throw new Error('No existe el archivo ' + readTarget.relative + '.');
         var safe = sanitizarContenidoHerramienta(state.content);
         return {
@@ -3727,6 +3727,9 @@
     if (call.name === 'project.write_file') {
       var writeTarget = rutaLocalHerramienta(args.path, false);
       return leerEstadoArchivoHerramienta(writeTarget.absolute, 262144).then(function (current) {
+        if (current.exists && !args.expectedDigest) {
+          throw new Error('El archivo ya existe. Léelo primero y vuelve a proponer el cambio con su digest para evitar sobrescribir una versión distinta.');
+        }
         if (args.expectedDigest && (!current.exists || hashTextoHerramienta(current.content) !== args.expectedDigest)) {
           throw new Error('El archivo cambió desde la última lectura. Vuelve a leerlo antes de escribir.');
         }
@@ -3742,7 +3745,10 @@
       var deleteTarget = rutaLocalHerramienta(args.path, false);
       return leerEstadoArchivoHerramienta(deleteTarget.absolute, 262144).then(function (current) {
         if (!current.exists) throw new Error('El archivo que se intenta borrar ya no existe.');
-        if (args.expectedDigest && hashTextoHerramienta(current.content) !== args.expectedDigest) {
+        if (!args.expectedDigest) {
+          throw new Error('Léelo primero y vuelve a proponer el borrado con su digest. No se eliminó el archivo.');
+        }
+        if (hashTextoHerramienta(current.content) !== args.expectedDigest) {
           throw new Error('El archivo cambió desde la última lectura. No se borró.');
         }
         return conSistema('deleteFile', deleteTarget.absolute).then(function () {
