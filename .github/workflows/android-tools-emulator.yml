@@ -1,0 +1,76 @@
+name: Prueba de herramientas de archivos · emulador Android
+
+on:
+  push:
+    branches:
+      - ank/block-3-multiple-api
+    paths:
+      - "fuente-completa/decoded/assets/www/ank/ai.js"
+      - "fuente-completa/tools/auditar-bloque-3.js"
+      - ".github/workflows/android-tools-emulator.yml"
+      - ".github/scripts/inject-android-tools-harness.py"
+      - ".github/scripts/android-tools-emulator.sh"
+      - "docs/BLOQUE_6_HERRAMIENTAS_PERMISOS.md"
+      - "docs/CONTINUIDAD_DESARROLLO.txt"
+  pull_request:
+    branches:
+      - ank/block-3-multiple-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  file-tools-emulator:
+    name: Listar, leer, buscar, escribir, respaldar y restaurar
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Descargar rama de trabajo
+        uses: actions/checkout@v4
+
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Apktool
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/iBotPeaches/Apktool/releases/download/v2.11.1/apktool_2.11.1.jar -o "$RUNNER_TEMP/apktool.jar"
+          printf '#!/usr/bin/env bash\nexec java -jar "%s" "$@"\n' "$RUNNER_TEMP/apktool.jar" | sudo tee /usr/local/bin/apktool >/dev/null
+          sudo chmod +x /usr/local/bin/apktool
+          apktool --version
+
+      - name: Inyectar harness exclusivo de CI y reconstruir APK temporal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/inject-android-tools-harness.py
+          apktool b fuente-completa/decoded -o "$RUNNER_TEMP/CodigoANK-tools-ci-unsigned.apk"
+          SDK_ROOT="$ANDROID_HOME"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          PACKAGE_NAME="$("$AAPT" dump badging "$RUNNER_TEMP/CodigoANK-tools-ci-unsigned.apk" | grep -o "package: name='[^']*'" | cut -d"'" -f2)"
+          test "$PACKAGE_NAME" = "com.ank.codigoank" || { echo "Application ID inesperado: $PACKAGE_NAME"; exit 1; }
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/ank-tools-ci-debug.jks" -storepass android -keypass android -alias ank-ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=ANK CI,O=OpenAI,C=US"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" sign --ks "$RUNNER_TEMP/ank-tools-ci-debug.jks" --ks-pass pass:android --key-pass pass:android --out "$RUNNER_TEMP/CodigoANK-tools-ci.apk" "$RUNNER_TEMP/CodigoANK-tools-ci-unsigned.apk"
+          "$APKSIGNER" verify "$RUNNER_TEMP/CodigoANK-tools-ci.apk"
+          echo "APK temporal firmada con clave efímera; no es una release."
+
+      - name: Ejecutar ejecutores Cordova en emulador Android
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
+        with:
+          api-level: 30
+          arch: x86_64
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: bash .github/scripts/android-tools-emulator.sh

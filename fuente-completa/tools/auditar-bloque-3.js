@@ -215,6 +215,15 @@ assert.match(panel, /Math\.min\(24576, args\.maxBytes \|\| 24576\)/, 'La lectura
 assert.match(panel, /current\.exists && !args\.expectedDigest/, 'El overwrite de un archivo existente debe exigir el digest de su última lectura.');
 assert.match(panel, /if \(!args\.expectedDigest\) \{\s*throw new Error\('Léelo primero/, 'El borrado debe exigir el digest de su última lectura.');
 assert.match(panel, /function restaurarSnapshotHerramienta\(id\)/, 'Falta restaurar desde copias locales.');
+assert.match(panel, /function restaurarTrasFalloHerramienta\(context, originalError\)/,
+  'Falta el mecanismo de recuperación ante un fallo de mutación.');
+assert.match(panel, /escribir\(writeTarget\.absolute, args\.content\)\.catch\(rollback\)/,
+  'Una escritura parcial fallida debe restaurar el snapshot anterior.');
+assert.match(panel, /conSistema\('deleteFile', deleteTarget\.absolute\)\.catch\(rollback\)/,
+  'Un borrado fallido debe restaurar el snapshot anterior.');
+assert.match(panel, /restaurarSnapshotHerramienta\(args\.backupId\)\.catch\(rollback\)/,
+  'Una restauración fallida debe recuperar el estado anterior al intento.');
+
 assert.ok(panel.includes('data-view="seguridad"') && panel.includes('data-tab="seguridad"'),
   'Falta la pestaña dedicada de seguridad y actividad.');
 assert.ok(panel.includes('ank.ai.tool.activity.v1') && panel.includes('function registrarActividadHerramienta(event)'),

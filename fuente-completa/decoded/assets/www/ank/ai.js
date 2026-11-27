@@ -3732,7 +3732,23 @@
     });
   }
 
-  function ejecutarHerramientaProyecto(call) {
+  function restaurarTrasFalloHerramienta(context, originalError) {
+    var message = String(originalError && originalError.message ? originalError.message : originalError || 'Error de escritura');
+    var backupId = context && String(context.backupId || '');
+    if (!backupId) {
+      return Promise.reject(new Error(message + ' No hay un respaldo verificable para restaurar automáticamente.'));
+    }
+    return restaurarSnapshotHerramienta(backupId).then(function () {
+      throw new Error(message + ' El archivo se restauró automáticamente desde el respaldo local.');
+    }, function (restoreError) {
+      var detail = String(restoreError && restoreError.message ? restoreError.message : restoreError || 'error desconocido');
+      throw new Error(message + ' La restauración automática también falló: ' + detail +
+        '. Conserva el respaldo local ' + backupId + ' para recuperar el estado anterior.');
+    });
+  }
+
+  function ejecutarHerramientaProyecto(call, context) {
+    var rollback = function (error) { return restaurarTrasFalloHerramienta(context, error); };
     var args = call.arguments || {};
     if (call.name === 'project.list_files') {
       return listarArchivosProyectoHerramienta(args.path, args.maxDepth);
@@ -3769,7 +3785,7 @@
         }
         var folder = writeTarget.absolute.replace(/\/[^\/]+$/, '');
         return conSistema('mkdirs', folder).then(function () {
-          return escribir(writeTarget.absolute, args.content);
+          return escribir(writeTarget.absolute, args.content).catch(rollback);
         }).then(function () {
           return { written: true, path: writeTarget.relative, bytes: args.content.length };
         });
@@ -3785,13 +3801,13 @@
         if (hashTextoHerramienta(current.content) !== args.expectedDigest) {
           throw new Error('El archivo cambió desde la última lectura. No se borró.');
         }
-        return conSistema('deleteFile', deleteTarget.absolute).then(function () {
+        return conSistema('deleteFile', deleteTarget.absolute).catch(rollback).then(function () {
           return { deleted: true, path: deleteTarget.relative };
         });
       });
     }
     if (call.name === 'project.restore_backup') {
-      return restaurarSnapshotHerramienta(args.backupId);
+      return restaurarSnapshotHerramienta(args.backupId).catch(rollback);
     }
     return Promise.reject(new Error('Esta herramienta no está habilitada en el teléfono.'));
   }

@@ -111,3 +111,17 @@ La auditoría estática comprueba que los diálogos están conectados a los call
 3. Probar que un fallo de escritura no informa éxito y que el respaldo anterior permite recuperar el contenido.
 4. Evaluar límites de memoria/tiempo en un dispositivo Android físico de gama modesta.
 5. Mantener `terminal.run` fuera de las herramientas anunciadas hasta implementar timeout y cancelación nativa verificable.
+
+
+## Actualización · recuperación automática ante fallos de mutación
+
+El ejecutor Cordova recibe el identificador del snapshot creado por `runAgent`. Si el envío nativo de `System.writeText` falla durante la escritura, ANK intenta restaurar automáticamente el snapshot previo. La misma recuperación protege los intentos fallidos de borrado o de restauración de un snapshot.
+
+- Si la restauración automática funciona, el error informa que se recuperó el contenido anterior.
+- Si la restauración también falla, el error conserva el identificador del respaldo local para recuperación manual.
+- Los fallos de validación de ruta o digest ocurren antes de iniciar la mutación y no restauran snapshots; así se evita sobrescribir cambios ajenos que hayan aparecido después del respaldo.
+- El respaldo previo sigue siendo obligatorio. Si no existe un snapshot verificable, la mutación no se ejecuta.
+
+Se añadió un workflow de emulador que reconstruye una APK temporal e inyecta un puente de pruebas solo dentro de esa compilación. Comprueba los ejecutores Cordova reales de listado, lectura, búsqueda, escritura, backup, restauración y borrado; también archivos vacíos, redacción de secretos, rechazo de traversal y rollback tras simular una escritura parcial fallida. El puente de diagnóstico no queda en los assets versionados ni en una APK release.
+
+El resultado del workflow debe estar en **success** para declarar validada esta subfase. Sigue pendiente la prueba física en un teléfono Android.

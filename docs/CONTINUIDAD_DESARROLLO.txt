@@ -610,3 +610,37 @@ Restricciones:
   certificado original de distribución siguen sin estar disponibles.
 
 FIN DE LA ACTUALIZACIÓN
+
+
+================================================================
+17. BLOQUE 6 · ROLLBACK AUTOMÁTICO Y HARNESS DE HERRAMIENTAS ANDROID
+================================================================
+
+Se reforzó el ejecutor Cordova para que los fallos de mutación utilicen el
+snapshot creado antes de la operación:
+- write_file: restaura el contenido anterior si System.writeText falla.
+- delete_file: restaura el archivo desde el snapshot si el borrado falla.
+- restore_backup: restaura el estado anterior al intento si falla la
+  restauración solicitada.
+Si también falla la recuperación, el mensaje conserva el ID del respaldo.
+
+Se añadió un workflow Android de CI que:
+- reconstruye una APK temporal con Apktool y firma efímera;
+- inyecta el puente de diagnóstico únicamente en esa APK temporal;
+- usa Cordova real y File API dentro de un emulador Android API 30;
+- prueba list/read/search/write/create_backup/restore/delete;
+- prueba archivo vacío, redacción de secretos y rechazo de traversal;
+- fuerza una escritura parcial seguida de error para verificar rollback.
+
+El puente de diagnóstico no se añade a los assets normales del repositorio.
+La auditoría estática exige el mecanismo de recuperación en el ejecutor.
+Esperar el resultado SUCCESS del nuevo workflow antes de declarar probada
+la ejecución de herramientas en Android.
+
+Pendiente:
+- comprobar el resultado CI del harness de ejecutores;
+- repetir la matriz en un teléfono Android físico;
+- medir memoria/tiempos con el proyecto y archivos reales;
+- terminal.run continúa oculto hasta tener timeout y cancelación nativos.
+
+No se modifica main. No se genera APK release ni actualizable.
