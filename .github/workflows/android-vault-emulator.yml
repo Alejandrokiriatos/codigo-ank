@@ -109,6 +109,14 @@ jobs:
           path.write_text(html.replace("</body>", harness + "\n</body>"), encoding="utf-8")
           PY
           apktool b fuente-completa/decoded -o "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          PACKAGE_NAME="$("$AAPT" dump badging "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+          test "$PACKAGE_NAME" = "com.ank.codigoank" || { echo "Application ID inesperado: $PACKAGE_NAME"; exit 1; }
+          echo "Application ID verificado: $PACKAGE_NAME" >> "$GITHUB_STEP_SUMMARY"
+          # Esta clave efímera solo sirve para instalar la build de prueba desde cero en el emulador.
+          # Nunca reutilizarla para actualizaciones ni distribuir esta APK.
           keytool -genkeypair -v -keystore "$RUNNER_TEMP/ank-ci-debug.jks" -storepass android -keypass android -alias ank-ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=ANK CI,O=OpenAI,C=US"
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
