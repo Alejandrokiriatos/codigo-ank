@@ -1405,6 +1405,9 @@
           perfil.apiKey = String(payload.apiKey || '');
           perfil.customHeaders = String(payload.customHeaders || '{}');
           perfil.customBodyTemplate = String(payload.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+          if (necesitaMigracion) {
+            return conSistema('secureRemove', claveApiLegacyId(perfil.id)).catch(function () {}).then(function () { return true; });
+          }
           return true;
         }
         /* Compatibilidad defensiva si una compilación previa dejó la clave
@@ -1558,6 +1561,8 @@
         return cargarPerfilSeguro(perfil, rawProfiles[index] || {}, necesitaMigracion).catch(function (error) {
           migracionSeguraCorrecta = false;
           perfil.apiKey = '';
+          perfil.customHeaders = '{}';
+          perfil.customBodyTemplate = CUSTOM_BODY_DEFAULT;
           log('e', 'No se pudieron recuperar/migrar los campos privados de «' + perfil.name + '»: ' + (error.message || error));
         });
       }).then(function () {
