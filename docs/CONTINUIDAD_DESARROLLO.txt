@@ -499,3 +499,70 @@ ApiVault en emulador:
   y conclusión success. No se ha probado en teléfono físico.
 
 La rama principal permanece intacta.
+
+
+================================================================
+15. BLOQUE 6 · EJECUTORES COR DOVA Y PRUEBA ApiVault · 27/11/2026
+================================================================
+
+El panel Android ahora invoca ANKAIEngine.runAgent() para OpenAI, Anthropic
+y Gemini. El modo custom-json mantiene chat sin herramientas; el modo Plan
+solo expone lectura/listado/búsqueda; Construir añade backup/escritura/borrado/
+restauración. terminal.run está definido en el catálogo interno, pero no se
+ofrece al modelo hasta que exista cancelación fiable de procesos.
+
+Ejecutores Cordova conectados en ai.js:
+- project.list_files: listado recursivo, límite 400 y exclusión de ocultos/
+  node_modules.
+- project.read_file: rutas confinadas, 256 KiB, redacción de secretos/token/
+  password/Bearer y digest solo si no se redaccionó contenido.
+- project.search_files: búsqueda limitada, máximo 50 resultados.
+- project.write_file: System.writeText, verificación expectedDigest opcional.
+- project.delete_file: System.deleteFile y verificación de digest opcional.
+- project.create_backup / project.restore_backup: snapshots de archivo
+  previos y rollback del estado actual antes de restaurar.
+
+Seguridad:
+- Permiso y confirmación explícita con diálogo antes de operaciones sensibles.
+- Mutaciones bloqueadas si no se crea snapshot verificable.
+- Snapshots por archivo de hasta 256 KiB en el almacenamiento privado
+  files/ank-ai/backups/<proyecto>/; excluidos de Android backup/cloud/device
+  transfer. No hay snapshot de proyecto completo todavía.
+- Denegación predeterminada en runAgent; no concede permisos desde argumentos
+  del modelo. Las concesiones no se guardan como permanentes.
+- El agente no recibe acceso a shell ni a rutas absolutas.
+
+CI actual de motor/panel: run 45996503802 SUCCESS.
+- 56 tests, 56 pass, 0 fail.
+- node --check motor/panel, build-ai --check y auditoría estática SUCCESS.
+- Cuatro copias de ai.js byte-identical.
+- Auditoría comprueba la integración runAgent, ejecutores cordova y exclusión
+  de snapshots locales en las reglas de backup.
+
+ApiVault: prueba Android en emulador CI cerrada con éxito.
+- Run 45994302632, job 140489705802, conclusión SUCCESS.
+- Application ID verificado: com.ank.codigoank.
+- WebView reportó STAGE1_OK después de securePut + secureGet.
+- GitHub Actions hizo force-stop y relanzó la aplicación.
+- WebView reportó STAGE2_OK tras secureGet persistido + secureRemove +
+  secureGet vacío. Log final: PASS.
+- El secreto era efímero y no se imprimió en logs.
+- Esto prueba el vault en emulador y persistencia tras muerte del proceso;
+  no prueba reinicio completo del OS ni teléfono físico.
+
+Pendiente de cerrar bloque 6:
+1. Ejecutar en runtime Android los ejecutores Cordova de archivos; el ensayo
+   ApiVault no ejercita estas herramientas.
+2. Pruebas de escritura fallida/rollback, archivos vacíos/grandes y restauración.
+3. UI dedicada para administrar concesiones y consultar actividad (por ahora
+   se usan confirmaciones window.confirm por operación).
+4. Ejecutar terminal con timeout + cancelación real del proceso y solo luego
+   incluir terminal.run en las herramientas anunciadas.
+5. Revisar límites y comportamiento en el teléfono físico.
+
+Restricciones vigentes:
+- Rama activa ank/block-3-multiple-api; main intacta.
+- APK de CI diagnóstica/temporal, no release; no incluye Alpine/AXS/proot.
+- Application ID com.ank.codigoank verificado en harness, pero el certificado
+  original de distribución y la clave de firma siguen sin estar disponibles.
+- No crear APK actualizable sin verificar el mismo certificado original.
