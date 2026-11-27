@@ -128,6 +128,23 @@ for (const action of ['secureGet', 'securePut', 'secureRemove']) {
   assert.ok(systemSmali.includes('"' + action + '"'), 'System.smali no enruta ' + action + '.');
 }
 
+assert.match(systemPlugin,
+  /secureGet:\s*function\s*\(key,\s*success,\s*error\)\s*\{\s*cordova\.exec\(success,\s*error,\s*'System',\s*'secureGet',\s*\[key\]\);/s,
+  'secureGet debe enviar la clave al servicio nativo System sin alterar argumentos.');
+assert.match(systemPlugin,
+  /secureSet:\s*function\s*\(key,\s*value,\s*success,\s*error\)\s*\{\s*cordova\.exec\(success,\s*error,\s*'System',\s*'securePut',\s*\[key,\s*value\]\);/s,
+  'secureSet debe traducirse exactamente a securePut con clave y valor.');
+assert.match(systemPlugin,
+  /secureRemove:\s*function\s*\(key,\s*success,\s*error\)\s*\{\s*cordova\.exec\(success,\s*error,\s*'System',\s*'secureRemove',\s*\[key\]\);/s,
+  'secureRemove debe enviar únicamente la clave al servicio nativo.');
+assert.match(vault, /const-string v3, "ank_api_secrets"/,
+  'El nombre del archivo de preferencias cifradas cambió: revisar las reglas de backup.');
+assert.ok(backupRules.includes('path="ank_api_secrets.xml"') &&
+  (extractionRules.match(/path="ank_api_secrets\.xml"/g) || []).length === 2,
+  'Las reglas de backup deben excluir exactamente el archivo de preferencias que crea ApiVault.');
+assert.match(vault, /const-string v1, "ank_api_master_key_v1"/,
+  'No se encuentra el alias versionado de Android Keystore; revisar migraciones de claves.');
+
 assert.ok(panel.includes('id="ank-ai-perfil"') && panel.includes('id="ank-ai-perfil-nombre"'),
   'Faltan controles para elegir y nombrar conexiones.');
 assert.ok(panel.includes('data-accion="nuevo-perfil-api"') && panel.includes('data-accion="eliminar-perfil-api"'),
