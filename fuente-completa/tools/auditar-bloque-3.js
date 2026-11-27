@@ -170,7 +170,7 @@ for (const [action, success, error] of [
 ]) {
   const start = vault.indexOf('const-string v0, "' + action + '"');
   assert.ok(start >= 0, 'ApiVault.execute no reconoce ' + action + '.');
-  const next = vault.indexOf('\\n    :cond_secure_', start + 1);
+  const next = vault.indexOf('\n    :cond_secure_', start + 1);
   const block = vault.slice(start, next < 0 ? vault.length : next);
   assert.ok(block.includes(success), action + ' debe enviar callback de éxito tras completar la operación.');
   assert.ok(block.includes(error), action + ' debe propagar los errores al callback Cordova.');
