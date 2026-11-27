@@ -230,7 +230,14 @@
     return '';
   }
 
-  function errorDesdeCuerpo(status, statusText, body) {
+  function limpiarSecreto(mensaje, apiKey) {
+    var text = String(mensaje == null ? '' : mensaje);
+    var secret = String(apiKey == null ? '' : apiKey);
+    if (secret) text = text.split(secret).join('[CLAVE OCULTA]');
+    return text;
+  }
+
+  function errorDesdeCuerpo(status, statusText, body, apiKey) {
     var message = '';
     try {
       var parsed = typeof body === 'string' ? JSON.parse(body || '{}') : body || {};
@@ -242,7 +249,7 @@
     } catch (_) {}
     if (!message && typeof body === 'string') message = body.trim().slice(0, 500);
     if (!message) message = statusText || 'Error de conexión';
-    message = String(message).slice(0, MAX_ERROR_LENGTH);
+    message = limpiarSecreto(message, apiKey).slice(0, MAX_ERROR_LENGTH);
     return fail('API HTTP ' + status + ': ' + message, 'ANK_AI_HTTP_' + status);
   }
 
@@ -613,12 +620,12 @@
           responseType: 'text',
           connectTimeout: timeout,
           readTimeout: timeout,
-          followRedirect: true
+          followRedirect: false
         }, function (response) {
           var status = response && response.status != null ? response.status : 200;
           if (status < 200 || status >= 300) {
             var body = response && response.data != null ? response.data : '';
-            settleError(errorDesdeCuerpo(status, response.statusText, body));
+            settleError(errorDesdeCuerpo(status, response.statusText, body, options.apiKey));
             return;
           }
           try {
@@ -630,14 +637,14 @@
           var response = error && error.status != null ? error : (error && error.error && error.error.status != null ? error.error : null);
           var raw = error && error.error != null ? error.error : (error && error.data != null ? error.data : '');
           var status = response && response.status != null ? response.status : (error && error.status ? error.status : 0);
-          if (status) settleError(errorDesdeCuerpo(status, response && response.statusText, raw));
+          if (status) settleError(errorDesdeCuerpo(status, response && response.statusText, raw, options.apiKey));
           else settleError(fail(
-            'Error de conexión nativa: ' + String(error && (error.message || error.error) || 'sin detalle').slice(0, 500),
+            'Error de conexión nativa: ' + limpiarSecreto(error && (error.message || error.error) || 'sin detalle', options.apiKey).slice(0, 500),
             'ANK_AI_NATIVE_HTTP'
           ));
         });
       } catch (error) {
-        settleError(fail(error && error.message ? error.message : String(error), 'ANK_AI_NATIVE_HTTP'));
+        settleError(fail(limpiarSecreto(error && error.message ? error.message : String(error), options.apiKey), 'ANK_AI_NATIVE_HTTP'));
       }
     });
   }
@@ -678,7 +685,7 @@
           signal: control.signal
         }).then(function (response) {
           if (!response.ok) {
-            return response.text().then(function (txt) { throw errorDesdeCuerpo(response.status, response.statusText, txt); });
+            return response.text().then(function (txt) { throw errorDesdeCuerpo(response.status, response.statusText, txt, apiKey); });
           }
           if (protocol === PROTOCOLS.openai && request.stream) return parsearSSE(response, options.onDelta, control.signal);
           return response.json().then(function (data) {
@@ -694,7 +701,7 @@
             }
             throw fail('La solicitud fue cancelada.', 'ANK_AI_ABORTED');
           }
-          var message = err && err.message ? err.message : String(err || 'Error de red');
+          var message = limpiarSecreto(err && err.message ? err.message : String(err || 'Error de red'), apiKey);
           if (/failed to fetch|networkerror|load failed/i.test(message)) {
             message = 'No se pudo conectar con la API. Comprueba la dirección, la conexión y los permisos de red.';
           }
