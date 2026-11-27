@@ -936,31 +936,33 @@
     if (name === 'project.list_files') {
       only(['path', 'maxDepth']);
       output.path = normalizarRutaProyecto(safe.path, true);
-      output.maxDepth = safe.maxDepth == null ? 2 : Number(safe.maxDepth);
-      if (!isFinite(output.maxDepth) || Math.floor(output.maxDepth) !== output.maxDepth || output.maxDepth < 1 || output.maxDepth > 4) {
+      output.maxDepth = safe.maxDepth == null ? 2 : safe.maxDepth;
+      if (typeof output.maxDepth !== 'number' || !isFinite(output.maxDepth) || Math.floor(output.maxDepth) !== output.maxDepth || output.maxDepth < 1 || output.maxDepth > 4) {
         throw fail('maxDepth debe ser un entero entre 1 y 4.', 'ANK_TOOL_ARGUMENTS_INVALID');
       }
     } else if (name === 'project.read_file') {
       only(['path', 'maxBytes']);
       output.path = normalizarRutaProyecto(safe.path, false);
-      output.maxBytes = safe.maxBytes == null ? 65536 : Number(safe.maxBytes);
-      if (!isFinite(output.maxBytes) || Math.floor(output.maxBytes) !== output.maxBytes || output.maxBytes < 1 || output.maxBytes > 262144) {
+      output.maxBytes = safe.maxBytes == null ? 65536 : safe.maxBytes;
+      if (typeof output.maxBytes !== 'number' || !isFinite(output.maxBytes) || Math.floor(output.maxBytes) !== output.maxBytes || output.maxBytes < 1 || output.maxBytes > 262144) {
         throw fail('maxBytes debe ser un entero entre 1 y 262144.', 'ANK_TOOL_ARGUMENTS_INVALID');
       }
     } else if (name === 'project.search_files') {
       only(['query', 'path', 'maxResults']);
-      output.query = String(safe.query == null ? '' : safe.query).trim();
+      if (typeof safe.query !== 'string') throw fail('La consulta debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      output.query = safe.query.trim();
       if (!output.query || output.query.length > 200 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(output.query)) {
         throw fail('La consulta debe tener entre 1 y 200 caracteres imprimibles.', 'ANK_TOOL_ARGUMENTS_INVALID');
       }
       output.path = normalizarRutaProyecto(safe.path, true);
-      output.maxResults = safe.maxResults == null ? 20 : Number(safe.maxResults);
-      if (!isFinite(output.maxResults) || Math.floor(output.maxResults) !== output.maxResults || output.maxResults < 1 || output.maxResults > 50) {
+      output.maxResults = safe.maxResults == null ? 20 : safe.maxResults;
+      if (typeof output.maxResults !== 'number' || !isFinite(output.maxResults) || Math.floor(output.maxResults) !== output.maxResults || output.maxResults < 1 || output.maxResults > 50) {
         throw fail('maxResults debe ser un entero entre 1 y 50.', 'ANK_TOOL_ARGUMENTS_INVALID');
       }
     } else if (name === 'project.create_backup') {
       only(['path', 'reason']);
       output.path = normalizarRutaProyecto(safe.path, true);
+      if (safe.reason != null && typeof safe.reason !== 'string') throw fail('reason debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
       output.reason = String(safe.reason || '').trim().slice(0, 240);
     } else if (name === 'project.write_file') {
       only(['path', 'content', 'expectedDigest']);
@@ -969,7 +971,10 @@
         throw fail('El contenido debe ser texto y no superar 256 KiB.', 'ANK_TOOL_CONTENT_INVALID');
       }
       output.content = safe.content;
-      if (safe.expectedDigest != null) output.expectedDigest = String(safe.expectedDigest).slice(0, 128);
+      if (safe.expectedDigest != null) {
+        if (typeof safe.expectedDigest !== 'string') throw fail('expectedDigest debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+        output.expectedDigest = safe.expectedDigest.slice(0, 128);
+      }
     } else if (name === 'project.delete_file') {
       only(['path', 'expectedDigest']);
       output.path = normalizarRutaProyecto(safe.path, false);
@@ -982,13 +987,14 @@
       }
     } else if (name === 'terminal.run') {
       only(['command', 'cwd', 'timeoutMs']);
-      output.command = String(safe.command == null ? '' : safe.command);
+      if (typeof safe.command !== 'string') throw fail('command debe ser texto.', 'ANK_TOOL_COMMAND_INVALID');
+      output.command = safe.command;
       if (!output.command.trim() || output.command.length > 2000 || /\u0000/.test(output.command)) {
         throw fail('El comando está vacío o supera el límite de 2000 caracteres.', 'ANK_TOOL_COMMAND_INVALID');
       }
       output.cwd = normalizarRutaProyecto(safe.cwd, true);
-      output.timeoutMs = safe.timeoutMs == null ? 15000 : Number(safe.timeoutMs);
-      if (!isFinite(output.timeoutMs) || Math.floor(output.timeoutMs) !== output.timeoutMs ||
+      output.timeoutMs = safe.timeoutMs == null ? 15000 : safe.timeoutMs;
+      if (typeof output.timeoutMs !== 'number' || !isFinite(output.timeoutMs) || Math.floor(output.timeoutMs) !== output.timeoutMs ||
           output.timeoutMs < 1000 || output.timeoutMs > 60000) {
         throw fail('timeoutMs debe ser un entero entre 1000 y 60000.', 'ANK_TOOL_ARGUMENTS_INVALID');
       }
