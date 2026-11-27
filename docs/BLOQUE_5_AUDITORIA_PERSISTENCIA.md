@@ -70,3 +70,15 @@ Usar una build de diagnóstico creada desde esta rama y un secreto desechable de
 | Inspeccionar `provider.json` | Sin secretos ni campos privados |
 
 **Bloqueo:** no se dispone de una sesión de Android físico/emulador conectada a esta ejecución. Por tanto, todos los puntos de la matriz permanecen pendientes de prueba práctica. No se declara validada la persistencia física ni se autoriza una APK release.
+
+## Segunda capa de auditoría estática
+
+En el commit `5d8dbb605c5f2fb92db0a83845e154413e91636f` se amplió el auditor para comprobar además:
+
+- Que `System.smali` delegue las acciones reconocidas a `ApiVault.execute` y no continúe por el dispatcher heredado.
+- Que `put` y `remove` comprueben el resultado booleano de `commit()` y conviertan un fallo en error.
+- Que `secureGet`, `securePut` y `secureRemove` tengan callback de éxito y callback de error.
+- Que `get` lea mediante `SharedPreferences.getString` del almacén devuelto por `getPreferences`.
+- Que `ApiVault` no escriba contenido del vault en Logcat.
+
+Esto reduce el riesgo de regresiones en el puente Smali, pero sigue siendo análisis estático; no sustituye la prueba de cifrado/descifrado en Android.
