@@ -103,3 +103,18 @@ El código activo de OpenCode está retirado, el motor API inicial está conecta
 ### Criterio de cierre
 
 El retiro del runtime OpenCode y la sustitución inicial del chat por API compatible están implementados a nivel de código y pasan pruebas automatizadas. El bloque 2 permanece **abierto para distribución** hasta recuperar los assets requeridos, reconstruir/firmar el APK con la cadena original y probar en Android la persistencia, conexión API, cancelación y conservación de terminal/Alpine. No iniciar el bloque 3 antes de resolver esos puntos o acordar expresamente una base de reconstrucción distinta.
+
+## Auditoría de copias residuales · 27/11/2026
+
+Durante el bloque 3 se detectaron dos copias de publicación que no estaban cubiertas por la auditoría inicial: `ank/ai.js` y `fuente-completa/.repo-publicacion/ank/ai.js`. Ambas todavía contenían el panel antiguo ligado a OpenCode, aunque el panel cargado por Android ya utilizaba el motor API.
+
+Las cuatro copias de publicación se han sincronizado con el panel multi-API 2.4.0:
+
+- `ank/ai.js` y `ank/ai.css`
+- `fuente-completa/.repo-publicacion/ank/ai.js` y `fuente-completa/.repo-publicacion/ank/ai.css`
+- `fuente-completa/update/ank/ai.js` y `fuente-completa/update/ank/ai.css`
+- `fuente-completa/decoded/assets/www/ank/ai.js` y `fuente-completa/decoded/assets/www/ank/ai.css`
+
+La auditoría de CI comprueba ahora que las copias de panel y CSS coincidan byte a byte, y rechaza referencias al runtime OpenCode en los paneles de publicación. La búsqueda de rutas del árbol Git ya no encuentra archivos o carpetas con nombre OpenCode; la única aparición con ese nombre que debe permanecer es esta documentación histórica.
+
+También se corrigió el workflow de reconstrucción: el binario OpenCode ya no figura como asset requerido. El único conjunto nativo que sigue faltando es el de Alpine/AXS/proot, que corresponde al terminal Linux opcional, no al asistente conectado por API.
