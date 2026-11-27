@@ -54,7 +54,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 
 ## Panel y persistencia
 
-### Perfiles de conexión (provider.json v6)
+### Perfiles de conexión (provider.json v7)
 
 - Se pueden guardar hasta **12 conexiones** con nombre propio.
 - Cada perfil mantiene protocolo, endpoint, modelo y opciones personalizadas. Los secretos y los campos libres de cabeceras/cuerpo se almacenan cifrados fuera de `provider.json`.
@@ -67,11 +67,11 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
 - La lógica de creación, normalización, migración, actualización y eliminación de perfiles vive en `ank-ai/engine.js`, independiente de la vista. Esto permite probar las reglas del almacén sin depender del DOM.
 
-Las claves API, las cabeceras personalizadas y las plantillas JSON del cuerpo ya no se escriben en `provider.json`: se almacenan juntas por perfil en `EncryptedSharedPreferences` (AES256-SIV para nombres y AES256-GCM para valores), con una clave maestra `AES256_GCM` respaldada por Android Keystore. El puente Cordova del plugin `System` expone lectura, escritura y borrado para cada perfil. `provider.json` v6 conserva solo los parámetros no sensibles. Las configuraciones v3, v4 y v5 se migran al almacén cifrado antes de retirar esos campos del archivo; si falla, se conserva el archivo previo y los campos privados no se activan en esa sesión hasta poder cifrarlos. No se debe compartir `provider.json` ni incluirlo en un repositorio.
+Las claves API, los prefijos de autenticación personalizados, las cabeceras adicionales y las plantillas JSON del cuerpo ya no se escriben en `provider.json`: se almacenan juntos por perfil en `EncryptedSharedPreferences` (AES256-SIV para nombres y AES256-GCM para valores), con una clave maestra `AES256_GCM` respaldada por Android Keystore. El puente Cordova del plugin `System` expone lectura, escritura y borrado para cada perfil. `provider.json` v6 conserva solo los parámetros no sensibles. Las configuraciones v3, v4, v5 y v6 se migran al almacén cifrado antes de retirar esos campos del archivo; si falla, se conserva el archivo previo y los campos privados no se activan en esa sesión hasta poder cifrarlos. No se debe compartir `provider.json` ni incluirlo en un repositorio.
 
 Las reglas de copia de seguridad clásicas y Android 12+ excluyen `ank_api_secrets.xml` tanto de copia cloud como de transferencia entre dispositivos. El ciphertext depende de una clave Android Keystore que no puede trasladarse con el archivo cifrado.
 
-### Diseño del panel 2.5.0
+### Diseño del panel 2.6.0
 
 - El arranque del APK solo carga `./ank/ai.js`, que es el panel integrado en la aplicación. Ya no ejecuta JavaScript o CSS guardados en `localStorage`; los paquetes antiguos no firmados se eliminan al iniciar.
 - Mientras el actualizador remoto siga desactivado, no se aceptan paquetes web. La reactivación exige validación de firma Ed25519 en el arranque, antes de ejecutar el contenido.
