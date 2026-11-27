@@ -17,6 +17,9 @@ const rootPanel = fs.readFileSync(path.join(root, '..', 'ank', 'ai.js'), 'utf8')
 const rootCss = fs.readFileSync(path.join(root, '..', 'ank', 'ai.css'), 'utf8');
 const publicationPanel = read('.repo-publicacion/ank/ai.js');
 const publicationCss = read('.repo-publicacion/ank/ai.css');
+const vault = read('decoded/smali/com/foxdebug/system/ApiVault.smali');
+const systemSmali = read('decoded/smali/com/foxdebug/system/System.smali');
+const systemPlugin = read('decoded/assets/www/plugins/cordova-plugin-system/www/plugin.js');
 
 const begin = '/* ANK_AI_ENGINE_BUNDLE_BEGIN */';
 const end = '/* ANK_AI_ENGINE_BUNDLE_END */';
@@ -49,8 +52,22 @@ assert.ok(panel.includes('window.ANKAIEngine.normalizarPerfiles(') &&
 assert.ok(panel.includes("if (q('#ank-ai-key')) q('#ank-ai-key').value = '';") &&
   panel.includes("label.textContent = st.model ? st.activeProfileName + ' · ' + st.model : 'Sin modelo';"),
   'El cambio de perfil debe limpiar el campo secreto y mostrar la conexión activa.');
-assert.ok(panel.includes('version: 4') && panel.includes('profiles: st.apiProfiles.slice(0, 12)'),
-  'Los perfiles deben persistirse en el formato v4 con límite de 12 conexiones.');
+assert.ok(panel.includes('version: 5') && panel.includes('profiles: st.apiProfiles.slice(0, 12)'),
+  'Los perfiles deben persistirse en el formato v5 con límite de 12 conexiones.');
+assert.ok(panel.includes('delete safe.apiKey') && panel.includes('function guardarClaveSeguraPerfil(perfil)'),
+  'Las claves API no deben escribirse dentro de provider.json.');
+assert.ok(panel.includes("conSistema('secureSet'") && panel.includes("conSistema('secureGet'") && panel.includes("conSistema('secureRemove'"),
+  'El panel debe escribir, leer y borrar secretos mediante el almacén nativo cifrado.');
+assert.match(panel, /function eliminarClaveApi\(\)/, 'Falta la eliminación manual de la clave API cifrada.');
+assert.ok(panel.includes('data-accion="eliminar-clave-api"'), 'Falta el control de usuario para borrar la clave API.');
+assert.match(vault, /EncryptedSharedPreferences;->create/, 'El almacén nativo no cifra las preferencias.');
+assert.match(vault, /AES256_GCM/, 'El almacén nativo no configura AES256-GCM.');
+assert.match(vault, /AES256_SIV/, 'El almacén nativo no cifra los nombres de las claves.');
+for (const action of ['secureGet', 'securePut', 'secureRemove']) {
+  assert.ok(systemPlugin.includes(action), 'Falta puente Cordova para ' + action + '.');
+  assert.ok(systemSmali.includes('"' + action + '"'), 'System.smali no enruta ' + action + '.');
+}
+
 assert.ok(panel.includes('id="ank-ai-perfil"') && panel.includes('id="ank-ai-perfil-nombre"'),
   'Faltan controles para elegir y nombrar conexiones.');
 assert.ok(panel.includes('data-accion="nuevo-perfil-api"') && panel.includes('data-accion="eliminar-perfil-api"'),
@@ -77,6 +94,7 @@ assert.equal(rootPanel, panel, 'ank/ai.js todavía no coincide con la versión m
 assert.equal(rootCss, css, 'ank/ai.css todavía no coincide con los estilos incluidos en Android.');
 assert.equal(publicationPanel, panel, 'La carpeta .repo-publicacion todavía contiene un panel antiguo.');
 assert.equal(publicationCss, css, 'La carpeta .repo-publicacion todavía contiene estilos antiguos.');
+assert.equal(fs.readFileSync(path.join(root, 'update/ank/ai.js'), 'utf8'), panel, 'El panel del actualizador está desincronizado.');
 assert.ok(css.includes('.ank-ai-profile-card') && css.includes('.ank-ai-profile-select select'),
   'Faltan estilos del administrador de perfiles API.');
 assert.ok(css.includes('@media (min-width: 720px)') && css.includes('@media (max-width: 719px)'),
