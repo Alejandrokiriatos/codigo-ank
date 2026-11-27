@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-3-multiple-api`  
 **Base:** bloque 2, commit `ca27820463950bcd455e1349b49e47a43a1d16a6`  
-**Estado:** cuatro formatos API, perfiles múltiples y rediseño responsive implementados; auditoría estática y 28 pruebas automatizadas superadas; sigue pendiente la validación en Android físico y el endurecimiento del almacenamiento de claves.
+**Estado:** cuatro formatos API, perfiles múltiples, diseño responsive, almacenamiento cifrado Android Keystore y arranque seguro implementados; 28 pruebas JavaScript superadas y reconstrucción Smali con Apktool validada en CI. Sigue pendiente la prueba de uso real en teléfono y una APK release firmada.
 
 ## Objetivo
 
@@ -60,7 +60,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Cada perfil mantiene protocolo, endpoint, modelo y opciones personalizadas. Los secretos y los campos libres de cabeceras/cuerpo se almacenan cifrados fuera de `provider.json`.
 - El selector cambia entre perfiles sin volver a pegar las claves. Las ediciones del perfil anterior se capturan antes de cambiar o crear uno nuevo.
 - Se puede crear una conexión nueva y eliminar la conexión activa; al borrar la última se genera una ficha vacía para no dejar los ajustes inutilizables.
-- Los perfiles v3 de una sola conexión se migran automáticamente a v4 como «Conexión principal», sin descartar los valores anteriores.
+- Los perfiles v3 de una sola conexión se migran automáticamente a `provider.json` v6 como «Conexión principal»; los formatos v3/v4/v5 transfieren las claves, cabeceras personalizadas y plantillas JSON al almacén cifrado antes de retirar esos campos del archivo.
 - La selección activa se restaura al abrir el panel.
 - Al cambiar, crear o eliminar perfiles, se limpia el campo de clave API para que una clave escrita en un perfil no termine accidentalmente en otro.
 - En el chat se identifica el perfil activo junto al modelo.
@@ -102,7 +102,7 @@ Las reglas de copia de seguridad clásicas y Android 12+ excluyen `ank_api_secre
 
 “Cualquier API” no significa cualquier URL de inferencia: los proveedores deben exponer uno de los tres protocolos nativos o usar el modo HTTP POST JSON configurable. Una API propia con WebSocket, gRPC, protocolo binario, firma compleja o respuestas no JSON requiere un adaptador adicional.
 
-El almacenamiento cifrado está implementado en la capa Smali nativa usando las clases AndroidX Security y Tink que ya existen en el APK base. La prueba CI del motor no basta para certificar el flujo del Keystore: la reconstrucción Apktool debe pasar y todavía se requiere probar alta, restauración, cambio y borrado de claves en un teléfono Android real.
+El almacenamiento cifrado está implementado en la capa Smali nativa usando las clases AndroidX Security y Tink que ya existen en el APK base. Las operaciones de escritura y borrado usan `SharedPreferences.Editor.commit()` para no informar éxito antes de confirmar la escritura, y las transacciones del vault se serializan. CI ensambla el Smali con Apktool; esto no certifica el flujo en un teléfono real, donde aún se debe probar alta, restauración, cambio, migración y borrado de claves.
 
 El actualizador web permanece desactivado porque la verificación HMAC anterior fue retirada. No publicar este panel por el canal antiguo. La actualización firmada debe reabrirse con verificación asimétrica Ed25519.
 
@@ -122,16 +122,16 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 
 ### Resultado CI del 27/11/2026
 
-La ejecución [45973457092](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45973457092) terminó correctamente:
+La ejecución [45976502430](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45976502430) terminó correctamente:
 
 - 28 pruebas del motor: 28 correctas, 0 fallidas.
 - Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
-- Auditoría estática de los perfiles: migración v3, formato v4, creación, selección y eliminación.
+- Auditoría estática de los perfiles: migración v3–v5, formato v6, creación, selección y eliminación.
 - Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias de publicación y del actualizador interno.
 - Auditoría del almacenamiento de secretos: puente Cordova, `System.smali`, `ApiVault.smali` y `EncryptedSharedPreferences` detectados y conectados; claves, cabeceras personalizadas y plantillas JSON excluidas de `provider.json` v6.
 - Copias de seguridad: `ank_api_secrets.xml` excluido del backup clásico y de Android 12+ cloud/device transfer.
 - Arranque: no se evalúa código guardado localmente; el inicio siempre carga el panel del APK y elimina los bundles web previos no verificados.
-- Acceso al vault serializado para no inicializar simultáneamente los keysets Tink cuando hay varios perfiles.
+- Lecturas, escrituras y borrados del vault serializados para evitar carreras de Tink/SharedPreferences entre perfiles; escritura síncrona verificada mediante `commit()`.
 - Se comprobó además que `ank/ai.js`, `.repo-publicacion/ank/ai.js`, `update/ank/ai.js` y las copias incluidas en Android coinciden byte a byte; los paneles de publicación no contienen el runtime OpenCode.
 - Se incorporó una corrección de aislamiento: al cambiar, crear o eliminar perfiles, se vacía el campo de clave, evitando reutilizar accidentalmente una clave que quedó escrita en el perfil anterior.
 - Diseño responsive: reglas verificadas para teléfono y escritorio.
