@@ -594,3 +594,86 @@ test('el timeout de fetch se informa como timeout y no como cancelación manual'
     (error) => error.code === 'ANK_AI_TIMEOUT'
   );
 });
+
+
+test('el transporte Android no sigue redirecciones que podrían reenviar credenciales', async () => {
+  const captured = {};
+  await Engine.chat({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'redirect-secret',
+    model: 'm',
+    messages: [{ role: 'user', content: 'Hola' }],
+    http: nativeSuccess({
+      choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }]
+    }, captured)
+  });
+  assert.equal(captured.options.followRedirect, false);
+});
+
+test('oculta la clave API si un servidor la devuelve en un error HTTP nativo', async () => {
+  const secret = 'native-secret-should-not-leak';
+  const http = {
+    sendRequest(_url, _options, _success, failure) {
+      failure({
+        status: 401,
+        error: JSON.stringify({ error: { message: 'Invalid key: ' + secret } })
+      });
+      return 901;
+    }
+  };
+  await assert.rejects(
+    Engine.chat({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: secret,
+      model: 'm',
+      messages: [{ role: 'user', content: 'Hola' }],
+      http
+    }),
+    (error) => error.code === 'ANK_AI_HTTP_401' &&
+      !error.message.includes(secret) &&
+      error.message.includes('[CLAVE OCULTA]')
+  );
+});
+
+test('oculta la clave API si un servidor la devuelve en un error HTTP fetch', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const secret = 'fetch-secret-should-not-leak';
+  global.fetch = async () => ({
+    ok: false,
+    status: 429,
+    statusText: 'Too Many Requests',
+    text: async () => JSON.stringify({ error: { message: 'Quota rejected token ' + secret } })
+  });
+  await assert.rejects(
+    Engine.chat({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: secret,
+      model: 'm',
+      messages: [{ role: 'user', content: 'Hola' }]
+    }),
+    (error) => error.code === 'ANK_AI_HTTP_429' &&
+      !error.message.includes(secret) &&
+      error.message.includes('[CLAVE OCULTA]')
+  );
+});
+
+test('rechaza respuestas nativas que no contienen JSON válido sin revelar credenciales', async () => {
+  const secret = 'invalid-json-secret';
+  const http = {
+    sendRequest(_url, _options, success) {
+      success({ status: 200, data: '<html>gateway error</html>' });
+      return 902;
+    }
+  };
+  await assert.rejects(
+    Engine.chat({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: secret,
+      model: 'm',
+      messages: [{ role: 'user', content: 'Hola' }],
+      http
+    }),
+    (error) => error.code === 'ANK_AI_INVALID_JSON' && !error.message.includes(secret)
+  );
+});
