@@ -6893,8 +6893,8 @@
     move-object/from16 v3, p2
 
     move-object/from16 v4, p3
-    /* API credentials use EncryptedSharedPreferences backed by Android Keystore.
-       These Cordova actions are intercepted before the legacy System dispatcher. */
+    # API credentials use EncryptedSharedPreferences backed by Android Keystore.
+    # These Cordova actions are intercepted before the legacy System dispatcher.
     const-string v0, "secureGet"
 
     invoke-virtual {v2, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
