@@ -91,3 +91,137 @@
 
     return-void
 .end method
+
+
+.method public static execute(Landroid/content/Context;Ljava/lang/String;Lorg/json/JSONArray;Lorg/apache/cordova/CallbackContext;)Z
+    .locals 4
+
+    const-string v0, "secureGet"
+
+    invoke-virtual {p1, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_secure_put
+
+    const/4 v1, 0x0
+
+    invoke-virtual {p2, v1}, Lorg/json/JSONArray;->getString(I)Ljava/lang/String;
+
+    move-result-object v1
+
+    :try_start_secure_get
+    invoke-static {p0, v1}, Lcom/foxdebug/system/ApiVault;->get(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {p3, v2}, Lorg/apache/cordova/CallbackContext;->success(Ljava/lang/String;)V
+    :try_end_secure_get
+    .catch Ljava/lang/Exception; {:try_start_secure_get .. :try_end_secure_get} :catch_secure_get
+
+    const/4 v0, 0x1
+
+    return v0
+
+    :catch_secure_get
+    move-exception v0
+
+    invoke-virtual {v0}, Ljava/lang/Exception;->getMessage()Ljava/lang/String;
+
+    move-result-object v0
+
+    invoke-virtual {p3, v0}, Lorg/apache/cordova/CallbackContext;->error(Ljava/lang/String;)V
+
+    const/4 v0, 0x1
+
+    return v0
+
+    :cond_secure_put
+    const-string v0, "securePut"
+
+    invoke-virtual {p1, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_secure_remove
+
+    const/4 v1, 0x0
+
+    invoke-virtual {p2, v1}, Lorg/json/JSONArray;->getString(I)Ljava/lang/String;
+
+    move-result-object v1
+
+    const/4 v2, 0x1
+
+    invoke-virtual {p2, v2}, Lorg/json/JSONArray;->getString(I)Ljava/lang/String;
+
+    move-result-object v2
+
+    :try_start_secure_put
+    invoke-static {p0, v1, v2}, Lcom/foxdebug/system/ApiVault;->put(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V
+
+    invoke-virtual {p3}, Lorg/apache/cordova/CallbackContext;->success()V
+    :try_end_secure_put
+    .catch Ljava/lang/Exception; {:try_start_secure_put .. :try_end_secure_put} :catch_secure_put
+
+    const/4 v0, 0x1
+
+    return v0
+
+    :catch_secure_put
+    move-exception v0
+
+    invoke-virtual {v0}, Ljava/lang/Exception;->getMessage()Ljava/lang/String;
+
+    move-result-object v0
+
+    invoke-virtual {p3, v0}, Lorg/apache/cordova/CallbackContext;->error(Ljava/lang/String;)V
+
+    const/4 v0, 0x1
+
+    return v0
+
+    :cond_secure_remove
+    const-string v0, "secureRemove"
+
+    invoke-virtual {p1, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_secure_unknown
+
+    const/4 v1, 0x0
+
+    invoke-virtual {p2, v1}, Lorg/json/JSONArray;->getString(I)Ljava/lang/String;
+
+    move-result-object v1
+
+    :try_start_secure_remove
+    invoke-static {p0, v1}, Lcom/foxdebug/system/ApiVault;->remove(Landroid/content/Context;Ljava/lang/String;)V
+
+    invoke-virtual {p3}, Lorg/apache/cordova/CallbackContext;->success()V
+    :try_end_secure_remove
+    .catch Ljava/lang/Exception; {:try_start_secure_remove .. :try_end_secure_remove} :catch_secure_remove
+
+    const/4 v0, 0x1
+
+    return v0
+
+    :catch_secure_remove
+    move-exception v0
+
+    invoke-virtual {v0}, Ljava/lang/Exception;->getMessage()Ljava/lang/String;
+
+    move-result-object v0
+
+    invoke-virtual {p3, v0}, Lorg/apache/cordova/CallbackContext;->error(Ljava/lang/String;)V
+
+    const/4 v0, 0x1
+
+    return v0
+
+    :cond_secure_unknown
+    const/4 v0, 0x0
+
+    return v0
+.end method
