@@ -1387,7 +1387,7 @@
     rawProfile = rawProfile && typeof rawProfile === 'object' ? rawProfile : {};
     if (!vaultApiDisponible()) {
       if (necesitaMigracion || rawProfile.apiKey ||
-          rawProfile.customHeaders || rawProfile.customBodyTemplate) {
+          rawProfile.customAuthPrefix || rawProfile.customHeaders || rawProfile.customBodyTemplate) {
         return Promise.reject(new Error('El almacén Android Keystore no está disponible para migrar los campos privados de este perfil.'));
       }
       perfil.apiKey = '';
@@ -1567,6 +1567,7 @@
       var teniaDatosPrivadosEnJson = rawProfiles.some(function (item) {
         return !!(item && (
           (typeof item.apiKey === 'string' && item.apiKey.length) ||
+          Object.prototype.hasOwnProperty.call(item, 'customAuthPrefix') ||
           Object.prototype.hasOwnProperty.call(item, 'customHeaders') ||
           Object.prototype.hasOwnProperty.call(item, 'customBodyTemplate')
         ));
