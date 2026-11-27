@@ -450,3 +450,52 @@ que certifique simultáneamente tests, bundle y auditoría estática.
 Todavía NO existe el bucle autónomo completo modelo→herramienta→resultado→
 modelo, ni la UI de permisos ni los ejecutores operativos. Las llamadas se
 normalizan y validan, pero no ejecutan todavía acciones del teléfono.
+
+
+ORQUESTADOR DE HERRAMIENTAS · SUBFASE TERMINADA EN MOTOR · 27/11/2026
+
+Archivo canónico: fuente-completa/ank-ai/engine.js
+API añadida: ANKAIEngine.runAgent(options)
+
+El orquestador realiza varias rondas modelo→herramienta→resultado→modelo con
+adaptadores OpenAI, Anthropic y Gemini. Mantiene los mensajes tool_calls,
+tool_use y functionCall y convierte sus resultados al formato del proveedor.
+
+Los callbacks de confianza que la aplicación anfitriona debe aportar:
+- requestPermission: solicitar permiso por herramienta/categoría.
+- confirmTool: autorización por operación sensible.
+- createBackup: crear y confirmar respaldo antes de mutaciones.
+- executeTool: ejecutor real con acceso limitado al proyecto/terminal.
+No hay fallback a ejecución automática si alguno de estos controles requeridos
+no se suministra.
+
+Protecciones del runner:
+- Denegación predeterminada.
+- Confirmación individual para escritura, borrado, restauración y terminal.
+- Escritura/borrado bloqueados si el respaldo no se pudo crear.
+- Máximo 8 rondas y 20 llamadas por ejecución; resultados limitados a 32 KiB.
+- Cancela entre rondas y antes de iniciar acciones.
+- Contador de llamadas solicitadas separado de operaciones ejecutadas.
+- Registro solo de metadatos, sin argumentos, contenido o comandos.
+
+Pruebas CI 45995437656: 55/55 aprobadas, cero fallos. Sintaxis del motor y
+panel, build-ai --check, auditoría estática e integridad del bundle pasaron.
+Cuatro copias de ai.js están sincronizadas.
+
+No confundir runner del motor con integración de la app: el panel todavía no
+invoca runAgent ni aporta callbacks. Siguen pendientes los ejecutores reales,
+la UI de permisos/confirmación, lectura/listado/búsqueda, backup/restore,
+escritura/borrado y terminal limitada. Por ahora el flujo de cambios desde chat
+sigue siendo propuesta de archivo con aplicación manual.
+
+ApiVault en emulador:
+- El script del emulador se corrigió para usar un único proceso Bash y acceder
+  a ANDROID_HOME/ANDROID_SDK_ROOT, evitando pérdida de variables entre líneas.
+- Las builds temporales superaron reconstrucción de APK en CI.
+- Las ejecuciones 45993858809, 45994196821, 45994302632 y 45995421583
+  no tenían resultado final accesible en la última inspección; las primeras
+  seguían activas y sus logs no se podían descargar mientras el job corría.
+- No declarar securePut/get/persistencia/remove validados hasta ver PASS final
+  y conclusión success. No se ha probado en teléfono físico.
+
+La rama principal permanece intacta.
