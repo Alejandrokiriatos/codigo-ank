@@ -1162,8 +1162,10 @@
     var protocol = API_PROTOCOL_DEFAULT;
     try { protocol = window.ANKAIEngine.protocolName(data.protocol || API_PROTOCOL_DEFAULT); }
     catch (_) {}
+    var id = String(data.id || ('api-' + index + '-' + Date.now().toString(36))).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+    if (!id) id = 'api-' + index + '-' + Date.now().toString(36);
     return {
-      id: String(data.id || ('api-' + index + '-' + Date.now().toString(36))).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80),
+      id: id,
       name: String(data.name || ('Conexión ' + (index + 1))).trim().slice(0, 60) || ('Conexión ' + (index + 1)),
       protocol: protocol,
       endpoint: String(data.endpoint || endpointPredeterminado(protocol)).trim(),
@@ -1275,6 +1277,7 @@
   }
 
   function crearPerfilApi() {
+    if (st.apiProfiles.length >= 12) return aviso('Ya tienes el máximo de 12 conexiones guardadas.');
     var actual = capturarPerfilApi();
     actualizarPerfilEnLista(actual);
     var perfil = nuevoPerfilApi();
@@ -1315,6 +1318,11 @@
       var profiles = [];
       if (Array.isArray(data.profiles)) {
         profiles = data.profiles.slice(0, 12).map(normalizarPerfilApi);
+        var profileIds = {};
+        profiles.forEach(function (profile, index) {
+          if (profileIds[profile.id]) profile.id = 'api-' + index + '-' + Date.now().toString(36);
+          profileIds[profile.id] = true;
+        });
       } else if (data.endpoint || data.model || data.apiKey || data.protocol) {
         /* Migración transparente desde provider.json v3 de una sola conexión. */
         profiles = [normalizarPerfilApi({
@@ -1337,9 +1345,9 @@
       var active = profiles.filter(function (p) { return p.id === activeId; })[0] || profiles[0];
       aplicarPerfilApi(active);
       if (!Array.isArray(data.profiles)) {
-        persistirPerfilesApi().catch(function (error) {
+        return persistirPerfilesApi().catch(function (error) {
           log('w', 'No se pudo migrar el formato de conexiones: ' + (error.message || error));
-        });
+        }).then(function () { return st.apiConfigured; });
       }
       return st.apiConfigured;
     }).catch(function (error) {
