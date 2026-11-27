@@ -66,6 +66,14 @@ assert.match(panel, /function cargarPerfilSeguro\(perfil, rawProfile, necesitaMi
   'Falta la migración de configuraciones privadas antiguas al vault v2.');
 assert.match(panel, /function procesarPerfilesEnSerie\(perfiles, procesar\)/,
   'Las lecturas y escrituras del vault deben ejecutarse en serie para evitar inicializaciones simultáneas de Tink.');
+assert.match(panel, /var apiVaultQueue = Promise\.resolve\(\)/,
+  'Las transacciones del vault deben serializarse también entre varios guardados de perfiles.');
+assert.match(panel, /function encolarOperacionVault\(operacion\)/,
+  'Falta la cola transaccional del almacén de perfiles.');
+assert.match(vault, /SharedPreferences\$Editor;->commit\(\)Z/,
+  'El almacén cifrado debe confirmar la persistencia en disco antes de completar la operación.');
+assert.doesNotMatch(vault, /SharedPreferences\$Editor;->apply\(\)V/,
+  'El almacén cifrado no debe devolver éxito antes de confirmar la escritura.');
 assert.ok(panel.includes('return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro)'),
   'Los perfiles deben guardar su bloque privado completo dentro del almacén cifrado.');
 assert.ok(panel.includes('customHeaders: String(perfil && perfil.customHeaders ||') &&
