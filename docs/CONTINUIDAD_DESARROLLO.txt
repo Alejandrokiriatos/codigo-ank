@@ -424,3 +424,29 @@ temporal de APK ya terminó, pero no se debe considerar validada la persistencia
 hasta que el ciclo put/get/force-stop/get/remove finalice correctamente.
 
 FIN DE LA ACTUALIZACIÓN
+
+SUBFASE ADICIONAL BLOQUE 6 · ADAPTADORES TOOL CALLING · 27/11/2026
+
+Se amplió el motor canónico y se sincronizaron de nuevo las cuatro copias del
+bundle ai.js. El motor construye esquemas de herramientas para:
+- OpenAI Chat Completions compatible (tools + tool_choice auto; sin SSE cuando
+  se anuncian herramientas).
+- Anthropic Messages (tools/input_schema + bloques tool_use).
+- Gemini (functionDeclarations + bloques functionCall).
+
+Las llamadas del proveedor se traducen a nombres internos canónicos mediante
+un mapa explícito y sus argumentos se validan de nuevo contra el catálogo
+local antes de devolverlas. Se rechazan herramientas desconocidas, argumentos
+JSON inválidos, rutas privadas y traversal. El protocolo JSON personalizado
+no se presenta como compatible con tool calling nativo.
+
+CI de pruebas: en la primera ejecución tras agregar estos adaptadores se
+detectó un problema de traducción inversa de nombres; se corrigió con un mapa
+proveedor→nombre canónico. Después, los 48 tests del motor pasan (48/48), pero
+esa ejecución detectó que el bundle Android todavía estaba desactualizado.
+Se regeneraron las cuatro copias. Falta obtener una ejecución CI posterior
+que certifique simultáneamente tests, bundle y auditoría estática.
+
+Todavía NO existe el bucle autónomo completo modelo→herramienta→resultado→
+modelo, ni la UI de permisos ni los ejecutores operativos. Las llamadas se
+normalizan y validan, pero no ejecutan todavía acciones del teléfono.
