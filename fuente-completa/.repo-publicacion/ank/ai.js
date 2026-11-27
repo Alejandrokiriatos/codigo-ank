@@ -1296,6 +1296,9 @@
     st.customHeaders = String(perfil.customHeaders || '{}');
     st.customBodyTemplate = String(perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
     st.customResponsePath = String(perfil.customResponsePath || 'choices.0.message.content');
+    /* Las claves son particulares de cada perfil: nunca deben quedar visibles
+       en el campo password al cambiar, crear o eliminar una conexión. */
+    if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
     st.apiConfigured = false;
     var authReady = !!(st.apiKey || (st.protocol === 'custom-json' && !st.customAuthHeader.trim()));
     if (st.endpoint && st.model && authReady) {
@@ -3803,7 +3806,10 @@
     if (protocol && protocol.value !== st.protocol) protocol.value = st.protocol;
     pintarCamposPersonalizados();
     var label = q('#ank-ai-chat-modelo');
-    if (label) label.textContent = st.model || 'Sin modelo';
+    if (label) {
+      label.textContent = st.model ? st.activeProfileName + ' · ' + st.model : 'Sin modelo';
+      label.setAttribute('title', st.model ? st.activeProfileName + ' · ' + st.protocol : 'Configura una conexión API');
+    }
     var mode = q('.ank-ai-modo');
     if (mode) {
       var plan = st.modo === 'plan';
