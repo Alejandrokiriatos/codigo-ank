@@ -1141,14 +1141,10 @@
     return null;
   }
 
-  function nuevoPerfilApi(id, nombre) {
+  function opcionesDefectoPerfilApi() {
     return {
-      id: String(id || ('api-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7))),
-      name: String(nombre || 'Nueva conexión').trim().slice(0, 60),
       protocol: API_PROTOCOL_DEFAULT,
       endpoint: API_ENDPOINT_DEFAULT,
-      model: '',
-      apiKey: '',
       customAuthHeader: 'Authorization',
       customAuthPrefix: 'Bearer',
       customHeaders: '{}',
@@ -1157,27 +1153,17 @@
     };
   }
 
-  function normalizarPerfilApi(data, index) {
-    data = data && typeof data === 'object' ? data : {};
-    var protocol = API_PROTOCOL_DEFAULT;
-    try { protocol = window.ANKAIEngine.protocolName(data.protocol || API_PROTOCOL_DEFAULT); }
-    catch (_) {}
-    var id = String(data.id || ('api-' + index + '-' + Date.now().toString(36))).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
-    if (!id) id = 'api-' + index + '-' + Date.now().toString(36);
-    return {
+  function nuevoPerfilApi(id, nombre) {
+    return window.ANKAIEngine.crearPerfil(opcionesDefectoPerfilApi(), {
       id: id,
-      name: String(data.name || ('Conexión ' + (index + 1))).trim().slice(0, 60) || ('Conexión ' + (index + 1)),
-      protocol: protocol,
-      endpoint: String(data.endpoint || endpointPredeterminado(protocol)).trim(),
-      model: String(data.model || '').trim().slice(0, 256),
-      apiKey: String(data.apiKey || ''),
-      customAuthHeader: String(data.customAuthHeader == null ? 'Authorization' : data.customAuthHeader),
-      customAuthPrefix: String(data.customAuthPrefix == null ? 'Bearer' : data.customAuthPrefix),
-      customHeaders: String(data.customHeaders || '{}'),
-      customBodyTemplate: String(data.customBodyTemplate || CUSTOM_BODY_DEFAULT),
-      customResponsePath: String(data.customResponsePath || 'choices.0.message.content')
-    };
+      name: nombre || 'Nueva conexión'
+    });
   }
+
+  function normalizarPerfilApi(data, index) {
+    return window.ANKAIEngine.normalizarPerfil(data, index, opcionesDefectoPerfilApi());
+  }
+
 
   function aplicarPerfilApi(perfil) {
     perfil = perfil || nuevoPerfilApi();
@@ -1237,13 +1223,7 @@
   }
 
   function actualizarPerfilEnLista(perfil) {
-    var index = -1;
-    for (var i = 0; i < st.apiProfiles.length; i++) {
-      if (st.apiProfiles[i].id === perfil.id) { index = i; break; }
-    }
-    if (index === -1) st.apiProfiles.push(perfil);
-    else st.apiProfiles[index] = perfil;
-    if (st.apiProfiles.length > 12) st.apiProfiles = st.apiProfiles.slice(-12);
+    st.apiProfiles = window.ANKAIEngine.upsertPerfil(st.apiProfiles, perfil, 12);
     st.activeProfileId = perfil.id;
     st.activeProfileName = perfil.name;
   }
@@ -1300,9 +1280,10 @@
     if (!st.activeProfileId) return;
     if (typeof window.confirm === 'function' &&
         !window.confirm('¿Eliminar la conexión «' + st.activeProfileName + '»? Esta acción no se puede deshacer.')) return;
-    st.apiProfiles = st.apiProfiles.filter(function (p) { return p.id !== st.activeProfileId; });
-    if (!st.apiProfiles.length) st.apiProfiles.push(nuevoPerfilApi('default', 'Mi conexión'));
-    aplicarPerfilApi(st.apiProfiles[0]);
+    var result = window.ANKAIEngine.eliminarPerfil(st.apiProfiles, st.activeProfileId, opcionesDefectoPerfilApi());
+    st.apiProfiles = result.profiles;
+    var siguiente = st.apiProfiles.filter(function (p) { return p.id === result.activeProfileId; })[0] || st.apiProfiles[0];
+    aplicarPerfilApi(siguiente);
     persistirPerfilesApi().then(function () {
       pintar();
       aviso('Conexión eliminada.');
@@ -1315,36 +1296,13 @@
     if (!st.prefix) return Promise.resolve(false);
     return leerTexto(rutaConfigApi()).then(function (raw) {
       var data = raw && raw.trim() ? JSON.parse(raw) : {};
-      var profiles = [];
-      if (Array.isArray(data.profiles)) {
-        profiles = data.profiles.slice(0, 12).map(normalizarPerfilApi);
-        var profileIds = {};
-        profiles.forEach(function (profile, index) {
-          if (profileIds[profile.id]) profile.id = 'api-' + index + '-' + Date.now().toString(36);
-          profileIds[profile.id] = true;
-        });
-      } else if (data.endpoint || data.model || data.apiKey || data.protocol) {
-        /* Migración transparente desde provider.json v3 de una sola conexión. */
-        profiles = [normalizarPerfilApi({
-          id: 'legacy-default',
-          name: data.name || data.profileName || 'Conexión principal',
-          protocol: data.protocol || API_PROTOCOL_DEFAULT,
-          endpoint: data.endpoint,
-          model: data.model,
-          apiKey: data.apiKey,
-          customAuthHeader: data.customAuthHeader,
-          customAuthPrefix: data.customAuthPrefix,
-          customHeaders: data.customHeaders,
-          customBodyTemplate: data.customBodyTemplate,
-          customResponsePath: data.customResponsePath
-        }, 0)];
-      }
-      if (!profiles.length) profiles = [nuevoPerfilApi('default', 'Mi conexión')];
-      st.apiProfiles = profiles;
-      var activeId = String(data.activeProfileId || profiles[0].id);
-      var active = profiles.filter(function (p) { return p.id === activeId; })[0] || profiles[0];
+      var normalized = window.ANKAIEngine.normalizarPerfiles(data, opcionesDefectoPerfilApi(), 12);
+      st.apiProfiles = normalized.profiles;
+      var active = st.apiProfiles.filter(function (p) {
+        return p.id === normalized.activeProfileId;
+      })[0] || st.apiProfiles[0];
       aplicarPerfilApi(active);
-      if (!Array.isArray(data.profiles)) {
+      if (normalized.migrated) {
         return persistirPerfilesApi().catch(function (error) {
           log('w', 'No se pudo migrar el formato de conexiones: ' + (error.message || error));
         }).then(function () { return st.apiConfigured; });
