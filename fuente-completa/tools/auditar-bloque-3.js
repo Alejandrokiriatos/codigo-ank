@@ -85,8 +85,8 @@ assert.match(vault, /SharedPreferences\$Editor;->commit\(\)Z/,
   'El almacén cifrado debe confirmar la persistencia en disco antes de completar la operación.');
 assert.doesNotMatch(vault, /SharedPreferences\$Editor;->apply\(\)V/,
   'El almacén cifrado no debe devolver éxito antes de confirmar la escritura.');
-assert.ok(panel.includes('return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro)'),
-  'Los perfiles deben guardar su bloque privado completo dentro del almacén cifrado.');
+assert.ok(panel.includes('return procesarPerfilesEnSerie(profiles, guardarPerfilSeguroNoEncolado)'),
+  'Los perfiles deben guardar su bloque privado completo dentro del almacén cifrado dentro de la cola externa, sin anidar operaciones que puedan bloquearse.');
 assert.ok(panel.includes('customHeaders: String(perfil && perfil.customHeaders ||') &&
   panel.includes('customBodyTemplate: String(perfil && perfil.customBodyTemplate ||'),
   'El registro cifrado debe incluir cabeceras personalizadas y plantillas JSON.');
