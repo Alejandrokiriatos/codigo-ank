@@ -168,7 +168,7 @@ jobs:
                     report("STAGE3_TOOL_OK");
                   } catch (error) {
                     clearTimeout(timeout);
-                    console.log("ANK_TOOL_CI_ERROR:" + step + ":" + String(error && error.message || "failure"));
+                    console.log("ANK_TOOL_CI_ERROR:" + step);
                     fail("TOOL_" + step + "_FAILED");
                   }
                 })();
