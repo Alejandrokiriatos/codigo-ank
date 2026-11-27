@@ -197,3 +197,46 @@ El siguiente paso es continuar la validación real del motor multi-API
 y de la persistencia cifrada, sin reconstruir los bloques anteriores.
 
 FIN DE LA ACTUALIZACIÓN
+
+================================================================
+9. ACTUALIZACIÓN DEL BLOQUE 5 · 27/11/2026
+================================================================
+
+Se completó la subfase automatizada de transporte y protección de credenciales.
+Informe:
+  docs/BLOQUE_5_PRUEBAS_MULTI_API.md
+
+Cambios:
+- El transporte HTTP nativo ya no sigue redirecciones automáticamente
+  (followRedirect=false), para evitar reenviar encabezados de autenticación
+  a una ubicación redirigida.
+- El motor oculta la clave API si un servidor la devuelve dentro de errores
+  HTTP o errores de conexión, tanto en fetch como en el transporte nativo.
+- Se añadieron pruebas de redirección, errores 401/429 con eco de clave y
+  respuesta JSON nativa inválida.
+- Se sincronizaron las cuatro copias de ai.js con la fuente canónica.
+
+Resultados finales:
+- 34 pruebas aprobadas, 0 fallidas.
+- Auditoría multi-API y auditoría general superadas.
+- Bundle verificado.
+- Reconstrucción diagnóstica Apktool completada: 15.487.793 bytes,
+  sin firma release y sin assets Alpine/AXS/proot completos.
+- CI multi-API:
+  https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45984420086
+- CI general:
+  https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45984413973
+
+Límites:
+- No se utilizaron claves reales ni se hicieron llamadas a proveedores reales.
+- No se ha validado Android Keystore en dispositivo físico.
+- No se han probado persistencia tras cierre forzado/reinicio ni migración
+  real de instalación previa.
+- No publicar ni firmar release por ahora.
+
+Siguiente acción:
+Validación de alta/edición/selección/eliminación de perfiles y persistencia
+cifrada en un Android físico con una clave de prueba. Después, pruebas de
+401/403/429/5xx, timeout, cancelación, desconexión y respuesta malformada.
+
+FIN DE LA ACTUALIZACIÓN
