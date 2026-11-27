@@ -1399,23 +1399,18 @@
         try {
           payload = JSON.parse(String(stored));
         } catch (_) {
-          payload = null;
+          throw new Error('El registro privado del perfil no tiene un formato JSON válido.');
         }
-        if (payload && typeof payload === 'object') {
-          perfil.apiKey = String(payload.apiKey || '');
-          perfil.customHeaders = String(payload.customHeaders || '{}');
-          perfil.customBodyTemplate = String(payload.customBodyTemplate || CUSTOM_BODY_DEFAULT);
-          if (necesitaMigracion) {
-            return conSistema('secureRemove', claveApiLegacyId(perfil.id)).catch(function () {}).then(function () { return true; });
-          }
-          return true;
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new Error('El registro privado del perfil tiene una estructura no válida.');
         }
-        /* Compatibilidad defensiva si una compilación previa dejó la clave
-           simple bajo la clave v2 en vez del objeto cifrado. */
-        perfil.apiKey = String(stored);
-        perfil.customHeaders = String(rawProfile.customHeaders || perfil.customHeaders || '{}');
-        perfil.customBodyTemplate = String(rawProfile.customBodyTemplate || perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
-        return guardarPerfilSeguro(perfil);
+        perfil.apiKey = String(payload.apiKey || '');
+        perfil.customHeaders = String(payload.customHeaders || '{}');
+        perfil.customBodyTemplate = String(payload.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+        if (necesitaMigracion) {
+          return conSistema('secureRemove', claveApiLegacyId(perfil.id)).catch(function () {}).then(function () { return true; });
+        }
+        return true;
       }
 
       return conSistema('secureGet', claveApiLegacyId(perfil.id)).then(function (legacyKey) {
