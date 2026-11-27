@@ -986,7 +986,7 @@
     },
     {
       name: 'project.create_backup',
-      description: 'Crea una copia de seguridad del proyecto o de una ruta antes de modificarla.',
+      description: 'Crea una copia de seguridad de un archivo del proyecto.',
       permission: 'backup',
       risk: 'backup',
       requiresConfirmation: false,
@@ -994,9 +994,10 @@
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Ruta relativa que se incluirá en la copia.' },
+          path: { type: 'string', description: 'Archivo relativo al proyecto que se incluirá en la copia.' },
           reason: { type: 'string', maxLength: 240 }
         },
+        required: ['path'],
         additionalProperties: false
       }
     },
@@ -1041,7 +1042,7 @@
       permission: 'destructive',
       risk: 'destructive',
       requiresConfirmation: true,
-      requiresBackup: false,
+      requiresBackup: true,
       parameters: {
         type: 'object',
         properties: {
@@ -1169,7 +1170,7 @@
       }
     } else if (name === 'project.create_backup') {
       only(['path', 'reason']);
-      output.path = normalizarRutaProyecto(safe.path, true);
+      output.path = normalizarRutaProyecto(safe.path, false);
       if (safe.reason != null && typeof safe.reason !== 'string') throw fail('reason debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
       output.reason = String(safe.reason || '').trim().slice(0, 240);
     } else if (name === 'project.write_file') {
