@@ -1,0 +1,168 @@
+INFORME DE CONTINUIDAD DEL DESARROLLO
+Proyecto: Código ANK
+Repositorio: Alejandrokiriatos/codigo-ank
+Rama de trabajo: ank/block-3-multiple-api
+Fecha del informe: 27/11/2026
+Documento preparado para retomar el trabajo desde ChatGPT en un teléfono móvil.
+
+================================================================
+1. OBJETIVO GENERAL DEL PROYECTO
+================================================================
+
+Transformar Código ANK para eliminar la dependencia de OpenCode y permitir que cualquier usuario conecte proveedores de inteligencia artificial mediante sus propias API. La aplicación debe servir como entorno de trabajo donde distintos modelos/proveedores puedan operar dentro del proyecto, manteniendo una experiencia coherente tanto en móvil como en escritorio.
+
+El desarrollo debe continuar sobre la rama ank/block-3-multiple-api. No trabajar directamente sobre main ni mezclar este trabajo con la rama principal sin una revisión y autorización explícitas.
+
+================================================================
+2. TRABAJO REALIZADO HASTA AHORA
+================================================================
+
+A. Sustitución de OpenCode y motor multi-API
+- Se implementó una arquitectura de proveedores API para sustituir el flujo dependiente de OpenCode.
+- Se contemplan proveedores compatibles con OpenAI, Anthropic y Gemini.
+- También se contempla configuración JSON personalizada para APIs compatibles o adaptadores específicos.
+- El diseño admite hasta 12 conexiones/configuraciones de proveedor.
+- La intención es que cada usuario pueda introducir sus propios datos de conexión y seleccionar el proveedor/modelo que utilizará.
+
+B. Protección y persistencia de credenciales
+- Se implementó almacenamiento cifrado apoyado en Android Keystore y EncryptedSharedPreferences.
+- Se trabajó en la migración de la configuración existente al nuevo sistema.
+- La revisión debe confirmar en un dispositivo real que las claves sobreviven al cierre/reinicio y que no aparecen en registros, interfaz, archivos exportados ni mensajes de error.
+
+C. Interfaz y sincronización
+- Se realizaron cambios de interfaz para móvil y escritorio relacionados con la nueva configuración multi-API.
+- Se sincronizaron cuatro copias de los archivos ai.js y ai.css para evitar divergencias entre las distintas ubicaciones del proyecto.
+- La siguiente auditoría debe volver a comparar todas las copias y comprobar que no existan versiones antiguas activas o rutas que carguen archivos equivocados.
+
+D. Pruebas y auditorías informadas
+En el último reporte de trabajo quedaron registradas estas comprobaciones:
+- 28 pruebas ejecutadas.
+- Revisión de 334 archivos JS/MJS.
+- Comprobaciones de credenciales.
+- Comprobación de copias/sincronización.
+- Comprobaciones con Apktool.
+- Las auditorías indicadas quedaron reportadas como superadas.
+
+IMPORTANTE: estos resultados son el estado informado del trabajo anterior. Antes de dar el proyecto por terminado hay que repetir las pruebas en el estado actual del repositorio y documentar comandos, resultados y errores reales.
+
+================================================================
+3. ESTADO ACTUAL Y LIMITACIONES CONOCIDAS
+================================================================
+
+- La rama de trabajo es ank/block-3-multiple-api; mantenerla aislada de main.
+- Existe un APK de diagnóstico de 15.487.612 bytes. NO debe tratarse como APK final ni distribuirse como versión estable.
+- Todavía no se ha completado la validación integral en un teléfono Android físico.
+- No se debe afirmar que el cifrado está validado en dispositivo real hasta probarlo.
+- No se debe publicar una APK release hasta completar compilación reproducible, firma y pruebas.
+- El actualizador quedó pendiente de firma Ed25519 para reactivarlo de forma segura.
+- Se identificó trabajo pendiente para recuperar/restaurar recursos relacionados con Alpine, AXS y proot.
+- Faltan herramientas controladas para las operaciones posteriores, además de un sistema de backups y reversión.
+- Faltan permisos individuales para controlar qué acciones puede realizar cada herramienta o integración.
+
+================================================================
+4. PLAN DE TRABAJO PENDIENTE (ORDEN RECOMENDADO)
+================================================================
+
+BLOQUE 4 - AUDITORÍA COMPLETA DEL REPOSITORIO
+1. Inspeccionar la rama y el árbol actual antes de modificar archivos.
+2. Leer los documentos de auditoría y bloques anteriores en docs/.
+3. Revisar arquitectura, dependencias, rutas de carga y puntos de entrada.
+4. Buscar referencias residuales a OpenCode y determinar si son código activo, documentación o compatibilidad antigua.
+5. Verificar que no queden rutas que eviten el motor multi-API.
+6. Comparar las cuatro copias de ai.js y ai.css, comprobar equivalencia y confirmar cuál es la fuente canónica.
+7. Revisar errores de consola, promesas, manejo de timeout, cancelación, streaming, respuestas incompletas y errores de proveedor.
+8. Ejecutar pruebas automatizadas y registrar resultados reproducibles.
+
+BLOQUE 5 - PRUEBAS REALES DEL SISTEMA MULTI-API
+1. Probar alta, edición, eliminación y selección de proveedores.
+2. Probar OpenAI-compatible, Anthropic, Gemini y JSON personalizado.
+3. Probar cambio entre proveedores y modelos sin reiniciar la aplicación.
+4. Probar claves incorrectas, límites de cuota, falta de conexión, timeout y respuestas malformadas.
+5. Comprobar que las claves no se filtran en logs ni en mensajes visibles.
+6. Probar persistencia cifrada y migración en Android físico.
+7. Verificar que los ajustes sobreviven al cierre forzado y reinicio del dispositivo.
+
+BLOQUE 6 - HERRAMIENTAS Y CONTROL DE ACCIONES
+1. Definir herramientas disponibles para que la IA trabaje dentro de la aplicación.
+2. Establecer permisos individuales por herramienta y por acción.
+3. Separar lectura, escritura, ejecución y operaciones destructivas.
+4. Pedir confirmación explícita antes de borrar, sobrescribir o ejecutar acciones peligrosas.
+5. Añadir registro de actividad entendible y seguro, sin secretos.
+6. Implementar backups antes de cambios importantes y mecanismos de reversión.
+
+BLOQUE 7 - RECURSOS Y ENTORNO DE EJECUCIÓN
+1. Investigar el estado de Alpine, AXS y proot.
+2. Recuperar o reconstruir únicamente los recursos que realmente falten.
+3. Verificar compatibilidad de arquitecturas y versiones Android.
+4. Probar instalación, arranque, persistencia y recuperación del entorno.
+5. Documentar limitaciones conocidas.
+
+BLOQUE 8 - ACTUALIZADOR SEGURO
+1. Diseñar y verificar el flujo de firma Ed25519.
+2. Validar firma antes de aceptar una actualización.
+3. Rechazar paquetes modificados, incompletos o de versión incompatible.
+4. Probar actualización, fallo, cancelación y recuperación.
+5. No reactivar distribución automática hasta superar estas pruebas.
+
+BLOQUE 9 - COMPILACIÓN Y ENTREGA
+1. Limpiar artefactos de diagnóstico y separar debug/release.
+2. Compilar APK release reproducible.
+3. Firmar con el mecanismo previsto y verificar la firma.
+4. Instalar en teléfono físico desde cero y actualizar desde una versión anterior.
+5. Probar las funciones principales con varios proveedores.
+6. Entregar APK final y reporte de pruebas; no llamar final a una compilación que no haya pasado estas verificaciones.
+
+================================================================
+5. REGLAS DE TRABAJO PARA LA IA QUE CONTINÚE
+================================================================
+
+- Antes de cambiar código, leer este informe y los documentos existentes:
+  docs/AUDITORIA_BLOQUE_1.md
+  docs/BLOQUE_2_ELIMINACION_OPENCODE.md
+  docs/BLOQUE_3_PROVEEDORES_API.md
+  docs/estadisticas.md
+- Trabajar en la rama ank/block-3-multiple-api.
+- No modificar main ni fusionar ramas sin autorización expresa.
+- No reconstruir el proyecto desde cero ni reemplazar archivos completos sin necesidad demostrada.
+- Inspeccionar el código real antes de afirmar que una función existe o funciona.
+- Hacer cambios por bloques coherentes, no entregar microcambios sin valor.
+- Después de cada bloque: ejecutar pruebas, revisar diferencias y documentar archivos modificados.
+- No inventar resultados de pruebas, compilaciones, APKs, capturas ni enlaces.
+- No mostrar, copiar ni guardar claves API reales en documentación, commits, logs o respuestas.
+- Mantener compatibilidad móvil y escritorio.
+- Priorizar seguridad, estabilidad, rendimiento y facilidad de configuración.
+- Si una prueba requiere dispositivo físico o intervención del usuario, indicarlo claramente y preparar pasos concretos.
+- Al informar avances, incluir: porcentaje estimado, bloque terminado, pruebas realizadas, problemas encontrados y siguiente bloque.
+- No declarar terminado el proyecto hasta que la APK release esté firmada y validada en un teléfono real.
+
+================================================================
+6. DOCUMENTOS DEL PROYECTO
+================================================================
+
+Repositorio:
+https://github.com/Alejandrokiriatos/codigo-ank
+
+Rama:
+ank/block-3-multiple-api
+
+Documentación existente:
+- docs/AUDITORIA_BLOQUE_1.md
+- docs/BLOQUE_2_ELIMINACION_OPENCODE.md
+- docs/BLOQUE_3_PROVEEDORES_API.md
+- docs/estadisticas.md
+
+Este archivo:
+- docs/CONTINUIDAD_DESARROLLO.txt
+
+================================================================
+7. PRIMERA ACCIÓN AL RETOMAR
+================================================================
+
+No empezar directamente a programar. Primero:
+1. Confirmar repositorio y rama.
+2. Leer los cuatro documentos anteriores y este informe.
+3. Inspeccionar el estado real del árbol y los últimos commits.
+4. Comparar el código actual con lo que dicen los informes.
+5. Presentar un diagnóstico breve de diferencias y continuar con el BLOQUE 4, corrigiendo primero cualquier regresión detectada.
+
+FIN DEL INFORME
