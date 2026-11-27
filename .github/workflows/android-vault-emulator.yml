@@ -7,6 +7,7 @@ on:
     paths:
       - "fuente-completa/decoded/**"
       - ".github/workflows/android-vault-emulator.yml"
+      - ".github/scripts/android-vault-emulator.sh"
       - "docs/BLOQUE_5_AUDITORIA_PERSISTENCIA.md"
       - "docs/CONTINUIDAD_DESARROLLO.txt"
   pull_request:
@@ -144,45 +145,4 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            set -euo pipefail
-            APK="$RUNNER_TEMP/CodigoANK-vault-ci.apk"
-            # No depender de GITHUB_ENV dentro del wrapper de la action:
-            # algunos runners no propagan esas variables al shell encapsulado.
-            PKG="com.ank.codigoank"
-            SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-            AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-            test -x "$AAPT"
-            DETECTED_PACKAGE="$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
-            test "$DETECTED_PACKAGE" = "$PKG" || { echo "Application ID inesperado: $DETECTED_PACKAGE"; exit 1; }
-            ACTIVITY="$("$AAPT" dump badging "$APK" | sed -n "s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
-            test -n "$ACTIVITY" || { echo "No se detectó actividad de inicio"; exit 1; }
-            echo "APK: $PKG / $ACTIVITY"
-            timeout 90s adb wait-for-device
-            timeout 90s adb install "$APK"
-            timeout 30s adb shell pm path "$PKG"
-            adb logcat -c
-            timeout 60s adb shell am start -W -n "$PKG/$ACTIVITY"
-            wait_marker() {
-              expected="$1"
-              for attempt in $(seq 1 90); do
-                if adb logcat -d -t 3000 | grep -F "ANK_VAULT_CI:$expected" >/dev/null; then
-                  echo "Android WebView reportó $expected"
-                  return 0
-                fi
-                if adb logcat -d -t 3000 | grep -F "ANK_VAULT_CI:FAIL_" >/dev/null; then
-                  adb logcat -d -t 3000 | grep -E "ANK_VAULT_CI:|FATAL EXCEPTION|AndroidRuntime" | tail -n 120 || true
-                  return 1
-                fi
-                sleep 2
-              done
-              adb logcat -d -t 3000 | grep -E "ANK_VAULT_CI:|FATAL EXCEPTION|AndroidRuntime" | tail -n 120 || true
-              adb shell dumpsys activity activities | grep -E "ResumedActivity|mResumedActivity" | tail -n 10 || true
-              echo "No se recibió marcador $expected antes del límite"
-              return 1
-            }
-            wait_marker STAGE1_OK
-            timeout 30s adb shell am force-stop "$PKG"
-            timeout 60s adb shell am start -W -n "$PKG/$ACTIVITY"
-            wait_marker STAGE2_OK
-            echo "PASS: put/get, persistencia tras force-stop, remove y lectura vacía en ApiVault real." >> "$GITHUB_STEP_SUMMARY"
+          script: bash .github/scripts/android-vault-emulator.sh
