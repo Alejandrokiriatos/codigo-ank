@@ -3473,7 +3473,7 @@
     return new Promise(function (resolve, reject) {
       if (!entry || !entry.isFile) return reject(new Error('La ruta no señala un archivo.'));
       entry.file(function (file) {
-        var limit = Math.max(1, Math.min(262144, Number(maxBytes) || 262144));
+        var limit = Math.max(1, Math.min(320000, Number(maxBytes) || 262144));
         if (file.size > limit) return reject(new Error('El archivo supera el límite de lectura de ' + limit + ' bytes.'));
         if (!window.FileReader) return reject(new Error('FileReader no está disponible.'));
         var reader = new window.FileReader();
