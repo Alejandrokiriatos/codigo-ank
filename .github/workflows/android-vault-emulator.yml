@@ -132,11 +132,11 @@ jobs:
             wait_marker() {
               expected="$1"
               for attempt in $(seq 1 90); do
-                if adb logcat -d -s chromium:I '*:S' | grep -Fq "ANK_VAULT_CI:$expected"; then
+                if adb logcat -d -s chromium:I '*:S' | grep -F "ANK_VAULT_CI:$expected" >/dev/null; then
                   echo "Android WebView reportó $expected"
                   return 0
                 fi
-                if adb logcat -d | grep -Fq "ANK_VAULT_CI:FAIL_"; then
+                if adb logcat -d | grep -F "ANK_VAULT_CI:FAIL_" >/dev/null; then
                   adb logcat -d -s chromium:I '*:S' | grep -F "ANK_VAULT_CI:"
                   return 1
                 fi
