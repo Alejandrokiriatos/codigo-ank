@@ -489,9 +489,9 @@
     }
     return rawCalls.map(function (call) {
       var providerName = String(call.name || '');
-      var canonical = names[providerName] || providerName.replace(/_/g, '.');
-      if (!TOOL_BY_NAME[canonical]) {
-        throw fail('El proveedor solicitó una herramienta no registrada: ' + providerName, 'ANK_TOOL_UNKNOWN');
+      var canonical = names[providerName];
+      if (!canonical || !TOOL_BY_NAME[canonical]) {
+        throw fail('El proveedor solicitó una herramienta que no se ofreció en esta petición: ' + providerName, 'ANK_TOOL_NOT_OFFERED');
       }
       var args = analizarArgumentosHerramienta(call.arguments, canonical);
       var validated = validarLlamadaHerramienta(canonical, args);
