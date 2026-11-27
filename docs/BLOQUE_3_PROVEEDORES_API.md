@@ -118,12 +118,14 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 
 ### Resultado CI del 27/11/2026
 
-La ejecución [45973107755](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45973107755) terminó correctamente:
+La ejecución [45973457092](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45973457092) terminó correctamente:
 
 - 28 pruebas del motor: 28 correctas, 0 fallidas.
 - Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
 - Auditoría estática de los perfiles: migración v3, formato v4, creación, selección y eliminación.
 - Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias del actualizador interno.
+- Se comprobó además que `ank/ai.js`, `.repo-publicacion/ank/ai.js`, `update/ank/ai.js` y las copias incluidas en Android coinciden byte a byte; los paneles de publicación no contienen el runtime OpenCode.
+- Se incorporó una corrección de aislamiento: al cambiar, crear o eliminar perfiles, se vacía el campo de clave, evitando reutilizar accidentalmente una clave que quedó escrita en el perfil anterior.
 - Diseño responsive: reglas verificadas para teléfono y escritorio.
 - Sin referencias de OpenCode en el panel activo; las claves no se guardan en `localStorage`.
 
@@ -137,3 +139,5 @@ La ejecución [45892806329](https://github.com/Alejandrokiriatos/codigo-ank/acti
 - La copia interna `update/ank/ai.js` quedó sincronizada con el bundle Android. Esto no reactiva el canal remoto: `upd.js` continúa inerte y el manifiesto antiguo no se publica.
 
 La CI valida el comportamiento simulado y la integración estática. No sustituye la prueba real con claves y endpoints de los proveedores, ni la prueba en un teléfono Android con el plugin Cordova instalado.
+
+El workflow de reconstrucción volvió a generar un APK diagnóstico sin firma release de **15.484.081 bytes**. Se deja como resultado técnico de compilación, no como archivo instalable para el usuario: continúan faltando los assets Alpine/AXS/proot del terminal opcional y no está disponible el keystore legítimo de distribución.
