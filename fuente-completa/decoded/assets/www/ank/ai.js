@@ -1668,13 +1668,13 @@
     perfil.apiKey = '';
     actualizarPerfilEnLista(perfil);
     st.apiKey = '';
-    eliminarClaveSeguraPerfil(perfil.id).then(function () {
+    guardarPerfilSeguro(perfil).then(function () {
       return persistirPerfilesApi();
     }).then(function () {
       pintar();
-      aviso('Clave API eliminada del almacén cifrado.');
+      aviso('Clave API eliminada del almacén cifrado; los ajustes personalizados se conservaron.');
     }).catch(function (error) {
-      log('e', 'No se pudo eliminar la clave cifrada: ' + (error.message || error));
+      log('e', 'No se pudo actualizar el perfil privado: ' + (error.message || error));
       aviso('No se pudo eliminar la clave. Revisa el Registro.');
     });
   }
@@ -4698,9 +4698,9 @@
         '<div class="ank-ai-hint">Déjalo vacío junto con la clave API para servicios locales o públicos que no requieren autenticación.</div></div>' +
                 '<div class="ank-ai-field"><label>Prefijo de autenticación</label><input id="ank-ai-custom-auth-prefix" type="text" spellcheck="false" placeholder="Bearer (vacío = clave directa)" /></div>' +
                 '<div class="ank-ai-field"><label>Encabezados adicionales (JSON)</label><textarea id="ank-ai-custom-headers" spellcheck="false" rows="3" placeholder="{}"></textarea>' +
-                  '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}} en valores de encabezado. No pongas secretos en la URL.</div></div>' +
+                  '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}}. Este JSON se cifra junto con la clave en Android Keystore; nunca pongas credenciales en la URL.</div></div>' +
                 '<div class="ank-ai-field"><label>Plantilla del cuerpo JSON</label><textarea id="ank-ai-custom-body" spellcheck="false" rows="7"></textarea>' +
-                  '<div class="ank-ai-hint">Variables disponibles: {{MODEL}}, {{MESSAGES}}, {{SYSTEM}}, {{API_KEY}}, {{TEMPERATURE}} y {{MAX_TOKENS}}. Escribe {{MESSAGES}} entre comillas para insertar el historial como valor JSON.</div></div>' +
+                  '<div class="ank-ai-hint">Variables disponibles: {{MODEL}}, {{MESSAGES}}, {{SYSTEM}}, {{API_KEY}}, {{TEMPERATURE}} y {{MAX_TOKENS}}. La plantilla se cifra en el dispositivo. Escribe {{MESSAGES}} entre comillas para insertar el historial como valor JSON.</div></div>' +
                 '<div class="ank-ai-field"><label>Ruta del texto de respuesta</label><input id="ank-ai-custom-response" type="text" spellcheck="false" placeholder="choices.0.message.content" />' +
                   '<div class="ank-ai-hint">Ruta JSON con puntos e índices de array. Ejemplo: data.response.text o output.0.content.</div></div>' +
               '</div>' +
