@@ -285,13 +285,36 @@
   }
 
   function normalizarMensajes(messages) {
-    return (Array.isArray(messages) ? messages : []).filter(function (m) {
-      return m && typeof m.content === 'string' && String(m.content).trim();
-    }).map(function (m) {
-      var role = String(m.role || 'user').toLowerCase();
-      if (role !== 'system' && role !== 'assistant' && role !== 'user') role = 'user';
-      return { role: role, content: String(m.content) };
-    });
+    return (Array.isArray(messages) ? messages : []).reduce(function (output, item) {
+      if (!item || typeof item !== 'object') return output;
+      var role = String(item.role || 'user').toLowerCase();
+      if (role !== 'system' && role !== 'assistant' && role !== 'user' && role !== 'tool') role = 'user';
+      var content = typeof item.content === 'string' ? item.content : '';
+      var normalized = { role: role, content: content };
+      if (role === 'assistant' && Array.isArray(item.toolCalls)) {
+        if (item.toolCalls.length > 20) throw fail('Un mensaje no puede contener más de 20 llamadas de herramientas.', 'ANK_TOOL_LIMIT');
+        normalized.toolCalls = item.toolCalls.map(function (call) {
+          var validated = validarLlamadaHerramienta(call && call.name, call && call.arguments);
+          return {
+            id: String(call && call.id || ('call-' + validated.name)).slice(0, 100),
+            name: validated.name,
+            arguments: validated.arguments
+          };
+        });
+      }
+      if (role === 'tool') {
+        normalized.toolCallId = String(item.toolCallId || '').trim().slice(0, 100);
+        normalized.name = String(item.name || '').trim();
+        if (!normalized.toolCallId || !TOOL_BY_NAME[normalized.name]) {
+          throw fail('El resultado de herramienta no está vinculado a una llamada válida.', 'ANK_TOOL_RESULT_INVALID');
+        }
+      }
+      if (content.trim() || (normalized.toolCalls && normalized.toolCalls.length) ||
+          (role === 'tool' && normalized.toolCallId)) {
+        output.push(normalized);
+      }
+      return output;
+    }, []);
   }
 
   function leerObjetoJSON(value, label) {
@@ -521,6 +544,25 @@
         model: String(options.model).trim(),
         max_tokens: maxTokens || 4096,
         messages: chatMessages.map(function (m) {
+          if (m.role === 'tool') {
+            return {
+              role: 'user',
+              content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: m.content }]
+            };
+          }
+          if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length) {
+            var blocks = [];
+            if (m.content) blocks.push({ type: 'text', text: m.content });
+            m.toolCalls.forEach(function (call) {
+              blocks.push({
+                type: 'tool_use',
+                id: call.id,
+                name: nombreHerramientaProveedor(call.name),
+                input: call.arguments
+              });
+            });
+            return { role: 'assistant', content: blocks };
+          }
           return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
         }),
         temperature: temperature
@@ -545,10 +587,31 @@
 
     if (protocol === PROTOCOLS.gemini) {
       var contents = chatMessages.map(function (m) {
-        return {
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }]
-        };
+        if (m.role === 'tool') {
+          return {
+            role: 'user',
+            parts: [{
+              functionResponse: {
+                name: nombreHerramientaProveedor(m.name),
+                response: { result: m.content }
+              }
+            }]
+          };
+        }
+        var parts = [];
+        if (m.content) parts.push({ text: m.content });
+        if (m.role === 'assistant' && m.toolCalls) {
+          m.toolCalls.forEach(function (call) {
+            parts.push({
+              functionCall: {
+                id: call.id,
+                name: nombreHerramientaProveedor(call.name),
+                args: call.arguments
+              }
+            });
+          });
+        }
+        return { role: m.role === 'assistant' ? 'model' : 'user', parts: parts };
       });
       var generationConfig = { temperature: temperature };
       if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
@@ -570,7 +633,30 @@
 
     var openBody = {
       model: String(options.model).trim(),
-      messages: messages,
+      messages: messages.map(function (m) {
+        if (m.role === 'tool') {
+          return {
+            role: 'tool',
+            tool_call_id: m.toolCallId,
+            name: nombreHerramientaProveedor(m.name),
+            content: m.content
+          };
+        }
+        var message = { role: m.role, content: m.content || null };
+        if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length) {
+          message.tool_calls = m.toolCalls.map(function (call) {
+            return {
+              id: call.id,
+              type: 'function',
+              function: {
+                name: nombreHerramientaProveedor(call.name),
+                arguments: JSON.stringify(call.arguments)
+              }
+            };
+          });
+        }
+        return message;
+      }),
       stream: toolSet.declarations.length ? false : true
     };
     if (options.temperature != null && isFinite(Number(options.temperature))) openBody.temperature = temperature;
@@ -1228,6 +1314,253 @@
     return clonarJSON(TOOL_DEFINITIONS);
   }
 
+  function toolResultText(value, apiKey) {
+    var output;
+    if (typeof value === 'string') output = value;
+    else {
+      try { output = JSON.stringify(value == null ? null : value); }
+      catch (_) { output = String(value); }
+    }
+    output = limpiarSecreto(output, apiKey);
+    if (output.length > 32768) output = output.slice(0, 32768) + '\n[resultado recortado por el límite de 32 KiB]';
+    return output;
+  }
+
+  function notificarEventoHerramienta(callback, event) {
+    if (typeof callback !== 'function') return;
+    try { callback(clonarJSON(event)); } catch (_) {}
+  }
+
+  function runAgent(options) {
+    options = options || {};
+    var protocol;
+    try { protocol = protocolName(options.protocol); }
+    catch (error) { return Promise.reject(error); }
+    if (protocol === PROTOCOLS.custom) {
+      return Promise.reject(fail('El protocolo JSON personalizado no dispone de tool calling normalizado.', 'ANK_TOOL_PROTOCOL_UNSUPPORTED'));
+    }
+    if (typeof options.executeTool !== 'function') {
+      return Promise.reject(fail('No se configuró un ejecutor confiable para las herramientas.', 'ANK_TOOL_EXECUTOR_REQUIRED'));
+    }
+
+    var maxRounds = Math.max(1, Math.min(8, Math.floor(Number(options.maxToolRounds) || 5)));
+    var maxToolCalls = Math.max(1, Math.min(20, Math.floor(Number(options.maxToolCalls) || 12)));
+    var tools = Array.isArray(options.tools) ? options.tools : herramientasAgente();
+    var messages;
+    try { messages = normalizarMensajes(options.messages); }
+    catch (error) { return Promise.reject(error); }
+    var permissions = options.permissions && typeof options.permissions === 'object'
+      ? Object.assign({}, options.permissions) : {};
+    var sessionGrants = Object.create(null);
+    var activity = crearRegistroActividad({ maxEntries: 100 });
+    var callsExecuted = 0;
+    var roundCount = 0;
+    var lastContent = '';
+
+    function aborted() {
+      if (options.signal && options.signal.aborted) {
+        throw fail('La ejecución del agente fue cancelada.', 'ANK_AI_ABORTED');
+      }
+    }
+
+    function eventFor(call, status, extra) {
+      var item = {
+        tool: call.name,
+        permission: call.permission,
+        risk: call.risk,
+        status: status,
+        path: call.arguments && call.arguments.path
+          ? normalizarRutaProyecto(call.arguments.path, true) : ''
+      };
+      if (extra) Object.keys(extra).forEach(function (key) { item[key] = extra[key]; });
+      notificarEventoHerramienta(options.onToolEvent, item);
+    }
+
+    function getPermission(call) {
+      if (permissions[call.permission] === true || permissions[call.name] === true ||
+          sessionGrants[call.permission] === true) return Promise.resolve(true);
+      if (typeof options.requestPermission !== 'function') return Promise.resolve(false);
+      eventFor(call, 'permission_required');
+      return Promise.resolve().then(function () {
+        return options.requestPermission({
+          tool: call.name,
+          permission: call.permission,
+          risk: call.risk,
+          arguments: clonarJSON(call.arguments),
+          description: call.name
+        });
+      }).then(function (answer) {
+        var granted = answer === true || !!(answer && answer.granted === true);
+        if (granted && answer && answer.remember === true) sessionGrants[call.permission] = true;
+        return granted;
+      }, function () { return false; });
+    }
+
+    function confirmCall(call) {
+      if (!call.requiresConfirmation) return Promise.resolve(true);
+      if (typeof options.confirmTool !== 'function') return Promise.resolve(false);
+      eventFor(call, 'confirmation_required');
+      return Promise.resolve().then(function () {
+        return options.confirmTool({
+          tool: call.name,
+          permission: call.permission,
+          risk: call.risk,
+          arguments: clonarJSON(call.arguments),
+          description: call.name
+        });
+      }).then(function (answer) {
+        return answer === true || !!(answer && answer.confirmed === true);
+      }, function () { return false; });
+    }
+
+    function backupBefore(call) {
+      if (!call.requiresBackup) return Promise.resolve({ created: false, id: '' });
+      if (typeof options.createBackup !== 'function') return Promise.resolve({ created: false, id: '' });
+      eventFor(call, 'backup_required');
+      return Promise.resolve().then(function () {
+        return options.createBackup({
+          tool: call.name,
+          path: call.arguments.path,
+          reason: 'Antes de ' + call.name,
+          arguments: clonarJSON(call.arguments)
+        });
+      }).then(function (result) {
+        if (result === true) return { created: true, id: '' };
+        if (result && result.created === true) {
+          return { created: true, id: String(result.id || '').slice(0, 100) };
+        }
+        return { created: false, id: '' };
+      }, function () { return { created: false, id: '' }; });
+    }
+
+    function executeOne(rawCall) {
+      aborted();
+      var call;
+      try { call = validarLlamadaHerramienta(rawCall.name, rawCall.arguments); }
+      catch (error) {
+        return Promise.resolve({
+          message: 'Llamada rechazada por validación: ' + String(error.message || error),
+          status: 'failed'
+        });
+      }
+      if (callsExecuted >= maxToolCalls) {
+        return Promise.resolve({ message: 'Se alcanzó el límite de llamadas de herramientas de esta ejecución.', status: 'failed' });
+      }
+      callsExecuted += 1;
+      activity.record({ tool: call.name, status: 'requested', path: call.arguments.path });
+      return getPermission(call).then(function (granted) {
+        aborted();
+        if (!granted) {
+          activity.record({ tool: call.name, status: 'permission_denied', path: call.arguments.path });
+          eventFor(call, 'permission_denied');
+          return { message: 'Permiso denegado por el usuario. No se ejecutó ninguna acción.', status: 'permission_denied' };
+        }
+        return confirmCall(call).then(function (confirmed) {
+          aborted();
+          if (!confirmed) {
+            activity.record({ tool: call.name, status: 'permission_denied', path: call.arguments.path });
+            eventFor(call, 'confirmation_denied');
+            return { message: 'La operación no fue confirmada. No se ejecutó ninguna acción.', status: 'permission_denied' };
+          }
+          return backupBefore(call).then(function (backup) {
+            aborted();
+            var decision = evaluarPermisoHerramienta(call.name, call.arguments,
+              Object.assign({}, permissions, sessionGrants, (function () {
+                var grant = {};
+                grant[call.permission] = true;
+                return grant;
+              })()),
+              { userConfirmed: confirmed, backupCreated: backup.created });
+            if (!decision.allowed) {
+              activity.record({ tool: call.name, status: 'failed', path: call.arguments.path });
+              eventFor(call, decision.status);
+              return {
+                message: decision.status === 'backup_required'
+                  ? 'No se pudo crear una copia previa verificable. La acción no se ejecutó.'
+                  : 'La política de permisos no autorizó la operación.',
+                status: 'failed'
+              };
+            }
+            eventFor(call, 'executing', { backupId: backup.id });
+            return Promise.resolve().then(function () {
+              return options.executeTool(clonarJSON(call), {
+                signal: options.signal || null,
+                backupId: backup.id,
+                round: roundCount
+              });
+            }).then(function (value) {
+              aborted();
+              activity.record({ tool: call.name, status: 'completed', path: call.arguments.path });
+              eventFor(call, 'completed', { backupId: backup.id });
+              return { message: toolResultText(value, options.apiKey), status: 'completed' };
+            }, function (error) {
+              var message = limpiarSecreto(error && error.message ? error.message : String(error), options.apiKey);
+              activity.record({ tool: call.name, status: 'failed', path: call.arguments.path });
+              eventFor(call, 'failed');
+              return { message: 'La herramienta falló: ' + message.slice(0, 1200), status: 'failed' };
+            });
+          });
+        });
+      });
+    }
+
+    function runRound() {
+      aborted();
+      roundCount += 1;
+      var requestOptions = Object.assign({}, options, {
+        protocol: protocol,
+        messages: messages.slice(),
+        tools: tools
+      });
+      delete requestOptions.executeTool;
+      delete requestOptions.requestPermission;
+      delete requestOptions.confirmTool;
+      delete requestOptions.createBackup;
+      delete requestOptions.onToolEvent;
+      delete requestOptions.permissions;
+      delete requestOptions.maxToolRounds;
+      delete requestOptions.maxToolCalls;
+      return chat(requestOptions).then(function (result) {
+        lastContent = String(result.content || '');
+        var toolCalls = Array.isArray(result.toolCalls) ? result.toolCalls : [];
+        if (!toolCalls.length) {
+          return {
+            content: lastContent,
+            usage: result.usage || null,
+            finishReason: result.finishReason || null,
+            rounds: roundCount,
+            toolCallsExecuted: callsExecuted,
+            activity: activity.list()
+          };
+        }
+        if (roundCount >= maxRounds) {
+          throw fail('El agente alcanzó el límite de rondas de herramientas sin completar la respuesta.', 'ANK_TOOL_ROUND_LIMIT');
+        }
+        messages.push({
+          role: 'assistant',
+          content: lastContent,
+          toolCalls: toolCalls.map(function (call) {
+            return { id: call.id, name: call.name, arguments: call.arguments };
+          })
+        });
+        return toolCalls.reduce(function (chain, call) {
+          return chain.then(function () {
+            return executeOne(call).then(function (outcome) {
+              messages.push({
+                role: 'tool',
+                toolCallId: call.id,
+                name: call.name,
+                content: outcome.message
+              });
+            });
+          });
+        }, Promise.resolve()).then(runRound);
+      });
+    }
+
+    return runRound();
+  }
+
   return {
     version: VERSION,
     protocols: PROTOCOLS,
@@ -1245,6 +1578,7 @@
     validarLlamadaHerramienta: validarLlamadaHerramienta,
     evaluarPermisoHerramienta: evaluarPermisoHerramienta,
     crearRegistroActividad: crearRegistroActividad,
+    runAgent: runAgent,
     chat: chat
   };
 });
