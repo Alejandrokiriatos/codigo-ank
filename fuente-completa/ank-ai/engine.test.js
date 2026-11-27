@@ -715,7 +715,17 @@ test('normaliza rutas seguras y rechaza traversal, rutas absolutas y rutas priva
     '.ssh/id_ed25519',
     'config/credentials.json',
     'keys/release.keystore',
-    'ank_api_secrets.xml'
+    'ank_api_secrets.xml',
+    '.npmrc',
+    '.netrc',
+    '.pypirc',
+    '.docker/config.json',
+    '.kube/config',
+    '.terraform/terraform.tfstate',
+    '.azure/config',
+    '.gcloud/credentials.db',
+    'keys/id_ecdsa',
+    'keys/id_dsa'
   ]) {
     assert.throws(() => Engine.normalizarRutaProyecto(path, false), undefined, path);
   }
