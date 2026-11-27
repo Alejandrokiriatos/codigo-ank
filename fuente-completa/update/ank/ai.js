@@ -1382,6 +1382,12 @@
     return conSistema('secureRemove', claveApiSeguraId(profileId));
   }
 
+  function procesarPerfilesEnSerie(perfiles, procesar) {
+    return (perfiles || []).reduce(function (cadena, perfil, index) {
+      return cadena.then(function () { return procesar(perfil, index); });
+    }, Promise.resolve());
+  }
+
   function persistirPerfilesApi() {
     var profiles = st.apiProfiles.slice(0, 12);
     var data = {
@@ -1394,7 +1400,9 @@
       })
     };
     return dirsIniciales().then(function () {
-      return Promise.all(profiles.map(guardarClaveSeguraPerfil));
+      /* En serie: la inicialización de Tink/EncryptedSharedPreferences no debe
+         competir consigo misma cuando el perfil todavía no existe. */
+      return procesarPerfilesEnSerie(profiles, guardarClaveSeguraPerfil);
     }).then(function () {
       return escribir(rutaConfigApi(), JSON.stringify(data));
     });
@@ -1471,7 +1479,7 @@
       });
       var migracionSeguraCorrecta = true;
 
-      return Promise.all(normalized.profiles.map(function (perfil, index) {
+      return procesarPerfilesEnSerie(normalized.profiles, function (perfil, index) {
         var legacy = rawProfiles[index] && rawProfiles[index].apiKey;
         if (typeof legacy === 'string' && legacy.length) {
           perfil.apiKey = legacy;
@@ -1487,7 +1495,7 @@
           perfil.apiKey = '';
           log('e', 'No se pudo recuperar la clave cifrada del perfil «' + perfil.name + '»: ' + (error.message || error));
         });
-      })).then(function () {
+      }).then(function () {
         st.apiProfiles = normalized.profiles;
         var active = st.apiProfiles.filter(function (p) {
           return p.id === normalized.activeProfileId;
