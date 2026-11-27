@@ -1374,6 +1374,7 @@
     var payload = {
       version: 2,
       apiKey: String(perfil && perfil.apiKey || ''),
+      customAuthPrefix: String(perfil && perfil.customAuthPrefix == null ? 'Bearer' : perfil.customAuthPrefix),
       customHeaders: String(perfil && perfil.customHeaders || '{}'),
       customBodyTemplate: String(perfil && perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT)
     };
@@ -1405,10 +1406,16 @@
           throw new Error('El registro privado del perfil tiene una estructura no válida.');
         }
         perfil.apiKey = String(payload.apiKey || '');
+        perfil.customAuthPrefix = String(payload.customAuthPrefix == null
+          ? (rawProfile.customAuthPrefix == null ? perfil.customAuthPrefix : rawProfile.customAuthPrefix)
+          : payload.customAuthPrefix);
         perfil.customHeaders = String(payload.customHeaders || '{}');
         perfil.customBodyTemplate = String(payload.customBodyTemplate || CUSTOM_BODY_DEFAULT);
-        if (necesitaMigracion) {
-          return conSistema('secureRemove', claveApiLegacyId(perfil.id)).catch(function () {}).then(function () { return true; });
+        var needsPrefixMigration = !Object.prototype.hasOwnProperty.call(payload, 'customAuthPrefix');
+        if (necesitaMigracion || needsPrefixMigration) {
+          return guardarPerfilSeguro(perfil).then(function () {
+            return conSistema('secureRemove', claveApiLegacyId(perfil.id)).catch(function () {});
+          }).then(function () { return true; });
         }
         return true;
       }
@@ -1416,6 +1423,7 @@
       return conSistema('secureGet', claveApiLegacyId(perfil.id)).then(function (legacyKey) {
         var necesitaMigrarCampos = necesitaMigracion || !!legacyKey ||
           Object.prototype.hasOwnProperty.call(rawProfile, 'apiKey') ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'customAuthPrefix') ||
           Object.prototype.hasOwnProperty.call(rawProfile, 'customHeaders') ||
           Object.prototype.hasOwnProperty.call(rawProfile, 'customBodyTemplate');
 
@@ -1425,6 +1433,7 @@
         }
 
         perfil.apiKey = String(rawProfile.apiKey || legacyKey || '');
+        perfil.customAuthPrefix = String(rawProfile.customAuthPrefix == null ? perfil.customAuthPrefix : rawProfile.customAuthPrefix);
         perfil.customHeaders = String(rawProfile.customHeaders || perfil.customHeaders || '{}');
         perfil.customBodyTemplate = String(rawProfile.customBodyTemplate || perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
 
@@ -1467,11 +1476,12 @@
   function persistirPerfilesApi() {
     var profiles = st.apiProfiles.slice(0, 12);
     var data = {
-      version: 6,
+      version: 7,
       activeProfileId: st.activeProfileId,
       profiles: profiles.map(function (perfil) {
         var safe = Object.assign({}, perfil);
         delete safe.apiKey;
+        delete safe.customAuthPrefix;
         delete safe.customHeaders;
         delete safe.customBodyTemplate;
         return safe;
@@ -1561,13 +1571,14 @@
           Object.prototype.hasOwnProperty.call(item, 'customBodyTemplate')
         ));
       });
-      var necesitaMigracion = Number(data.version || 0) < 6;
+      var necesitaMigracion = Number(data.version || 0) < 7;
       var migracionSeguraCorrecta = true;
 
       return procesarPerfilesEnSerie(normalized.profiles, function (perfil, index) {
         return cargarPerfilSeguro(perfil, rawProfiles[index] || {}, necesitaMigracion).catch(function (error) {
           migracionSeguraCorrecta = false;
           perfil.apiKey = '';
+          perfil.customAuthPrefix = 'Bearer';
           perfil.customHeaders = '{}';
           perfil.customBodyTemplate = CUSTOM_BODY_DEFAULT;
           log('e', 'No se pudieron recuperar/migrar los campos privados de «' + perfil.name + '»: ' + (error.message || error));
