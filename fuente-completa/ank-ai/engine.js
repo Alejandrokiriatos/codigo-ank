@@ -1107,6 +1107,12 @@
     upsertPerfil: upsertPerfil,
     eliminarPerfil: eliminarPerfil,
     endpointUrl: endpointUrl,
+    herramientasAgente: herramientasAgente,
+    normalizarRutaProyecto: normalizarRutaProyecto,
+    normalizarArgumentosHerramienta: normalizarArgumentosHerramienta,
+    validarLlamadaHerramienta: validarLlamadaHerramienta,
+    evaluarPermisoHerramienta: evaluarPermisoHerramienta,
+    crearRegistroActividad: crearRegistroActividad,
     chat: chat
   };
 });
