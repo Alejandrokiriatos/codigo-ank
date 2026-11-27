@@ -58,5 +58,6 @@ wait_marker STAGE1_OK
 timeout 30s adb shell am force-stop "$PKG"
 launch_app
 wait_marker STAGE2_OK
+wait_marker STAGE3_TOOL_OK
 
-echo "PASS: securePut, secureGet, persistencia tras force-stop, secureRemove y lectura vacía en ApiVault real."
+echo "PASS: ApiVault securePut/get/persistencia/remove y herramientas Cordova list/read/search/write/backup/restore/delete."
