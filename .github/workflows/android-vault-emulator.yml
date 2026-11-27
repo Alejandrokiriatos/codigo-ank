@@ -7,6 +7,8 @@ on:
     paths:
       - "fuente-completa/decoded/**"
       - ".github/workflows/android-vault-emulator.yml"
+      - "docs/BLOQUE_5_AUDITORIA_PERSISTENCIA.md"
+      - "docs/CONTINUIDAD_DESARROLLO.txt"
   pull_request:
     branches:
       - ank/block-3-multiple-api
