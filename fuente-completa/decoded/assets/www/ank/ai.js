@@ -1544,26 +1544,21 @@
       var rawProfiles = Array.isArray(data.profiles)
         ? data.profiles.slice(0, 12)
         : (data.endpoint || data.model || data.apiKey || data.protocol ? [data] : []);
-      var teniaClaveEnJson = rawProfiles.some(function (item) {
-        return !!(item && typeof item.apiKey === 'string' && item.apiKey.length);
+      var teniaDatosPrivadosEnJson = rawProfiles.some(function (item) {
+        return !!(item && (
+          (typeof item.apiKey === 'string' && item.apiKey.length) ||
+          Object.prototype.hasOwnProperty.call(item, 'customHeaders') ||
+          Object.prototype.hasOwnProperty.call(item, 'customBodyTemplate')
+        ));
       });
+      var necesitaMigracion = Number(data.version || 0) < 6;
       var migracionSeguraCorrecta = true;
 
       return procesarPerfilesEnSerie(normalized.profiles, function (perfil, index) {
-        var legacy = rawProfiles[index] && rawProfiles[index].apiKey;
-        if (typeof legacy === 'string' && legacy.length) {
-          perfil.apiKey = legacy;
-          return guardarClaveSeguraPerfil(perfil).catch(function (error) {
-            migracionSeguraCorrecta = false;
-            perfil.apiKey = '';
-            log('e', 'No se pudo migrar la clave del perfil «' + perfil.name + '» al Android Keystore: ' + (error.message || error));
-          });
-        }
-        return leerClaveSeguraPerfil(perfil.id).then(function (key) {
-          perfil.apiKey = key;
-        }).catch(function (error) {
+        return cargarPerfilSeguro(perfil, rawProfiles[index] || {}, necesitaMigracion).catch(function (error) {
+          migracionSeguraCorrecta = false;
           perfil.apiKey = '';
-          log('e', 'No se pudo recuperar la clave cifrada del perfil «' + perfil.name + '»: ' + (error.message || error));
+          log('e', 'No se pudieron recuperar/migrar los campos privados de «' + perfil.name + '»: ' + (error.message || error));
         });
       }).then(function () {
         st.apiProfiles = normalized.profiles;
@@ -1572,13 +1567,13 @@
         })[0] || st.apiProfiles[0];
         aplicarPerfilApi(active);
 
-        if ((normalized.migrated || teniaClaveEnJson) && migracionSeguraCorrecta) {
+        if ((necesitaMigracion || normalized.migrated || teniaDatosPrivadosEnJson) && migracionSeguraCorrecta) {
           return persistirPerfilesApi().catch(function (error) {
-            log('e', 'No se pudo guardar provider.json sin secretos: ' + (error.message || error));
+            log('e', 'No se pudo guardar provider.json v6 sin campos privados: ' + (error.message || error));
           }).then(function () { return st.apiConfigured; });
         }
-        if (teniaClaveEnJson && !migracionSeguraCorrecta) {
-          log('e', 'La clave antigua sigue en la configuración previa porque falló su migración segura. No vuelvas a exportar ni compartir provider.json.');
+        if ((necesitaMigracion || teniaDatosPrivadosEnJson) && !migracionSeguraCorrecta) {
+          log('e', 'La migración de campos privados al Android Keystore no terminó. El provider.json anterior se conserva para evitar perder datos; no lo compartas ni lo publiques.');
         }
         return st.apiConfigured;
       });
