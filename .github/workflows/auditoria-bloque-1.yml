@@ -81,7 +81,12 @@ jobs:
           const boot = fs.readFileSync('decoded/assets/www/ank/boot-ai.js', 'utf8');
           const match = ai.match(/PANEL_VERSION = '([^']+)'/);
           if (!match) throw new Error('No se pudo leer la versión del panel');
-          if (!boot.includes('ANK_AI_ENGINE_BUNDLE_BEGIN')) throw new Error('El arranque no valida el panel nuevo');
+          if (!boot.includes("script.src = './ank/ai.js'") ||
+              /new Function|localStorage\\.getItem|eval\\s*\\(/.test(boot) ||
+              !boot.includes('localStorage.removeItem(K_AI)') ||
+              !boot.includes('localStorage.removeItem(K_CSS)')) {
+            throw new Error('El arranque debe cargar exclusivamente el panel incluido y descartar bundles web no verificados');
+          }
           if (!updater.includes('Actualizaciones web desactivadas temporalmente') ||
               !updater.includes('activo: function () { return false; }') ||
               /CLAVE_HEX|function hmac\(/.test(updater)) {
