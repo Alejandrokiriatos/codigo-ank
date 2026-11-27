@@ -284,13 +284,36 @@
   }
 
   function normalizarMensajes(messages) {
-    return (Array.isArray(messages) ? messages : []).filter(function (m) {
-      return m && typeof m.content === 'string' && String(m.content).trim();
-    }).map(function (m) {
-      var role = String(m.role || 'user').toLowerCase();
-      if (role !== 'system' && role !== 'assistant' && role !== 'user') role = 'user';
-      return { role: role, content: String(m.content) };
-    });
+    return (Array.isArray(messages) ? messages : []).reduce(function (output, item) {
+      if (!item || typeof item !== 'object') return output;
+      var role = String(item.role || 'user').toLowerCase();
+      if (role !== 'system' && role !== 'assistant' && role !== 'user' && role !== 'tool') role = 'user';
+      var content = typeof item.content === 'string' ? item.content : '';
+      var normalized = { role: role, content: content };
+      if (role === 'assistant' && Array.isArray(item.toolCalls)) {
+        if (item.toolCalls.length > 20) throw fail('Un mensaje no puede contener más de 20 llamadas de herramientas.', 'ANK_TOOL_LIMIT');
+        normalized.toolCalls = item.toolCalls.map(function (call) {
+          var validated = validarLlamadaHerramienta(call && call.name, call && call.arguments);
+          return {
+            id: String(call && call.id || ('call-' + validated.name)).slice(0, 100),
+            name: validated.name,
+            arguments: validated.arguments
+          };
+        });
+      }
+      if (role === 'tool') {
+        normalized.toolCallId = String(item.toolCallId || '').trim().slice(0, 100);
+        normalized.name = String(item.name || '').trim();
+        if (!normalized.toolCallId || !TOOL_BY_NAME[normalized.name]) {
+          throw fail('El resultado de herramienta no está vinculado a una llamada válida.', 'ANK_TOOL_RESULT_INVALID');
+        }
+      }
+      if (content.trim() || (normalized.toolCalls && normalized.toolCalls.length) ||
+          (role === 'tool' && normalized.toolCallId)) {
+        output.push(normalized);
+      }
+      return output;
+    }, []);
   }
 
   function leerObjetoJSON(value, label) {
@@ -520,6 +543,25 @@
         model: String(options.model).trim(),
         max_tokens: maxTokens || 4096,
         messages: chatMessages.map(function (m) {
+          if (m.role === 'tool') {
+            return {
+              role: 'user',
+              content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: m.content }]
+            };
+          }
+          if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length) {
+            var blocks = [];
+            if (m.content) blocks.push({ type: 'text', text: m.content });
+            m.toolCalls.forEach(function (call) {
+              blocks.push({
+                type: 'tool_use',
+                id: call.id,
+                name: nombreHerramientaProveedor(call.name),
+                input: call.arguments
+              });
+            });
+            return { role: 'assistant', content: blocks };
+          }
           return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
         }),
         temperature: temperature
@@ -544,10 +586,31 @@
 
     if (protocol === PROTOCOLS.gemini) {
       var contents = chatMessages.map(function (m) {
-        return {
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }]
-        };
+        if (m.role === 'tool') {
+          return {
+            role: 'user',
+            parts: [{
+              functionResponse: {
+                name: nombreHerramientaProveedor(m.name),
+                response: { result: m.content }
+              }
+            }]
+          };
+        }
+        var parts = [];
+        if (m.content) parts.push({ text: m.content });
+        if (m.role === 'assistant' && m.toolCalls) {
+          m.toolCalls.forEach(function (call) {
+            parts.push({
+              functionCall: {
+                id: call.id,
+                name: nombreHerramientaProveedor(call.name),
+                args: call.arguments
+              }
+            });
+          });
+        }
+        return { role: m.role === 'assistant' ? 'model' : 'user', parts: parts };
       });
       var generationConfig = { temperature: temperature };
       if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
@@ -569,7 +632,30 @@
 
     var openBody = {
       model: String(options.model).trim(),
-      messages: messages,
+      messages: messages.map(function (m) {
+        if (m.role === 'tool') {
+          return {
+            role: 'tool',
+            tool_call_id: m.toolCallId,
+            name: nombreHerramientaProveedor(m.name),
+            content: m.content
+          };
+        }
+        var message = { role: m.role, content: m.content || null };
+        if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length) {
+          message.tool_calls = m.toolCalls.map(function (call) {
+            return {
+              id: call.id,
+              type: 'function',
+              function: {
+                name: nombreHerramientaProveedor(call.name),
+                arguments: JSON.stringify(call.arguments)
+              }
+            };
+          });
+        }
+        return message;
+      }),
       stream: toolSet.declarations.length ? false : true
     };
     if (options.temperature != null && isFinite(Number(options.temperature))) openBody.temperature = temperature;
