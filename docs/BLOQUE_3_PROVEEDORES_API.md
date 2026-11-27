@@ -54,7 +54,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 
 ## Panel y persistencia
 
-### Perfiles de conexión (provider.json v4)
+### Perfiles de conexión (provider.json v5)
 
 - Se pueden guardar hasta **12 conexiones** con nombre propio.
 - Cada perfil mantiene protocolo, endpoint, modelo, clave, cabeceras y plantilla JSON de forma independiente.
@@ -67,7 +67,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
 - La lógica de creación, normalización, migración, actualización y eliminación de perfiles vive en `ank-ai/engine.js`, independiente de la vista. Esto permite probar las reglas del almacén sin depender del DOM.
 
-Las claves continúan en el archivo privado de la aplicación **sin cifrado Android Keystore**. El perfil múltiple organiza la configuración, pero no cambia ese límite de seguridad. No se debe compartir `provider.json` ni incluirlo en un repositorio.
+Las claves ya no se escriben en `provider.json`: se almacenan mediante `EncryptedSharedPreferences` (AES256-SIV para nombres y AES256-GCM para valores), con una clave maestra `AES256_GCM` respaldada por Android Keystore. El puente Cordova del plugin `System` expone lectura, escritura y borrado para cada perfil. `provider.json` v5 conserva solo los parámetros no secretos. En una instalación con datos v3/v4, la aplicación intenta migrar las claves al almacén cifrado antes de reescribir el archivo; si falla, conserva el archivo previo para no perder la clave e informa del problema en Registro. No se debe compartir `provider.json` ni incluirlo en un repositorio.
 
 ### Diseño del panel 2.4.1
 
@@ -98,7 +98,7 @@ Las claves continúan en el archivo privado de la aplicación **sin cifrado Andr
 
 “Cualquier API” no significa cualquier URL de inferencia: los proveedores deben exponer uno de los tres protocolos nativos o usar el modo HTTP POST JSON configurable. Una API propia con WebSocket, gRPC, protocolo binario, firma compleja o respuestas no JSON requiere un adaptador adicional.
 
-Las claves siguen guardándose en el directorio privado sin cifrado Android Keystore. No se debe presentar esta rama como una versión endurecida. El cifrado seguro y la gestión de secretos se mantienen para el bloque de seguridad.
+El almacenamiento cifrado está implementado en la capa Smali nativa usando las clases AndroidX Security y Tink que ya existen en el APK base. La prueba CI del motor no basta para certificar el flujo del Keystore: la reconstrucción Apktool debe pasar y todavía se requiere probar alta, restauración, cambio y borrado de claves en un teléfono Android real.
 
 El actualizador web permanece desactivado porque la verificación HMAC anterior fue retirada. No publicar este panel por el canal antiguo. La actualización firmada debe reabrirse con verificación asimétrica Ed25519.
 
@@ -123,7 +123,8 @@ La ejecución [45973457092](https://github.com/Alejandrokiriatos/codigo-ank/acti
 - 28 pruebas del motor: 28 correctas, 0 fallidas.
 - Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
 - Auditoría estática de los perfiles: migración v3, formato v4, creación, selección y eliminación.
-- Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias del actualizador interno.
+- Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias de publicación y del actualizador interno.
+- Auditoría del almacenamiento de secretos: puente Cordova, `System.smali`, `ApiVault.smali` y `EncryptedSharedPreferences` detectados y conectados; claves excluidas de `provider.json` v5.
 - Se comprobó además que `ank/ai.js`, `.repo-publicacion/ank/ai.js`, `update/ank/ai.js` y las copias incluidas en Android coinciden byte a byte; los paneles de publicación no contienen el runtime OpenCode.
 - Se incorporó una corrección de aislamiento: al cambiar, crear o eliminar perfiles, se vacía el campo de clave, evitando reutilizar accidentalmente una clave que quedó escrita en el perfil anterior.
 - Diseño responsive: reglas verificadas para teléfono y escritorio.
