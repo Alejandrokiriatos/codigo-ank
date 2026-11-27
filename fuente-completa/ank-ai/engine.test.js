@@ -799,7 +799,17 @@ test('borrado y restauración requieren permiso destructivo y confirmación expr
   );
   assert.equal(
     Engine.evaluarPermisoHerramienta('project.restore_backup', { backupId: 'backup-001' }, { destructive: true }, {}).status,
+    'backup_required'
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.restore_backup', { backupId: 'backup-001' }, { destructive: true }, { backupCreated: true }).status,
     'confirmation_required'
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.restore_backup', { backupId: 'backup-001' }, { destructive: true }, {
+      backupCreated: true, userConfirmed: true
+    }).allowed,
+    true
   );
 });
 
