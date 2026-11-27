@@ -3,4 +3,6 @@
     <!-- EncryptedSharedPreferences requires the Android Keystore master key.
          The keystore key is not portable in an ordinary app-data backup. -->
     <exclude domain="sharedpref" path="ank_api_secrets.xml" />
+    <!-- Local rollback snapshots contain user project source and stay on-device. -->
+    <exclude domain="file" path="ank-ai/backups/" />
 </full-backup-content>
