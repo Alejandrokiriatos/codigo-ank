@@ -3569,7 +3569,7 @@
             return chain.then(function () {
               if (results.length >= 400) { truncated = true; return; }
               var name = String(entry.name || '');
-              if (!name || name.charAt(0) === '.' || name === 'node_modules' || name === 'vendor') return;
+              if (!name || name === 'node_modules' || name === 'vendor') return;
               var child = rel === '.' ? name : (rel ? rel + '/' + name : name);
               try { window.ANKAIEngine.normalizarRutaProyecto(child, false); }
               catch (_) { return; }
