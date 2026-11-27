@@ -27,6 +27,7 @@
 - El manifiesto enlaza `@xml/ank_backup_rules` y `@xml/ank_data_extraction_rules`.
 - Backup clásico excluye `sharedpref/ank_api_secrets.xml`.
 - Las reglas Android 12+ excluyen ese mismo archivo tanto en cloud backup como en device transfer.
+- Los snapshots locales del proyecto se guardan en `ank-ai/backups/` dentro del almacenamiento privado y se excluyen también del backup clásico, cloud backup y device transfer.
 - El nombre del archivo excluido coincide con el nombre que pasa `ApiVault` a `EncryptedSharedPreferences.create`.
 
 ## Mejora de auditoría automatizada
@@ -69,7 +70,7 @@ Usar una build de diagnóstico creada desde esta rama y un secreto desechable de
 | Restaurar datos sin Keystore original | No se recupera ciphertext inutilizable; error controlado |
 | Inspeccionar `provider.json` | Sin secretos ni campos privados |
 
-**Bloqueo:** no se dispone de una sesión de Android físico/emulador conectada a esta ejecución. Por tanto, todos los puntos de la matriz permanecen pendientes de prueba práctica. No se declara validada la persistencia física ni se autoriza una APK release.
+**Estado actual:** el ciclo básico del vault ya se ejecutó correctamente en el emulador Android de CI (run `45994302632`, job `140489705802`). Se instalaron y arrancaron la APK temporal y el WebView reportó `STAGE1_OK` tras securePut→secureGet y `STAGE2_OK` tras force-stop, nuevo arranque, secureGet persistido, secureRemove y lectura vacía. El job terminó `success` e imprimió `PASS`. Esto valida el puente Cordova/Smali/ApiVault y la persistencia tras muerte del proceso en ese emulador. Siguen pendientes los escenarios de reinicio completo del sistema operativo, migración/restauración sin Keystore, flujo de perfiles de la interfaz y prueba en teléfono físico. La APK temporal usa firma efímera y no autoriza una release.
 
 ## Segunda capa de auditoría estática
 
@@ -106,7 +107,7 @@ Se añadió el workflow `.github/workflows/android-vault-emulator.yml`. En CI:
 
 La prueba de emulador cubre persistencia tras muerte del proceso, no reinicio completo del sistema operativo, migración desde una versión instalada ni interacción completa de la pantalla de perfiles. Esas pruebas siguen en la matriz manual. La APK de CI está firmada con una clave efímera de debug y nunca se distribuye como release.
 
-Resultado de CI: consultar la ejecución del workflow **Prueba Android real · ApiVault Cordova** en Actions. No se declarará superada hasta que el job del emulador termine en `success`; la auditoría estática por sí sola no cuenta como ejecución del vault.
+Resultado confirmado: [run 45994302632](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45994302632) terminó `success`. Los logs muestran la APK `com.ank.codigoank` instalada, el WebView reportando `STAGE1_OK` y `STAGE2_OK`, y el mensaje `PASS: securePut, secureGet, persistencia tras force-stop, secureRemove y lectura vacía en ApiVault real.` El secreto aleatorio no aparece en los logs. Una ejecución posterior de la APK integrada con herramientas de proyecto continúa como comprobación adicional; el resultado del ciclo del vault aquí citado es independiente y ya está cerrado.
 
 
 ## Identidad de paquete y continuidad de firma (regla obligatoria)
