@@ -3614,12 +3614,14 @@
   }
 
   function backupAntesDeHerramienta(call) {
-    if (call.name === 'project.restore_backup') {
-      return leerSnapshotHerramienta(call.arguments.backupId).then(function (snapshot) {
+    var name = call.tool || call.name;
+    var args = call.arguments || {};
+    if (name === 'project.restore_backup') {
+      return leerSnapshotHerramienta(args.backupId).then(function (snapshot) {
         return guardarSnapshotHerramienta(snapshot.path);
       });
     }
-    return guardarSnapshotHerramienta(call.arguments.path);
+    return guardarSnapshotHerramienta(args.path);
   }
 
   function restaurarSnapshotHerramienta(id) {
@@ -4988,8 +4990,10 @@
         'Eres el asistente de programación integrado en Código ANK.',
         'Responde en español, sé preciso y nunca inventes resultados de ejecución.',
         st.modo === 'plan'
-          ? 'Modo Plan: analiza y propone; no afirmes que has aplicado cambios.'
-          : 'Modo Construir: propone archivos completos; el usuario decide cuándo aplicarlos.',
+          ? 'Modo Plan: analiza y propone; solo puedes leer, listar y buscar archivos. No modifiques nada.'
+          : 'Modo Construir: puedes leer y buscar en el proyecto; para escribir, borrar o restaurar debes explicar el cambio y esperar la confirmación explícita de ANK.',
+        'Las herramientas de proyecto operan solo dentro de la carpeta del proyecto activo. No intentes leer credenciales, archivos ocultos ni salir de esa carpeta.',
+        'La terminal no está habilitada como herramienta del agente en esta versión. No inventes resultados de comandos.',
         PROTOCOLO_ARCHIVO, PROTOCOLO_APP, PROTOCOLO_CONTEXTO,
         memory ? '\n\n[Memoria del proyecto]\n' + memory : ''
       ].join('\n');
@@ -4999,13 +5003,13 @@
         return { role: m.rol === 'user' ? 'user' : 'assistant', content: String(m.texto || '').slice(0, 30000) };
       });
       log('i', 'Enviando solicitud a la API: ' + st.model);
-      return window.ANKAIEngine.chat({
+      var requestOptions = {
         protocol: st.protocol, endpoint: st.endpoint, apiKey: st.apiKey, model: st.model,
-      customAuthHeader: st.customAuthHeader,
-      customAuthPrefix: st.customAuthPrefix,
-      customHeaders: st.customHeaders,
-      customBodyTemplate: st.customBodyTemplate,
-      customResponsePath: st.customResponsePath,
+        customAuthHeader: st.customAuthHeader,
+        customAuthPrefix: st.customAuthPrefix,
+        customHeaders: st.customHeaders,
+        customBodyTemplate: st.customBodyTemplate,
+        customResponsePath: st.customResponsePath,
         messages: [{ role: 'system', content: systemPrompt }].concat(history),
         temperature: 0.2, timeoutMs: 120000,
         signal: st.abortController ? st.abortController.signal : undefined,
@@ -5013,7 +5017,24 @@
         onDelta: function (part) {
           try { escribirBot(part); } catch (e) { log('e', 'Render: ' + (e.message || e)); }
         }
-      });
+      };
+      if (st.protocol === 'custom-json') return window.ANKAIEngine.chat(requestOptions);
+      return window.ANKAIEngine.runAgent(Object.assign({}, requestOptions, {
+        tools: herramientasDisponiblesPanel(),
+        permissions: {},
+        requestPermission: permisoHerramientaPanel,
+        confirmTool: confirmarHerramientaPanel,
+        createBackup: backupAntesDeHerramienta,
+        executeTool: ejecutarHerramientaProyecto,
+        maxToolRounds: 5,
+        maxToolCalls: 12,
+        onToolEvent: function (event) {
+          var path = event.path ? ' · ' + event.path : '';
+          log(event.status === 'failed' || event.status === 'permission_denied' ||
+              event.status === 'confirmation_denied' ? 'w' : 'i',
+            'Herramienta ' + event.tool + ': ' + event.status + path);
+        }
+      }));
     }).then(function (result) {
       st.corriendo = false; st.abortController = null;
       cerrarTurno(false); tocarChat();
