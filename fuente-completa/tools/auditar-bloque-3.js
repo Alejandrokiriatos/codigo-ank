@@ -212,6 +212,34 @@ assert.match(panel, /Math\.min\(24576, args\.maxBytes \|\| 24576\)/, 'La lectura
 assert.match(panel, /current\.exists && !args\.expectedDigest/, 'El overwrite de un archivo existente debe exigir el digest de su última lectura.');
 assert.match(panel, /if \(!args\.expectedDigest\) \{\s*throw new Error\('Léelo primero/, 'El borrado debe exigir el digest de su última lectura.');
 assert.match(panel, /function restaurarSnapshotHerramienta\(id\)/, 'Falta restaurar desde copias locales.');
+assert.ok(panel.includes('data-view="seguridad"') && panel.includes('data-tab="seguridad"'),
+  'Falta la pestaña dedicada de seguridad y actividad.');
+assert.ok(panel.includes('ank.ai.tool.activity.v1') && panel.includes('function registrarActividadHerramienta(event)'),
+  'El historial debe persistir únicamente metadatos de las operaciones.');
+assert.ok(panel.includes('function pintarSeguridad()') && panel.includes('clear-tool-activity'),
+  'Falta la vista y limpieza del historial de herramientas.');
+assert.ok(panel.includes('tool-approval-once') && panel.includes('tool-approval-run') &&
+  panel.includes('tool-approval-confirm') && panel.includes('tool-approval-deny'),
+  'El diálogo debe distinguir permiso puntual, permiso durante el trabajo, confirmación y denegación.');
+const permissionStart = panel.indexOf('function permisoHerramientaPanel(info)');
+const permissionEnd = panel.indexOf('function confirmarHerramientaPanel(info)', permissionStart);
+const permissionBody = panel.slice(permissionStart, permissionEnd);
+assert.ok(permissionBody.includes("mostrarSolicitudHerramienta('permission'") &&
+  !permissionBody.includes('window.confirm'),
+  'Los permisos de herramientas deben utilizar el diálogo integrado, no window.confirm.');
+const confirmationStart = panel.indexOf('function confirmarHerramientaPanel(info)');
+const confirmationEnd = panel.indexOf('function herramientasDisponiblesPanel()', confirmationStart);
+const confirmationBody = panel.slice(confirmationStart, confirmationEnd);
+assert.ok(confirmationBody.includes("mostrarSolicitudHerramienta(") &&
+  !confirmationBody.includes('window.confirm'),
+  'Las operaciones sensibles deben utilizar el diálogo integrado.');
+assert.ok(panel.includes('remember: true') && panel.includes('remember: false'),
+  'La UI debe limitar la concesión recordada a la ejecución actual.');
+assert.ok(panel.includes('registrarActividadHerramienta(event);'),
+  'Los eventos del motor deben alimentar el historial visible.');
+assert.ok(css.includes('.ank-ai-security') && css.includes('.ank-ai-tool-overlay') &&
+  css.includes('.ank-ai-tool-dialog'),
+  'Faltan los estilos responsive de seguridad y confirmación.');
 assert.match(panel, /function rutaRaizBackupsHerramienta\(\)/, 'Falta el directorio interno de copias de seguridad.');
 assert.match(panel, /window\.ANKAIEngine\.normalizarModelo/, 'La interfaz no usa el normalizador de modelos.');
 assert.doesNotMatch(panel, /opencode/i, 'El panel activo aún contiene referencias al runtime OpenCode.');

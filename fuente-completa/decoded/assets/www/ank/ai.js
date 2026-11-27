@@ -1672,6 +1672,38 @@
    * estado
    * ------------------------------------------------------------------ */
 
+  function cargarActividadHerramientas() {
+    var permitidas = [
+      'project.list_files', 'project.read_file', 'project.search_files',
+      'project.create_backup', 'project.write_file', 'project.delete_file',
+      'project.restore_backup', 'terminal.run'
+    ];
+    var estados = [
+      'permission_required', 'permission_denied', 'confirmation_required',
+      'confirmation_denied', 'backup_required', 'executing', 'completed', 'failed'
+    ];
+    try {
+      var data = JSON.parse(leer('ank.ai.tool.activity.v1', '[]'));
+      if (!Array.isArray(data)) return [];
+      return data.slice(-100).filter(function (item) {
+        return item && permitidas.indexOf(item.tool) !== -1 &&
+          estados.indexOf(item.status) !== -1 &&
+          typeof item.timestamp === 'string';
+      }).map(function (item) {
+        return {
+          timestamp: item.timestamp.slice(0, 32),
+          tool: item.tool,
+          permission: String(item.permission || '').slice(0, 24),
+          risk: String(item.risk || '').slice(0, 24),
+          status: item.status,
+          path: String(item.path || '').slice(0, 240)
+        };
+      });
+    } catch (e) {
+      return [];
+    }
+  }
+
   var st = {
     prefix: '',
     pub: '',
@@ -1718,7 +1750,9 @@
     appsCargando: false,
     appActual: null,
     stats: null,
-    statsError: ''
+    statsError: '',
+    toolActivity: cargarActividadHerramientas(),
+    pendingToolApproval: null
   };
 
   var cur = null; // burbuja del bot en curso
@@ -3762,6 +3796,135 @@
     return Promise.reject(new Error('Esta herramienta no está habilitada en el teléfono.'));
   }
 
+  function registrarActividadHerramienta(event) {
+    if (!event || typeof event !== 'object') return;
+    var allowedTools = [
+      'project.list_files', 'project.read_file', 'project.search_files',
+      'project.create_backup', 'project.write_file', 'project.delete_file',
+      'project.restore_backup', 'terminal.run'
+    ];
+    var allowedStatuses = [
+      'permission_required', 'permission_denied', 'confirmation_required',
+      'confirmation_denied', 'backup_required', 'executing', 'completed', 'failed'
+    ];
+    var tool = String(event.tool || '');
+    var status = String(event.status || '');
+    if (allowedTools.indexOf(tool) === -1 || allowedStatuses.indexOf(status) === -1) return;
+    var relative = '';
+    if (event.path) {
+      try {
+        relative = window.ANKAIEngine.normalizarRutaProyecto(String(event.path), true);
+      } catch (e) {
+        relative = '[ruta omitida]';
+      }
+    }
+    st.toolActivity.push({
+      timestamp: new Date().toISOString(),
+      tool: tool,
+      permission: String(event.permission || '').slice(0, 24),
+      risk: String(event.risk || '').slice(0, 24),
+      status: status,
+      path: relative.slice(0, 240)
+    });
+    if (st.toolActivity.length > 100) st.toolActivity.splice(0, st.toolActivity.length - 100);
+    // Se persisten metadatos de auditoría, nunca argumentos ni contenido de herramientas.
+    guardar('ank.ai.tool.activity.v1', JSON.stringify(st.toolActivity));
+    pintarSeguridad();
+  }
+
+  function etiquetaHerramienta(nombre) {
+    var labels = {
+      'project.list_files': 'Listar archivos',
+      'project.read_file': 'Leer archivo',
+      'project.search_files': 'Buscar archivos',
+      'project.create_backup': 'Crear respaldo',
+      'project.write_file': 'Escribir archivo',
+      'project.delete_file': 'Eliminar archivo',
+      'project.restore_backup': 'Restaurar respaldo',
+      'terminal.run': 'Terminal'
+    };
+    return labels[nombre] || nombre;
+  }
+
+  function etiquetaEstadoHerramienta(status) {
+    var labels = {
+      permission_required: 'Permiso solicitado',
+      permission_denied: 'Permiso denegado',
+      confirmation_required: 'Esperando confirmación',
+      confirmation_denied: 'Operación cancelada',
+      backup_required: 'Creando respaldo',
+      executing: 'En ejecución',
+      completed: 'Completada',
+      failed: 'Fallida'
+    };
+    return labels[status] || status;
+  }
+
+  function pintarSeguridad() {
+    var list = q('.ank-ai-tool-activity');
+    if (!list) return;
+    var items = Array.isArray(st.toolActivity) ? st.toolActivity.slice(-100).reverse() : [];
+    if (!items.length) {
+      list.innerHTML = '<div class="ank-ai-security-empty">Todavía no hay operaciones del agente. Las solicitudes de permiso y sus resultados aparecerán aquí.</div>';
+      return;
+    }
+    list.innerHTML = items.map(function (item) {
+      var cls = item.status === 'completed' ? 'ok' :
+        item.status === 'failed' || item.status.indexOf('denied') !== -1 || item.status === 'confirmation_denied' ? 'bad' :
+        item.status === 'executing' ? 'active' : 'pending';
+      var date = fechaCorta(item.timestamp);
+      var path = item.path ? '<span class="ank-ai-tool-path">' + esc(item.path) + '</span>' : '';
+      return '<article class="ank-ai-tool-event">' +
+        '<span class="ank-ai-tool-state ' + cls + '">' + esc(etiquetaEstadoHerramienta(item.status)) + '</span>' +
+        '<div class="ank-ai-tool-event-main"><strong>' + esc(etiquetaHerramienta(item.tool)) + '</strong>' +
+        '<small>' + esc(date) + ' · ' + esc(item.permission || item.risk || 'herramienta') + '</small>' + path +
+        '</div></article>';
+    }).join('');
+  }
+
+  function resolverSolicitudHerramienta(answer) {
+    var pending = st.pendingToolApproval;
+    if (!pending) return;
+    st.pendingToolApproval = null;
+    var overlay = q('.ank-ai-tool-overlay', panel);
+    if (overlay) {
+      overlay.classList.remove('open');
+      overlay.hidden = true;
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+    try { pending.resolve(answer); } catch (e) {}
+  }
+
+  function mostrarSolicitudHerramienta(kind, info, detail, preview) {
+    return new Promise(function (resolve) {
+      if (!panel) construir();
+      var overlay = q('.ank-ai-tool-overlay', panel);
+      if (!overlay) { resolve(false); return; }
+      if (st.pendingToolApproval) resolverSolicitudHerramienta(false);
+      var title = q('[data-tool-approval-title]', overlay);
+      var text = q('[data-tool-approval-detail]', overlay);
+      var kindLabel = q('[data-tool-approval-kind]', overlay);
+      var code = q('[data-tool-approval-preview]', overlay);
+      var permissions = q('[data-tool-approval-permission-actions]', overlay);
+      var confirmations = q('[data-tool-approval-confirm-actions]', overlay);
+      if (title) title.textContent = kind === 'permission' ? 'ANK necesita un permiso' : 'Confirma esta operación';
+      if (kindLabel) kindLabel.textContent = kind === 'permission' ? 'SOLICITUD DE PERMISO' : 'CONFIRMACIÓN DE CAMBIO';
+      if (text) text.textContent = String(detail || '');
+      if (code) {
+        code.textContent = String(preview || '');
+        code.hidden = !preview;
+      }
+      if (permissions) permissions.hidden = kind !== 'permission';
+      if (confirmations) confirmations.hidden = kind !== 'confirmation';
+      st.pendingToolApproval = { kind: kind, resolve: resolve };
+      overlay.hidden = false;
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      var first = q(kind === 'permission' ? '[data-accion="tool-approval-deny"]' : '[data-accion="tool-approval-cancel"]', overlay);
+      if (first && typeof first.focus === 'function') first.focus();
+    });
+  }
+
   function permisoHerramientaPanel(info) {
     var labels = {
       read: 'leer o buscar archivos del proyecto',
@@ -3770,37 +3933,42 @@
       destructive: 'borrar un archivo o restaurar una copia',
       execute: 'ejecutar un comando de terminal'
     };
-    var path = info.arguments && info.arguments.path ? '\nRuta: ' + info.arguments.path : '';
-    var message = 'Código ANK solicita permiso para ' +
-      (labels[info.permission] || info.permission) + '.' + path +
-      '\n\n¿Permitir esta operación?';
-    return Promise.resolve(typeof window.confirm === 'function' && window.confirm(message));
+    var args = info.arguments || {};
+    var path = args.path ? '\nRuta: ' + String(args.path) : '';
+    var detail = 'Herramienta: ' + etiquetaHerramienta(info.tool) +
+      '\nAcceso solicitado: ' + (labels[info.permission] || info.permission) + path +
+      '\n\n“Durante este trabajo” solo concede el permiso para la ejecución actual del agente.';
+    return mostrarSolicitudHerramienta('permission', info, detail, '');
   }
 
   function confirmarHerramientaPanel(info) {
     var args = info.arguments || {};
-    var detail = args.path ? '\nRuta: ' + args.path : '';
+    var detail = 'Herramienta: ' + etiquetaHerramienta(info.tool);
+    if (args.path) detail += '\nRuta: ' + String(args.path);
+    var preview = '';
     if (info.tool === 'project.write_file') {
-      detail += '\n\nContenido propuesto (' + String(args.content || '').length + ' caracteres):\n' +
-        String(args.content || '').slice(0, 1800);
-      if (String(args.content || '').length > 1800) {
-        detail += '\n… vista previa recortada; ANK conservará el archivo anterior en un respaldo local.';
-      }
+      var content = String(args.content || '');
+      detail += '\nTamaño propuesto: ' + content.length + ' caracteres.';
+      preview = content.slice(0, 1800);
+      if (content.length > 1800) preview += '\n… vista previa recortada.';
     }
-    function confirmar(pathExtra) {
-      var message = 'Confirmación necesaria: ' + info.tool + detail + (pathExtra || '') +
-        '\n\nSe creará un respaldo local antes de modificar, borrar o restaurar. ¿Continuar?';
-      return Promise.resolve(typeof window.confirm === 'function' && window.confirm(message));
+    function solicitar(extra) {
+      return mostrarSolicitudHerramienta(
+        'confirmation',
+        info,
+        detail + (extra || '') + '\n\nANK creará un respaldo verificable antes de modificar, borrar o restaurar.',
+        preview
+      );
     }
     if (info.tool === 'project.restore_backup') {
       return leerSnapshotHerramienta(args.backupId).then(function (snapshot) {
-        return confirmar('\nArchivo que se restaurará: ' + snapshot.path + '\nCopia: ' + args.backupId);
+        return solicitar('\nArchivo que se restaurará: ' + snapshot.path + '\nCopia: ' + args.backupId);
       }).catch(function (error) {
         aviso('No se puede restaurar esa copia: ' + (error && error.message ? error.message : error));
         return false;
       });
     }
-    return confirmar('');
+    return solicitar('');
   }
 
   function herramientasDisponiblesPanel() {
@@ -5085,6 +5253,7 @@
         maxToolRounds: 5,
         maxToolCalls: 12,
         onToolEvent: function (event) {
+          registrarActividadHerramienta(event);
           var path = event.path ? ' · ' + event.path : '';
           log(event.status === 'failed' || event.status === 'permission_denied' ||
               event.status === 'confirmation_denied' ? 'w' : 'i',
@@ -5798,6 +5967,7 @@
     pintarModelos();
     pintarLog();
     pintarChats();
+    pintarSeguridad();
     pintarVersion();
     pintarApps();
     pintarEstadisticas();
@@ -5974,6 +6144,7 @@
           '<button class="ank-ai-tab" data-tab="chats" data-accion="tab" data-valor="chats">Chats</button>' +
           '<button class="ank-ai-tab" data-tab="apps" data-accion="tab" data-valor="apps">Apps</button>' +
           '<button class="ank-ai-tab" data-tab="entorno" data-accion="tab" data-valor="entorno">Entorno</button>' +
+          '<button class="ank-ai-tab" data-tab="seguridad" data-accion="tab" data-valor="seguridad">Seguridad</button>' +
           '<button class="ank-ai-tab" data-tab="log" data-accion="tab" data-valor="log">Registro</button>' +
           '<div class="ank-ai-spacer"></div>' +
           '<button class="ank-ai-x" data-accion="cerrar" aria-label="Cerrar">×</button>' +
@@ -6060,6 +6231,21 @@
               '<div class="ank-ai-field"><label>Carpeta de trabajo</label><input id="ank-ai-proj" type="text" spellcheck="false" value="' + esc(limpioRuta(st.project) || 'ank') + '" />' +
                 '<div class="ank-ai-hint">Relativa a /public/proyectos. Se crea al primer mensaje.</div></div>' +
             '</div></section>' +
+          '<section class="ank-ai-view" data-view="seguridad">' +
+            '<div class="ank-ai-security">' +
+              '<div class="ank-ai-security-intro">' +
+                '<span class="ank-ai-eyebrow">CONTROL DE ACCESO</span>' +
+                '<strong>Permisos y actividad del agente</strong>' +
+                '<p>ANK solicita autorización antes de usar herramientas. Puedes permitir una sola operación o mantener el permiso únicamente durante este trabajo. No se guardan autorizaciones permanentes.</p>' +
+              '</div>' +
+              '<div class="ank-ai-security-note"><b>Protección activa</b><span>Las escrituras, eliminaciones y restauraciones requieren confirmación individual y un respaldo verificable. El terminal no está disponible para el agente.</span></div>' +
+              '<div class="ank-ai-security-history">' +
+                '<div class="ank-ai-security-history-head"><div><strong>Actividad reciente</strong><small>Solo se guardan fecha, herramienta, estado y ruta relativa. Nunca claves, comandos ni contenido.</small></div>' +
+                '<button type="button" class="ank-ai-btn" data-accion="clear-tool-activity">Limpiar</button></div>' +
+                '<div class="ank-ai-tool-activity"></div>' +
+              '</div>' +
+            '</div>' +
+          '</section>' +
           '<section class="ank-ai-view" data-view="log">' +
             '<div class="ank-ai-logbar">' +
               '<button class="ank-ai-btn" data-accion="diag" title="Compartir versiones, entorno y errores recientes">Diagnóstico</button>' +
@@ -6082,6 +6268,23 @@
         '</div>' +
 
         '<div class="ank-ai-status"></div>' +
+        '<div class="ank-ai-tool-overlay" hidden aria-hidden="true">' +
+          '<div class="ank-ai-tool-dialog" role="dialog" aria-modal="true" aria-labelledby="ank-ai-tool-approval-title">' +
+            '<span class="ank-ai-eyebrow" data-tool-approval-kind>CONTROL DE ANK</span>' +
+            '<h2 id="ank-ai-tool-approval-title" data-tool-approval-title>Permiso solicitado</h2>' +
+            '<p class="ank-ai-tool-detail" data-tool-approval-detail></p>' +
+            '<pre class="ank-ai-tool-preview" data-tool-approval-preview hidden></pre>' +
+            '<div class="ank-ai-tool-actions ank-ai-tool-permission-actions" data-tool-approval-permission-actions>' +
+              '<button type="button" class="ank-ai-btn danger" data-accion="tool-approval-deny">Denegar</button>' +
+              '<button type="button" class="ank-ai-btn" data-accion="tool-approval-once">Permitir una vez</button>' +
+              '<button type="button" class="ank-ai-btn primary" data-accion="tool-approval-run">Durante este trabajo</button>' +
+            '</div>' +
+            '<div class="ank-ai-tool-actions ank-ai-tool-confirm-actions" data-tool-approval-confirm-actions hidden>' +
+              '<button type="button" class="ank-ai-btn danger" data-accion="tool-approval-cancel">No continuar</button>' +
+              '<button type="button" class="ank-ai-btn primary" data-accion="tool-approval-confirm">Confirmar operación</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
 
       '<div class="ank-ai-mem" id="ank-ai-mem">' +
@@ -6322,6 +6525,27 @@
         consolaComando(q('.ank-ai-input-console') && q('.ank-ai-input-console').value);
         if (q('.ank-ai-input-console')) q('.ank-ai-input-console').value = '';
         break;
+      case 'tool-approval-once':
+        resolverSolicitudHerramienta({ granted: true, remember: false });
+        break;
+      case 'tool-approval-run':
+        resolverSolicitudHerramienta({ granted: true, remember: true });
+        break;
+      case 'tool-approval-deny':
+        resolverSolicitudHerramienta(false);
+        break;
+      case 'tool-approval-confirm':
+        resolverSolicitudHerramienta(true);
+        break;
+      case 'tool-approval-cancel':
+        resolverSolicitudHerramienta(false);
+        break;
+      case 'clear-tool-activity':
+        st.toolActivity = [];
+        guardar('ank.ai.tool.activity.v1', '[]');
+        pintarSeguridad();
+        aviso('Historial de herramientas limpiado.');
+        break;
       case 'copiar-log':
         copiarPortapapeles(st.log.map(function (l) { return l.t + ' ' + l.m; }).join('\n'))
           .then(function () { aviso('Registro copiado.'); })
@@ -6475,6 +6699,7 @@
   }
 
   function cerrarPanel() {
+    if (st.pendingToolApproval) resolverSolicitudHerramienta(false);
     if (panel) panel.classList.remove('open');
   }
 

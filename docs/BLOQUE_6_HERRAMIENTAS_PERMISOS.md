@@ -87,3 +87,27 @@ La prueba [45994302632](https://github.com/Alejandrokiriatos/codigo-ank/actions/
 ## Distribución
 
 No se modifica `main`. El APK reconstruido en CI es diagnóstico, carece de assets completos de Alpine/AXS/proot y no es una release. No se puede generar una actualización instalable hasta verificar el certificado de firma original y la continuidad del application ID/certificado.
+
+
+## Actualización · interfaz de permisos y actividad
+
+Se añadió la pestaña **Seguridad** al panel de ANK IA.
+
+- El permiso de una herramienta ya no depende de un cuadro genérico `window.confirm`: se muestra un diálogo propio dentro del panel.
+- El usuario puede permitir una sola operación, permitir esa categoría durante el trabajo actual del agente o denegarla.
+- Las concesiones de “durante este trabajo” viven únicamente en la ejecución actual de `runAgent`; no se guardan como permisos permanentes ni se restauran al reabrir la aplicación.
+- Escritura, borrado y restauración mantienen una confirmación separada. El respaldo verificable sigue siendo obligatorio antes de ejecutar mutaciones.
+- La pestaña muestra un historial local limitado a 100 eventos con fecha, herramienta, permiso/riesgo, estado y ruta relativa. No guarda argumentos, comandos, claves ni contenido de archivos.
+- Se puede limpiar el historial desde la propia pestaña. La persistencia usa una clave de almacenamiento distinta de la configuración API cifrada y contiene solo metadatos no secretos.
+
+La auditoría estática comprueba que los diálogos están conectados a los callbacks de `runAgent`, que no se usa `window.confirm` en esos dos puntos de autorización y que los estilos responsive están presentes.
+
+**Límite:** esta interfaz no sustituye las pruebas de runtime Android de los ejecutores Cordova. Siguen pendientes los ensayos de listado/lectura/búsqueda/escritura/borrado/backup/restore, fallo de escritura y rollback en emulador; tampoco se ha probado el teléfono físico.
+
+### Siguiente subfase
+
+1. Añadir un harness aislado de emulador para probar los ejecutores Cordova reales con archivos desechables.
+2. Verificar escritura de archivo vacío y normal, lectura exacta, búsqueda, backup, modificación y restauración, borrado y rechazo de rutas fuera del proyecto.
+3. Probar que un fallo de escritura no informa éxito y que el respaldo anterior permite recuperar el contenido.
+4. Evaluar límites de memoria/tiempo en un dispositivo Android físico de gama modesta.
+5. Mantener `terminal.run` fuera de las herramientas anunciadas hasta implementar timeout y cancelación nativa verificable.

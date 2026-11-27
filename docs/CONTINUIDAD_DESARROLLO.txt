@@ -566,3 +566,47 @@ Restricciones vigentes:
 - Application ID com.ank.codigoank verificado en harness, pero el certificado
   original de distribución y la clave de firma siguen sin estar disponibles.
 - No crear APK actualizable sin verificar el mismo certificado original.
+
+
+================================================================
+16. BLOQUE 6 · DIÁLOGOS PROPIOS DE PERMISOS E HISTORIAL · 27/11/2026
+================================================================
+
+Se añadió una pestaña Seguridad al panel de ANK IA.
+
+Cambios:
+- requestPermission y confirmTool usan un diálogo integrado en el panel,
+  en lugar de window.confirm.
+- El usuario puede permitir una sola operación, permitir durante la ejecución
+  actual del agente o denegar.
+- La concesión recordada solo dura durante la ejecución actual de runAgent;
+  no se persisten permisos permanentes.
+- Las mutaciones mantienen una confirmación separada y requieren backup
+  verificable antes de ejecutarse.
+- El historial conserva como máximo 100 eventos y únicamente fecha, nombre
+  de herramienta, permiso/riesgo, estado y ruta relativa.
+- El historial excluye argumentos, comandos, contenido de archivos, claves
+  API y valores del vault. Se puede limpiar desde la pestaña Seguridad.
+- Se sincronizaron las cuatro copias de ai.js y las cuatro copias de ai.css.
+- La auditoría estática del bloque 3 exige la vista, los callbacks, las
+  opciones de concesión temporal y los estilos responsive.
+
+Pendiente de verificar en la CI posterior a este cambio:
+- Sintaxis de panel y motor.
+- 56 pruebas multi-API.
+- Bundle y auditoría estática de integración.
+- Sincronización de las copias del panel.
+
+No se ha ejecutado todavía un harness Android de los ejecutores Cordova de
+archivos. La prueba de ApiVault en emulador solo valida securePut, secureGet,
+persistencia tras force-stop y secureRemove. Siguen pendientes listado,
+lectura, búsqueda, escritura, borrado, backup, restore, rollback ante fallos
+y prueba en dispositivo físico.
+
+Restricciones:
+- Rama ank/block-3-multiple-api exclusivamente; main permanece intacta.
+- No se habilita terminal.run para el modelo.
+- No se declara APK release ni actualizable: assets Alpine/AXS/proot y
+  certificado original de distribución siguen sin estar disponibles.
+
+FIN DE LA ACTUALIZACIÓN
