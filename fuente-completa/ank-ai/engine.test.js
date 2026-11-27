@@ -431,3 +431,116 @@ test('Gemini codifica el ID completo del modelo sin eliminar variantes', () => {
     'https://generativelanguage.googleapis.com/v1beta/models/modelo%3Atest%2Bstable:generateContent'
   );
 });
+
+const PROFILE_DEFAULTS = {
+  protocol: 'openai-chat-completions',
+  endpoint: 'https://api.example.com/v1',
+  customAuthHeader: 'Authorization',
+  customAuthPrefix: 'Bearer',
+  customHeaders: '{}',
+  customBodyTemplate: '{"model":"{{MODEL}}","messages":"{{MESSAGES}}"}',
+  customResponsePath: 'choices.0.message.content'
+};
+
+test('crea perfiles API con los valores por defecto y sobrescribe el nombre e ID', () => {
+  const profile = Engine.crearPerfil(PROFILE_DEFAULTS, {
+    id: 'my-openrouter',
+    name: ' OpenRouter personal '
+  });
+  assert.equal(profile.id, 'my-openrouter');
+  assert.equal(profile.name, 'OpenRouter personal');
+  assert.equal(profile.protocol, 'openai-chat-completions');
+  assert.equal(profile.endpoint, 'https://api.example.com/v1');
+  assert.equal(profile.customAuthHeader, 'Authorization');
+});
+
+test('migra una configuración antigua de una conexión a provider.json v4', () => {
+  const result = Engine.normalizarPerfiles({
+    protocol: 'anthropic-messages',
+    endpoint: 'https://api.anthropic.com/v1',
+    model: 'claude-3-7-sonnet-latest',
+    apiKey: 'secret-old-key',
+    name: 'Anthropic de siempre',
+    customAuthHeader: 'x-api-key'
+  }, PROFILE_DEFAULTS, 12);
+  assert.equal(result.migrated, true);
+  assert.equal(result.profiles.length, 1);
+  assert.equal(result.activeProfileId, 'legacy-default');
+  assert.equal(result.profiles[0].name, 'Anthropic de siempre');
+  assert.equal(result.profiles[0].protocol, 'anthropic-messages');
+  assert.equal(result.profiles[0].apiKey, 'secret-old-key');
+  assert.equal(result.profiles[0].customAuthHeader, 'x-api-key');
+});
+
+test('normaliza varios perfiles v4 y restaura el proveedor activo', () => {
+  const result = Engine.normalizarPerfiles({
+    version: 4,
+    activeProfileId: 'gemini-work',
+    profiles: [
+      { id: 'openrouter', name: 'OpenRouter', protocol: 'openai', endpoint: 'https://openrouter.ai/api/v1', model: 'meta-llama/llama-3.1:free', apiKey: 'key-1' },
+      { id: 'gemini-work', name: 'Gemini trabajo', protocol: 'gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', apiKey: 'key-2' }
+    ]
+  }, PROFILE_DEFAULTS, 12);
+  assert.equal(result.migrated, false);
+  assert.equal(result.profiles.length, 2);
+  assert.equal(result.activeProfileId, 'gemini-work');
+  assert.equal(result.profiles[0].model, 'meta-llama/llama-3.1:free');
+  assert.equal(result.profiles[1].protocol, 'gemini-generate-content');
+  assert.equal(result.profiles[1].apiKey, 'key-2');
+});
+
+test('normaliza IDs inválidos y duplicados y limita la lista de perfiles', () => {
+  const result = Engine.normalizarPerfiles({
+    activeProfileId: 'duplicate',
+    profiles: [
+      { id: 'duplicate', name: 'Uno', model: 'm1' },
+      { id: 'duplicate', name: 'Dos', model: 'm2' },
+      { id: '///', name: 'Tres', model: 'm3' }
+    ]
+  }, PROFILE_DEFAULTS, 2);
+  assert.equal(result.profiles.length, 2);
+  assert.notEqual(result.profiles[0].id, result.profiles[1].id);
+  assert.ok(result.profiles.every(profile => !!profile.id));
+  assert.equal(result.activeProfileId, result.profiles[0].id);
+});
+
+test('el almacén permite actualizar y añadir un perfil sin perder los demás', () => {
+  const first = Engine.crearPerfil(PROFILE_DEFAULTS, { id: 'first', name: 'Primero' });
+  const second = Engine.crearPerfil(PROFILE_DEFAULTS, { id: 'second', name: 'Segundo' });
+  const updated = Object.assign({}, first, { model: 'gpt-test' });
+  let profiles = Engine.upsertPerfil([first, second], updated, 12);
+  assert.equal(profiles.length, 2);
+  assert.equal(profiles[0].model, 'gpt-test');
+  const third = Engine.crearPerfil(PROFILE_DEFAULTS, { id: 'third', name: 'Tercero' });
+  profiles = Engine.upsertPerfil(profiles, third, 12);
+  assert.deepEqual(profiles.map(profile => profile.id), ['first', 'second', 'third']);
+});
+
+test('el almacén limita perfiles y crea un perfil vacío al borrar el último', () => {
+  let profiles = [];
+  for (let i = 0; i < 13; i++) {
+    profiles = Engine.upsertPerfil(profiles, Engine.crearPerfil(PROFILE_DEFAULTS, {
+      id: 'profile-' + i,
+      name: 'Perfil ' + i
+    }), 12);
+  }
+  assert.equal(profiles.length, 12);
+  assert.equal(profiles[0].id, 'profile-1');
+  const removed = Engine.eliminarPerfil(profiles, 'profile-12', PROFILE_DEFAULTS);
+  assert.equal(removed.profiles.length, 11);
+  assert.equal(removed.activeProfileId, 'profile-1');
+  const last = Engine.eliminarPerfil([profiles[0]], profiles[0].id, PROFILE_DEFAULTS);
+  assert.equal(last.profiles.length, 1);
+  assert.equal(last.activeProfileId, 'default');
+  assert.equal(last.profiles[0].apiKey, '');
+});
+
+test('la normalización de perfiles descarta modelos con caracteres de control', () => {
+  const result = Engine.normalizarPerfil({
+    id: 'bad-model',
+    name: 'Modelo inválido',
+    model: 'model\nBearer secret'
+  }, 0, PROFILE_DEFAULTS);
+  assert.equal(result.model, '');
+});
+
