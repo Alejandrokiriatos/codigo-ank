@@ -821,6 +821,7 @@
     apiKey: '',
     apiConfigured: false,
     apiProfiles: [],
+    profileBusy: false,
     activeProfileId: '',
     activeProfileName: 'Mi conexión',
     modo: leer('ank.ai.modo', 'build'),
@@ -1506,44 +1507,57 @@
   }
 
   function seleccionarPerfilApi(id) {
-    if (!id || id === st.activeProfileId) return;
+    if (st.profileBusy || !id || id === st.activeProfileId) return;
     var actual = capturarPerfilApi();
     actualizarPerfilEnLista(actual);
     var siguiente = st.apiProfiles.filter(function (p) { return p.id === id; })[0];
     if (!siguiente) return;
     aplicarPerfilApi(siguiente);
+    /* Vaciar y repintar ANTES de cualquier espera nativa. Así la clave del
+       perfil anterior nunca queda visible ni puede guardarse en el siguiente. */
+    if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+    st.profileBusy = true;
+    pintar();
     persistirPerfilesApi().then(function () {
-      if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+      st.profileBusy = false;
       pintar();
       aviso('Conexión seleccionada: ' + st.activeProfileName);
     }).catch(function (error) {
+      st.profileBusy = false;
       log('e', 'No se pudo guardar la conexión seleccionada: ' + (error.message || error));
       pintar();
+      aviso('La conexión cambió en esta sesión, pero no se pudo guardar la selección.');
     });
   }
 
   function crearPerfilApi() {
+    if (st.profileBusy) return;
     if (st.apiProfiles.length >= 12) return aviso('Ya tienes el máximo de 12 conexiones guardadas.');
     var actual = capturarPerfilApi();
     actualizarPerfilEnLista(actual);
     var perfil = nuevoPerfilApi();
     perfil.name = 'Nueva conexión ' + (st.apiProfiles.length + 1);
     st.apiProfiles.push(perfil);
-    if (st.apiProfiles.length > 12) {
-      st.apiProfiles.shift();
-    }
+    if (st.apiProfiles.length > 12) st.apiProfiles.shift();
     aplicarPerfilApi(perfil);
+    if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+    st.profileBusy = true;
+    pintar();
     persistirPerfilesApi().then(function () {
+      st.profileBusy = false;
       pintar();
       if (q('#ank-ai-key')) q('#ank-ai-key').focus();
       aviso('Nueva conexión creada. Configura el proveedor y guarda.');
     }).catch(function (error) {
+      st.profileBusy = false;
       log('e', 'No se pudo crear la conexión: ' + (error.message || error));
+      pintar();
+      aviso('No se pudo guardar la nueva conexión. Revisa el Registro.');
     });
   }
 
   function eliminarPerfilApi() {
-    if (!st.activeProfileId) return;
+    if (st.profileBusy || !st.activeProfileId) return;
     if (typeof window.confirm === 'function' &&
         !window.confirm('¿Eliminar la conexión «' + st.activeProfileName + '»? Esta acción no se puede deshacer.')) return;
     var removedId = st.activeProfileId;
@@ -1551,12 +1565,17 @@
     st.apiProfiles = result.profiles;
     var siguiente = st.apiProfiles.filter(function (p) { return p.id === result.activeProfileId; })[0] || st.apiProfiles[0];
     aplicarPerfilApi(siguiente);
+    if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+    st.profileBusy = true;
+    pintar();
     persistirPerfilesApi().then(function () {
       return eliminarClaveSeguraPerfil(removedId);
     }).then(function () {
+      st.profileBusy = false;
       pintar();
       aviso('Conexión eliminada.');
     }).catch(function (error) {
+      st.profileBusy = false;
       log('e', 'No se pudo completar la eliminación segura de la conexión: ' + (error.message || error));
       pintar();
       aviso('Conexión retirada; revisa el Registro para confirmar la limpieza de la clave cifrada.');
@@ -1676,17 +1695,23 @@
       customBodyTemplate: customBodyTemplate,
       customResponsePath: customResponsePath
     };
+    if (st.profileBusy) return aviso('Espera a que termine el guardado actual de conexiones.');
     actualizarPerfilEnLista(perfil);
+    aplicarPerfilApi(perfil);
+    if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+    st.profileBusy = true;
+    pintar();
     return persistirPerfilesApi().then(function () {
-      aplicarPerfilApi(perfil);
-      if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+      st.profileBusy = false;
       log('i', 'Conexión «' + profileName + '» guardada en el almacenamiento privado de ANK.');
       aviso('Conexión guardada correctamente.');
       pintar();
       return true;
     }).catch(function (e) {
+      st.profileBusy = false;
       log('e', 'No se pudo guardar la configuración API: ' + (e && e.message ? e.message : e));
       aviso('No se pudo guardar la conexión API.');
+      pintar();
       return false;
     });
   }
@@ -1697,20 +1722,28 @@
         !window.confirm('¿Eliminar la clave API cifrada de «' + st.activeProfileName + '»?')) return;
     var perfil = capturarPerfilApi();
     perfil.apiKey = '';
+    if (st.profileBusy) return;
     actualizarPerfilEnLista(perfil);
     st.apiKey = '';
+    if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+    st.profileBusy = true;
+    pintar();
     guardarPerfilSeguro(perfil).then(function () {
       return persistirPerfilesApi();
     }).then(function () {
+      st.profileBusy = false;
       pintar();
       aviso('Clave API eliminada del almacén cifrado; los ajustes personalizados se conservaron.');
     }).catch(function (error) {
+      st.profileBusy = false;
       log('e', 'No se pudo actualizar el perfil privado: ' + (error.message || error));
+      pintar();
       aviso('No se pudo eliminar la clave. Revisa el Registro.');
     });
   }
 
   function probarAsistente() {
+    if (st.profileBusy) return aviso('Espera a que termine el guardado de la conexión API.');
     if (!st.apiConfigured || !window.ANKAIEngine) return aviso('Guarda primero la conexión API.');
     if (st.probandoPrueba) return;
     st.probandoPrueba = true;
@@ -3737,6 +3770,7 @@
   }
 
   function enviar(forzado) {
+    if (st.profileBusy) { aviso('Espera a que termine el guardado de la conexión API.'); return; }
     if (st.corriendo) { aviso('Todavía está trabajando. Esperá o tocá Detener.'); return; }
     var ta = q('.ank-ai-input');
     var pedido = forzado && forzado.texto != null ? String(forzado.texto) : (ta ? String(ta.value || '') : '');
@@ -3896,7 +3930,7 @@
   }
 
   function resumenAutomatico(proyecto, chat) {
-    if (!st.apiConfigured || !window.ANKAIEngine) { st.resumiendoAuto = false; return; }
+    if (st.profileBusy || !st.apiConfigured || !window.ANKAIEngine) { st.resumiendoAuto = false; return; }
     var proy = proyecto || limpioRuta(st.project) || 'ank';
     var history = (chat.msgs || []).slice(-24).map(function (m) {
       return (m.rol === 'user' ? 'Usuario: ' : 'Asistente: ') + String(m.texto || '').replace(/\s+/g, ' ').slice(0, 400);
@@ -3989,10 +4023,25 @@
     if (name && name.value !== st.activeProfileName) name.value = st.activeProfileName || '';
     var count = q('#ank-ai-profile-count');
     if (count) count.textContent = profiles.length + ' / 12';
+    var busy = !!st.profileBusy;
     var remove = q('[data-accion="eliminar-perfil-api"]');
-    if (remove) remove.disabled = !profiles.length;
+    if (remove) remove.disabled = busy || !profiles.length;
     var add = q('[data-accion="nuevo-perfil-api"]');
-    if (add) add.disabled = profiles.length >= 12;
+    if (add) add.disabled = busy || profiles.length >= 12;
+    if (select) select.disabled = busy || profiles.length < 2;
+    if (name) name.disabled = busy;
+    [
+      '#ank-ai-protocolo', '#ank-ai-endpoint', '#ank-ai-modelo', '#ank-ai-key',
+      '#ank-ai-custom-auth-header', '#ank-ai-custom-auth-prefix', '#ank-ai-custom-headers',
+      '#ank-ai-custom-body', '#ank-ai-custom-response'
+    ].forEach(function (selector) {
+      var field = q(selector);
+      if (field) field.disabled = busy;
+    });
+    ['[data-accion="guardar-clave"]', '[data-accion="probar"]', '[data-accion="eliminar-clave-api"]'].forEach(function (selector) {
+      var button = q(selector);
+      if (button) button.disabled = busy;
+    });
   }
 
   function pintarModelos() {
@@ -4897,6 +4946,7 @@
   /* Pide al modelo que reescriba la memoria en pocas líneas. El resultado se
      muestra en el editor; el usuario decide si guardarlo. */
   function compactarMemoria() {
+    if (st.profileBusy) return aviso('Espera a que termine el guardado de la conexión API.');
     if (st.probandoPrueba) return;
     if (!st.apiConfigured || !window.ANKAIEngine) return aviso('Conecta una API antes de resumir la memoria.');
     var project = limpioRuta(st.project) || 'ank';
