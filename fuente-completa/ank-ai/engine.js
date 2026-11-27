@@ -978,10 +978,14 @@
     } else if (name === 'project.delete_file') {
       only(['path', 'expectedDigest']);
       output.path = normalizarRutaProyecto(safe.path, false);
-      if (safe.expectedDigest != null) output.expectedDigest = String(safe.expectedDigest).slice(0, 128);
+      if (safe.expectedDigest != null) {
+        if (typeof safe.expectedDigest !== 'string') throw fail('expectedDigest debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+        output.expectedDigest = safe.expectedDigest.slice(0, 128);
+      }
     } else if (name === 'project.restore_backup') {
       only(['backupId']);
-      output.backupId = String(safe.backupId || '').trim();
+      if (typeof safe.backupId !== 'string') throw fail('backupId debe ser texto.', 'ANK_TOOL_BACKUP_ID_INVALID');
+      output.backupId = safe.backupId.trim();
       if (!/^[A-Za-z0-9._-]{1,100}$/.test(output.backupId)) {
         throw fail('El identificador de copia de seguridad no es válido.', 'ANK_TOOL_BACKUP_ID_INVALID');
       }
