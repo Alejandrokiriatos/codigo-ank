@@ -147,10 +147,17 @@ jobs:
           script: |
             set -euo pipefail
             APK="$RUNNER_TEMP/CodigoANK-vault-ci.apk"
-            PKG="$ANK_PACKAGE_NAME"
-            ACTIVITY="$ANK_LAUNCH_ACTIVITY"
-            test -n "$PKG"
-            test -n "$ACTIVITY"
+            # No depender de GITHUB_ENV dentro del wrapper de la action:
+            # algunos runners no propagan esas variables al shell encapsulado.
+            PKG="com.ank.codigoank"
+            SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+            AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+            test -x "$AAPT"
+            DETECTED_PACKAGE="$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+            test "$DETECTED_PACKAGE" = "$PKG" || { echo "Application ID inesperado: $DETECTED_PACKAGE"; exit 1; }
+            ACTIVITY="$("$AAPT" dump badging "$APK" | sed -n "s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+            test -n "$ACTIVITY" || { echo "No se detectó actividad de inicio"; exit 1; }
+            echo "APK: $PKG / $ACTIVITY"
             timeout 90s adb wait-for-device
             timeout 90s adb install "$APK"
             timeout 30s adb shell pm path "$PKG"
