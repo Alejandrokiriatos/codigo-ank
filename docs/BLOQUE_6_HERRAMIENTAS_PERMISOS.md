@@ -44,9 +44,20 @@ El catálogo incorpora esquemas de argumentos cerrados (`additionalProperties: f
 - `evaluarPermisoHerramienta(name, args, grants, context)`: devuelve `permission_required`, `backup_required`, `confirmation_required` o `allowed`. La confirmación y el estado de backup llegan por un contexto de ejecución confiable separado de los argumentos del modelo.
 - `crearRegistroActividad(options)`: crea una bitácora acotada que solo guarda metadatos.
 
+## Adaptadores de llamadas a herramientas
+
+El motor ya convierte el catálogo a los formatos de proveedor y normaliza las llamadas devueltas:
+
+- OpenAI Chat Completions compatible: `tools`, `tool_choice: auto`; desactiva SSE en una petición que ofrece herramientas para recibir la decisión estructurada completa.
+- Anthropic Messages: `tools` con `input_schema` y `tool_choice: auto`; procesa bloques `tool_use`.
+- Gemini: `tools.functionDeclarations`; procesa bloques `functionCall`.
+- Los nombres internos con punto se traducen a identificadores seguros para el proveedor y vuelven a sus nombres canónicos mediante un mapa explícito.
+- Los argumentos devueltos por el proveedor se vuelven a validar contra el registro local; se rechazan herramientas desconocidas, JSON inválido, rutas privadas y traversal.
+- El protocolo JSON personalizado queda excluido del tool calling nativo porque no define un contrato universal.
+
 ## Lo que todavía no se declara terminado
 
-Esta entrega es la capa de contrato y autorización. Aún no implementa el ciclo de llamadas a herramientas en los adaptadores OpenAI, Anthropic y Gemini; tampoco presenta la pantalla para administrar permisos ni contiene ejecutores completos para listado, búsqueda, backup/restore y terminal. Por eso el modelo todavía no dispone de estas ocho herramientas como acciones autónomas. La aplicación conserva el flujo existente de propuestas de archivo con aplicación manual.
+Aunque el motor ya puede describir herramientas a los tres proveedores y normalizar sus llamadas, todavía no ejecuta el bucle autónomo modelo → herramienta → resultado → modelo. Tampoco presenta la pantalla para administrar permisos ni contiene ejecutores completos para listado, búsqueda, backup/restore y terminal. Por eso una llamada recibida todavía no dispara una operación del teléfono. La aplicación conserva el flujo existente de propuestas de archivo con aplicación manual.
 
 Siguientes subfases:
 1. Adaptar las respuestas de tool/function calling de OpenAI-compatible, Anthropic y Gemini a una estructura común, con límites de rondas y cancelación.
