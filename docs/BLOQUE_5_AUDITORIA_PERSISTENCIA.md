@@ -82,3 +82,13 @@ En el commit `5d8dbb605c5f2fb92db0a83845e154413e91636f` se amplió el auditor pa
 - Que `ApiVault` no escriba contenido del vault en Logcat.
 
 Esto reduce el riesgo de regresiones en el puente Smali, pero sigue siendo análisis estático; no sustituye la prueba de cifrado/descifrado en Android.
+
+## CI del refuerzo
+
+La auditoría reforzada quedó validada en la ejecución final:
+- [CI multi-API y contrato nativo](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45986522981)
+- Resultado: 34 pruebas del motor aprobadas, 0 fallidas; bundle Android verificado; auditoría estática del bloque 3 superada.
+
+Durante el desarrollo, la CI detectó dos defectos en las nuevas aserciones (firmas exactas de callbacks y delimitación de etiquetas Smali). Se corrigieron y se volvió a ejecutar el flujo completo hasta obtener éxito. Esos fallos correspondieron al test nuevo, no a una regresión de las 34 pruebas del motor.
+
+**Límite sin cambios:** el resultado CI es estático y no sustituye la prueba de escritura/lectura real con Android Keystore en dispositivo o emulador.
