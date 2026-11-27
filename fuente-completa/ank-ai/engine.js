@@ -959,7 +959,7 @@
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Ruta relativa al proyecto.' },
-          maxBytes: { type: 'integer', minimum: 1, maximum: 262144 }
+          maxBytes: { type: 'integer', minimum: 1, maximum: 24576 }
         },
         required: ['path'],
         additionalProperties: false
@@ -1151,9 +1151,9 @@
     } else if (name === 'project.read_file') {
       only(['path', 'maxBytes']);
       output.path = normalizarRutaProyecto(safe.path, false);
-      output.maxBytes = safe.maxBytes == null ? 65536 : safe.maxBytes;
-      if (typeof output.maxBytes !== 'number' || !isFinite(output.maxBytes) || Math.floor(output.maxBytes) !== output.maxBytes || output.maxBytes < 1 || output.maxBytes > 262144) {
-        throw fail('maxBytes debe ser un entero entre 1 y 262144.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      output.maxBytes = safe.maxBytes == null ? 24576 : safe.maxBytes;
+      if (typeof output.maxBytes !== 'number' || !isFinite(output.maxBytes) || Math.floor(output.maxBytes) !== output.maxBytes || output.maxBytes < 1 || output.maxBytes > 24576) {
+        throw fail('maxBytes debe ser un entero entre 1 y 24576.', 'ANK_TOOL_ARGUMENTS_INVALID');
       }
     } else if (name === 'project.search_files') {
       only(['query', 'path', 'maxResults']);
