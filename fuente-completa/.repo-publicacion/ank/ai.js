@@ -1442,8 +1442,10 @@
     if (!vaultApiDisponible()) {
       return Promise.reject(new Error('El almacén cifrado de Android no está disponible.'));
     }
-    return conSistema('secureRemove', claveApiSeguraId(profileId)).then(function () {
-      return conSistema('secureRemove', claveApiLegacyId(profileId));
+    return encolarOperacionVault(function () {
+      return conSistema('secureRemove', claveApiSeguraId(profileId)).then(function () {
+        return conSistema('secureRemove', claveApiLegacyId(profileId));
+      });
     });
   }
 
@@ -1452,6 +1454,14 @@
     return (perfiles || []).reduce(function (cadena, perfil, index) {
       return cadena.then(function () { return procesar(perfil, index); });
     }, Promise.resolve());
+  }
+
+  var apiVaultQueue = Promise.resolve();
+
+  function encolarOperacionVault(operacion) {
+    var resultado = apiVaultQueue.catch(function () {}).then(operacion);
+    apiVaultQueue = resultado.catch(function () {});
+    return resultado;
   }
 
   function persistirPerfilesApi() {
@@ -1467,12 +1477,14 @@
         return safe;
       })
     };
-    return dirsIniciales().then(function () {
-      /* En serie: la inicialización de Tink/EncryptedSharedPreferences no debe
-         competir consigo misma cuando el perfil todavía no existe. */
-      return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro);
-    }).then(function () {
-      return escribir(rutaConfigApi(), JSON.stringify(data));
+    return encolarOperacionVault(function () {
+      return dirsIniciales().then(function () {
+        /* En serie: la inicialización de Tink/EncryptedSharedPreferences no debe
+           competir consigo misma cuando el perfil todavía no existe. */
+        return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro);
+      }).then(function () {
+        return escribir(rutaConfigApi(), JSON.stringify(data));
+      });
     });
   }
 
