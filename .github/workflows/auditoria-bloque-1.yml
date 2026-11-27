@@ -14,6 +14,9 @@ on:
       - "fuente-completa/web/**"
       - "fuente-completa/decoded/assets/www/ank/**"
       - "fuente-completa/update/**"
+      - "fuente-completa/decoded/smali/**"
+      - "fuente-completa/decoded/AndroidManifest.xml"
+      - "fuente-completa/decoded/res/xml/**"
   workflow_dispatch:
 
 permissions:
