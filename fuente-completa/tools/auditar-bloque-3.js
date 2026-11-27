@@ -208,6 +208,9 @@ assert.match(panel, /function backupAntesDeHerramienta\(call\)/, 'Falta el respa
 assert.match(panel, /tools\.filter\(function \(tool\) \{ return tool\.name !== 'terminal\.run'; \}\)/,
   'La terminal no debe exponerse como herramienta hasta contar con cancelación fiable.');
 assert.match(panel, /function sanitizarContenidoHerramienta\(value\)/, 'Las lecturas del proyecto deben ocultar claves y tokens.');
+assert.match(panel, /Math\.min\(24576, args\.maxBytes \|\| 24576\)/, 'La lectura del agente debe quedar por debajo del límite de resultado del motor.');
+assert.match(panel, /current\.exists && !args\.expectedDigest/, 'El overwrite de un archivo existente debe exigir el digest de su última lectura.');
+assert.match(panel, /if \(!args\.expectedDigest\) \{\s*throw new Error\('Léelo primero/, 'El borrado debe exigir el digest de su última lectura.');
 assert.match(panel, /function restaurarSnapshotHerramienta\(id\)/, 'Falta restaurar desde copias locales.');
 assert.match(panel, /function rutaRaizBackupsHerramienta\(\)/, 'Falta el directorio interno de copias de seguridad.');
 assert.match(panel, /window\.ANKAIEngine\.normalizarModelo/, 'La interfaz no usa el normalizador de modelos.');
