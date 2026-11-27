@@ -751,7 +751,7 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.6.1';
+  var PANEL_VERSION = '2.6.2';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/11/2026';
