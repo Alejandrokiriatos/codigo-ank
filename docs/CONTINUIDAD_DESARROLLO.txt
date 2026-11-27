@@ -166,3 +166,34 @@ No empezar directamente a programar. Primero:
 5. Presentar un diagnóstico breve de diferencias y continuar con el BLOQUE 4, corrigiendo primero cualquier regresión detectada.
 
 FIN DEL INFORME
+
+================================================================
+8. ACTUALIZACIÓN DEL BLOQUE 4 · 27/11/2026
+================================================================
+
+Se realizó una auditoría estática del repositorio y del motor multi-API.
+El informe completo está en:
+  docs/AUDITORIA_BLOQUE_4.md
+
+Hallazgos corregidos:
+- Anthropic ahora conserva el mensaje system también en el transporte fetch.
+- El timeout del transporte fetch ahora se informa como ANK_AI_TIMEOUT,
+  separado de una cancelación manual.
+
+Pruebas:
+- 30 pruebas del motor superadas, 0 fallidas.
+- Bundle Android verificado y copias ai.js sincronizadas.
+- Auditoría estática de integración y git diff --check superados.
+- CI final: https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45983599968
+
+Límites que siguen abiertos:
+- No se ha validado Android Keystore en un teléfono físico.
+- No se han probado endpoints reales de proveedores con claves de prueba.
+- No se ha firmado ni declarado una APK release.
+- El actualizador permanece desactivado hasta completar firma Ed25519.
+- La rama de trabajo no se fusiona con main sin autorización expresa.
+
+El siguiente paso es continuar la validación real del motor multi-API
+y de la persistencia cifrada, sin reconstruir los bloques anteriores.
+
+FIN DE LA ACTUALIZACIÓN
