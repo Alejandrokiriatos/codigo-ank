@@ -644,3 +644,32 @@ Pendiente:
 - terminal.run continúa oculto hasta tener timeout y cancelación nativos.
 
 No se modifica main. No se genera APK release ni actualizable.
+
+
+================================================================
+18. BLOQUE 6 · AJUSTE DEL HARNESS Y CONTROL DE CI · 27/11/2026
+================================================================
+
+Se ajustó el puente temporal del harness para normalizar el retorno del
+callback de backup al contrato {created, id} utilizado por las pruebas.
+El cambio solo afecta al script que inyecta pruebas en la APK temporal;
+no altera el ejecutor Cordova de producción.
+
+Se añadió concurrencia por rama al workflow Android: al iniciar un ensayo
+nuevo se cancelan ejecuciones anteriores del mismo grupo, evitando mantener
+varios emuladores durante correcciones sucesivas.
+
+Auditoría multi-API del commit 88d3b6b5: SUCCESS.
+La prueba de herramientas Cordova en emulador sigue pendiente de resultado
+PASS. La reconstrucción de la APK temporal ya había pasado en intentos
+anteriores, pero no se declara runtime Android validado mientras el harness
+no complete su ciclo.
+
+Siguiente:
+- obtener PASS del workflow Android serializado;
+- corregir cualquier fallo real de File API o de rollback;
+- ampliar prueba con tamaño límite (256 KiB) y archivo superior al límite;
+- ejecutar en dispositivo físico modesto;
+- mantener terminal.run deshabilitado hasta tener cancelación nativa.
+
+La rama main no se modifica. No se publica APK release ni actualizable.

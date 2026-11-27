@@ -125,3 +125,10 @@ El ejecutor Cordova recibe el identificador del snapshot creado por `runAgent`. 
 Se añadió un workflow de emulador que reconstruye una APK temporal e inyecta un puente de pruebas solo dentro de esa compilación. Comprueba los ejecutores Cordova reales de listado, lectura, búsqueda, escritura, backup, restauración y borrado; también archivos vacíos, redacción de secretos, rechazo de traversal y rollback tras simular una escritura parcial fallida. El puente de diagnóstico no queda en los assets versionados ni en una APK release.
 
 El resultado del workflow debe estar en **success** para declarar validada esta subfase. Sigue pendiente la prueba física en un teléfono Android.
+
+
+### Ajuste del harness de CI
+
+El puente de prueba normaliza el resultado de `backupAntesDeHerramienta` al contrato `{created, id}` que espera el test runner. El adaptador solo existe en la APK temporal; el ejecutor de producción no cambia por este ajuste.
+
+El workflow Android se serializa por rama con `concurrency` y cancela ensayos anteriores de la misma rama cuando se inicia uno nuevo, evitando acumular emuladores durante iteraciones rápidas. La auditoría multi-API del commit `88d3b6b5` terminó SUCCESS. La validación de ejecutores Android sigue pendiente hasta obtener PASS del harness.
