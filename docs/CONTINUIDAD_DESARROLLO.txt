@@ -338,3 +338,40 @@ sistema operativo, migración de instalación ni prueba física en TECNO.
 El workflow se activa en cambios del código Android y de estos documentos.
 No modificar main ni publicar el APK temporal.
 
+
+
+================================================================
+13. IDENTIDAD DE FIRMA APK · CONDICIÓN PARA ACTUALIZACIONES
+================================================================
+
+Instrucción explícita del proyecto: toda APK oficial que deba actualizar
+una instalación existente tiene que conservar la identidad de firma original.
+
+Datos inspeccionados en la rama:
+- application ID esperado tras reconstrucción: com.ank.codigoank
+- apktool.yml: renameManifestPackage=com.ank.codigoank
+- versionCode=1027, versionName=1.7.0
+- AndroidManifest.xml decodificado contiene el package de origen
+  com.foxdebug.acode; el nombre final debe verificarse en el APK construido.
+
+Cambios aplicados:
+- android-vault-emulator.yml valida el application ID compilado mediante
+  aapt dump badging.
+- La clave debug efímera solo se usa en emulador limpio para la prueba
+  automatizada. No es la firma oficial, no debe reutilizarse y no se
+  distribuye como actualización.
+
+Bloqueo de release:
+- En el árbol de esta rama no se encontró APK original, keystore ni
+  certificado de distribución para comparar huellas.
+- No inventar, regenerar ni reemplazar la clave de firma oficial.
+- No crear una release actualizable hasta verificar el certificado original
+  y demostrar que la firma coincide con la aplicación instalada.
+- No subir keystores, contraseñas ni claves privadas a Git.
+- Si la firma está gestionada por Google Play App Signing, seguir el
+  mecanismo de clave de carga y firma de Play.
+
+La prueba de emulador y la release tienen identidades de firma distintas
+intencionalmente: el emulador instala desde cero y no prueba actualización
+sobre una instalación anterior. La continuidad de firma queda como criterio
+obligatorio de aceptación para el bloque de entrega.
