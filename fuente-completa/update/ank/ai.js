@@ -634,10 +634,10 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.3.0';
+  var PANEL_VERSION = '2.4.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
-  var PANEL_FECHA = '26/11/2026';
+  var PANEL_FECHA = '27/11/2026';
 
   var ERRORES_MAX = 12;
 
@@ -4455,7 +4455,7 @@
                 '<div class="ank-ai-field"><label>Ruta del texto de respuesta</label><input id="ank-ai-custom-response" type="text" spellcheck="false" placeholder="choices.0.message.content" />' +
                   '<div class="ank-ai-hint">Ruta JSON con puntos e índices de array. Ejemplo: data.response.text o output.0.content.</div></div>' +
               '</div>' +
-              '<div class="ank-ai-field"><label>Clave API</label><input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Pega tu clave API" />' +
+              '<div class="ank-ai-field"><label>Clave API</label><input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Nueva clave API (vacío = conservar la actual)" />' +
                 '<div class="ank-ai-hint">Se guarda en el almacenamiento privado de la app. El cifrado con Android Keystore se incorpora en el bloque de seguridad.</div></div>' +
               '<div class="ank-ai-field ank-ai-appbar"><button class="ank-ai-btn primary" data-accion="guardar-clave">Guardar conexión</button>' +
                 '<button class="ank-ai-btn" data-accion="probar">Probar conexión</button></div>' +
