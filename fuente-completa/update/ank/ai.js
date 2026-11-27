@@ -751,7 +751,7 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.6.0';
+  var PANEL_VERSION = '2.6.1';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/11/2026';
@@ -1369,7 +1369,7 @@
 
   function guardarPerfilSeguro(perfil) {
     if (!vaultApiDisponible()) {
-      return Promise.reject(new Error('Android Keystore no está disponible. No se guardarán secretos ni cabeceras personalizadas en texto plano.'));
+      return Promise.reject(new Error('Android Keystore no está disponible. No se guardarán claves, prefijos ni ajustes privados en texto plano.'));
     }
     var payload = {
       version: 2,
@@ -4720,7 +4720,8 @@
               '<div class="ank-ai-custom" style="display:none">' +
                 '<div class="ank-ai-field"><label>Encabezado de autenticación</label><input id="ank-ai-custom-auth-header" type="text" spellcheck="false" placeholder="Authorization, api-key, x-api-key..." />' +
         '<div class="ank-ai-hint">Déjalo vacío junto con la clave API para servicios locales o públicos que no requieren autenticación.</div></div>' +
-                '<div class="ank-ai-field"><label>Prefijo de autenticación</label><input id="ank-ai-custom-auth-prefix" type="text" spellcheck="false" placeholder="Bearer (vacío = clave directa)" /></div>' +
+                '<div class="ank-ai-field"><label>Prefijo de autenticación</label><input id="ank-ai-custom-auth-prefix" type="text" spellcheck="false" placeholder="Bearer (vacío = clave directa)" />' +
+                  '<div class="ank-ai-hint">También se cifra en Android Keystore por si tu proveedor necesita un prefijo privado personalizado.</div></div>' +
                 '<div class="ank-ai-field"><label>Encabezados adicionales (JSON)</label><textarea id="ank-ai-custom-headers" spellcheck="false" rows="3" placeholder="{}"></textarea>' +
                   '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}}. Este JSON se cifra junto con la clave en Android Keystore; nunca pongas credenciales en la URL.</div></div>' +
                 '<div class="ank-ai-field"><label>Plantilla del cuerpo JSON</label><textarea id="ank-ai-custom-body" spellcheck="false" rows="7"></textarea>' +
