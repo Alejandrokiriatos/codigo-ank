@@ -703,6 +703,9 @@
     customResponsePath: 'choices.0.message.content',
     apiKey: '',
     apiConfigured: false,
+    apiProfiles: [],
+    activeProfileId: '',
+    activeProfileName: 'Mi conexión',
     modo: leer('ank.ai.modo', 'build'),
     sandbox: 'desconocido',
     credencial: 'falta',
@@ -1138,44 +1141,211 @@
     return null;
   }
 
+  function nuevoPerfilApi(id, nombre) {
+    return {
+      id: String(id || ('api-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7))),
+      name: String(nombre || 'Nueva conexión').trim().slice(0, 60),
+      protocol: API_PROTOCOL_DEFAULT,
+      endpoint: API_ENDPOINT_DEFAULT,
+      model: '',
+      apiKey: '',
+      customAuthHeader: 'Authorization',
+      customAuthPrefix: 'Bearer',
+      customHeaders: '{}',
+      customBodyTemplate: CUSTOM_BODY_DEFAULT,
+      customResponsePath: 'choices.0.message.content'
+    };
+  }
+
+  function normalizarPerfilApi(data, index) {
+    data = data && typeof data === 'object' ? data : {};
+    var protocol = API_PROTOCOL_DEFAULT;
+    try { protocol = window.ANKAIEngine.protocolName(data.protocol || API_PROTOCOL_DEFAULT); }
+    catch (_) {}
+    return {
+      id: String(data.id || ('api-' + index + '-' + Date.now().toString(36))).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80),
+      name: String(data.name || ('Conexión ' + (index + 1))).trim().slice(0, 60) || ('Conexión ' + (index + 1)),
+      protocol: protocol,
+      endpoint: String(data.endpoint || endpointPredeterminado(protocol)).trim(),
+      model: String(data.model || '').trim().slice(0, 256),
+      apiKey: String(data.apiKey || ''),
+      customAuthHeader: String(data.customAuthHeader == null ? 'Authorization' : data.customAuthHeader),
+      customAuthPrefix: String(data.customAuthPrefix == null ? 'Bearer' : data.customAuthPrefix),
+      customHeaders: String(data.customHeaders || '{}'),
+      customBodyTemplate: String(data.customBodyTemplate || CUSTOM_BODY_DEFAULT),
+      customResponsePath: String(data.customResponsePath || 'choices.0.message.content')
+    };
+  }
+
+  function aplicarPerfilApi(perfil) {
+    perfil = perfil || nuevoPerfilApi();
+    st.activeProfileId = perfil.id;
+    st.activeProfileName = perfil.name;
+    st.protocol = perfil.protocol || API_PROTOCOL_DEFAULT;
+    st.endpoint = perfil.endpoint || endpointPredeterminado(st.protocol);
+    try { st.model = window.ANKAIEngine.normalizarModelo(perfil.model || ''); }
+    catch (_) { st.model = ''; }
+    st.apiKey = String(perfil.apiKey || '');
+    st.customAuthHeader = perfil.customAuthHeader == null ? 'Authorization' : String(perfil.customAuthHeader);
+    st.customAuthPrefix = perfil.customAuthPrefix == null ? 'Bearer' : String(perfil.customAuthPrefix);
+    st.customHeaders = String(perfil.customHeaders || '{}');
+    st.customBodyTemplate = String(perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+    st.customResponsePath = String(perfil.customResponsePath || 'choices.0.message.content');
+    st.apiConfigured = false;
+    var authReady = !!(st.apiKey || (st.protocol === 'custom-json' && !st.customAuthHeader.trim()));
+    if (st.endpoint && st.model && authReady) {
+      try {
+        window.ANKAIEngine.endpointUrl(st.endpoint, st.protocol, st.model);
+        st.apiConfigured = true;
+      } catch (validationError) {
+        log('w', 'La conexión «' + st.activeProfileName + '» necesita revisión: ' + (validationError.message || validationError));
+      }
+    }
+    st.credencial = st.apiConfigured ? 'listo' : 'falta';
+  }
+
+  function capturarPerfilApi() {
+    var perfil = st.apiProfiles.filter(function (p) { return p.id === st.activeProfileId; })[0] ||
+      nuevoPerfilApi(st.activeProfileId, st.activeProfileName);
+    var protocolEl = q('#ank-ai-protocolo');
+    var endpointEl = q('#ank-ai-endpoint');
+    var modelEl = q('#ank-ai-modelo');
+    var keyEl = q('#ank-ai-key');
+    var nameEl = q('#ank-ai-perfil-nombre');
+    var authHeaderEl = q('#ank-ai-custom-auth-header');
+    var authPrefixEl = q('#ank-ai-custom-auth-prefix');
+    var headersEl = q('#ank-ai-custom-headers');
+    var bodyEl = q('#ank-ai-custom-body');
+    var responseEl = q('#ank-ai-custom-response');
+    var protocol = st.protocol;
+    try { protocol = window.ANKAIEngine.protocolName(protocolEl ? protocolEl.value : st.protocol); }
+    catch (_) {}
+    perfil.name = String(nameEl ? nameEl.value : st.activeProfileName || perfil.name).trim().slice(0, 60) || 'Mi conexión';
+    perfil.protocol = protocol;
+    perfil.endpoint = String(endpointEl ? endpointEl.value : st.endpoint || '').trim();
+    try { perfil.model = limpioModelo(modelEl ? modelEl.value : st.model); }
+    catch (_) { perfil.model = String(modelEl ? modelEl.value : st.model || '').trim().slice(0, 256); }
+    perfil.apiKey = String(keyEl && keyEl.value ? keyEl.value : st.apiKey || '');
+    perfil.customAuthHeader = String(authHeaderEl ? authHeaderEl.value : st.customAuthHeader).trim();
+    perfil.customAuthPrefix = String(authPrefixEl ? authPrefixEl.value : st.customAuthPrefix);
+    perfil.customHeaders = String(headersEl ? headersEl.value : st.customHeaders || '{}').trim() || '{}';
+    perfil.customBodyTemplate = String(bodyEl ? bodyEl.value : st.customBodyTemplate || CUSTOM_BODY_DEFAULT).trim() || CUSTOM_BODY_DEFAULT;
+    perfil.customResponsePath = String(responseEl ? responseEl.value : st.customResponsePath || 'choices.0.message.content').trim();
+    return perfil;
+  }
+
+  function actualizarPerfilEnLista(perfil) {
+    var index = -1;
+    for (var i = 0; i < st.apiProfiles.length; i++) {
+      if (st.apiProfiles[i].id === perfil.id) { index = i; break; }
+    }
+    if (index === -1) st.apiProfiles.push(perfil);
+    else st.apiProfiles[index] = perfil;
+    if (st.apiProfiles.length > 12) st.apiProfiles = st.apiProfiles.slice(-12);
+    st.activeProfileId = perfil.id;
+    st.activeProfileName = perfil.name;
+  }
+
+  function persistirPerfilesApi() {
+    var data = {
+      version: 4,
+      activeProfileId: st.activeProfileId,
+      profiles: st.apiProfiles.slice(0, 12)
+    };
+    return dirsIniciales().then(function () {
+      return escribir(rutaConfigApi(), JSON.stringify(data));
+    });
+  }
+
+  function seleccionarPerfilApi(id) {
+    if (!id || id === st.activeProfileId) return;
+    var actual = capturarPerfilApi();
+    actualizarPerfilEnLista(actual);
+    var siguiente = st.apiProfiles.filter(function (p) { return p.id === id; })[0];
+    if (!siguiente) return;
+    aplicarPerfilApi(siguiente);
+    persistirPerfilesApi().then(function () {
+      if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
+      pintar();
+      aviso('Conexión seleccionada: ' + st.activeProfileName);
+    }).catch(function (error) {
+      log('e', 'No se pudo guardar la conexión seleccionada: ' + (error.message || error));
+      pintar();
+    });
+  }
+
+  function crearPerfilApi() {
+    var actual = capturarPerfilApi();
+    actualizarPerfilEnLista(actual);
+    var perfil = nuevoPerfilApi();
+    perfil.name = 'Nueva conexión ' + (st.apiProfiles.length + 1);
+    st.apiProfiles.push(perfil);
+    if (st.apiProfiles.length > 12) {
+      st.apiProfiles.shift();
+    }
+    aplicarPerfilApi(perfil);
+    persistirPerfilesApi().then(function () {
+      pintar();
+      if (q('#ank-ai-key')) q('#ank-ai-key').focus();
+      aviso('Nueva conexión creada. Configura el proveedor y guarda.');
+    }).catch(function (error) {
+      log('e', 'No se pudo crear la conexión: ' + (error.message || error));
+    });
+  }
+
+  function eliminarPerfilApi() {
+    if (!st.activeProfileId) return;
+    if (typeof window.confirm === 'function' &&
+        !window.confirm('¿Eliminar la conexión «' + st.activeProfileName + '»? Esta acción no se puede deshacer.')) return;
+    st.apiProfiles = st.apiProfiles.filter(function (p) { return p.id !== st.activeProfileId; });
+    if (!st.apiProfiles.length) st.apiProfiles.push(nuevoPerfilApi('default', 'Mi conexión'));
+    aplicarPerfilApi(st.apiProfiles[0]);
+    persistirPerfilesApi().then(function () {
+      pintar();
+      aviso('Conexión eliminada.');
+    }).catch(function (error) {
+      log('e', 'No se pudo eliminar la conexión: ' + (error.message || error));
+    });
+  }
+
   function cargarConfigApi() {
     if (!st.prefix) return Promise.resolve(false);
     return leerTexto(rutaConfigApi()).then(function (raw) {
-      if (!raw.trim()) throw new Error('sin configuración');
-      var data = JSON.parse(raw);
-      st.protocol = window.ANKAIEngine.protocolName(data.protocol || API_PROTOCOL_DEFAULT);
-      st.endpoint = String(data.endpoint || endpointPredeterminado(st.protocol));
-      st.model = window.ANKAIEngine.normalizarModelo(String(data.model || ''));
-      st.apiKey = String(data.apiKey || '');
-      st.customAuthHeader = String(data.customAuthHeader == null ? 'Authorization' : data.customAuthHeader);
-      st.customAuthPrefix = String(data.customAuthPrefix == null ? 'Bearer' : data.customAuthPrefix);
-      st.customHeaders = String(data.customHeaders || '{}');
-      st.customBodyTemplate = String(data.customBodyTemplate || CUSTOM_BODY_DEFAULT);
-      st.customResponsePath = String(data.customResponsePath || 'choices.0.message.content');
-      var authReady = !!(st.apiKey || (st.protocol === 'custom-json' && !st.customAuthHeader.trim()));
-      st.apiConfigured = false;
-      if (st.endpoint && st.model && authReady) {
-        try {
-          window.ANKAIEngine.endpointUrl(st.endpoint, st.protocol, st.model);
-          st.apiConfigured = true;
-        } catch (validationError) {
-          log('w', 'La conexión guardada necesita revisión: ' + (validationError.message || validationError));
-        }
+      var data = raw && raw.trim() ? JSON.parse(raw) : {};
+      var profiles = [];
+      if (Array.isArray(data.profiles)) {
+        profiles = data.profiles.slice(0, 12).map(normalizarPerfilApi);
+      } else if (data.endpoint || data.model || data.apiKey || data.protocol) {
+        /* Migración transparente desde provider.json v3 de una sola conexión. */
+        profiles = [normalizarPerfilApi({
+          id: 'legacy-default',
+          name: data.name || data.profileName || 'Conexión principal',
+          protocol: data.protocol || API_PROTOCOL_DEFAULT,
+          endpoint: data.endpoint,
+          model: data.model,
+          apiKey: data.apiKey,
+          customAuthHeader: data.customAuthHeader,
+          customAuthPrefix: data.customAuthPrefix,
+          customHeaders: data.customHeaders,
+          customBodyTemplate: data.customBodyTemplate,
+          customResponsePath: data.customResponsePath
+        }, 0)];
       }
-      st.credencial = st.apiConfigured ? 'listo' : 'falta';
+      if (!profiles.length) profiles = [nuevoPerfilApi('default', 'Mi conexión')];
+      st.apiProfiles = profiles;
+      var activeId = String(data.activeProfileId || profiles[0].id);
+      var active = profiles.filter(function (p) { return p.id === activeId; })[0] || profiles[0];
+      aplicarPerfilApi(active);
+      if (!Array.isArray(data.profiles)) {
+        persistirPerfilesApi().catch(function (error) {
+          log('w', 'No se pudo migrar el formato de conexiones: ' + (error.message || error));
+        });
+      }
       return st.apiConfigured;
-    }).catch(function () {
-      st.apiKey = '';
-      st.apiConfigured = false;
-      st.credencial = 'falta';
-      st.model = '';
-      st.protocol = API_PROTOCOL_DEFAULT;
-      st.endpoint = API_ENDPOINT_DEFAULT;
-      st.customAuthHeader = 'Authorization';
-      st.customAuthPrefix = 'Bearer';
-      st.customHeaders = '{}';
-      st.customBodyTemplate = CUSTOM_BODY_DEFAULT;
-      st.customResponsePath = 'choices.0.message.content';
+    }).catch(function (error) {
+      st.apiProfiles = [nuevoPerfilApi('default', 'Mi conexión')];
+      aplicarPerfilApi(st.apiProfiles[0]);
+      log('w', 'No se pudo leer provider.json; se creó una conexión vacía: ' + (error.message || error));
       return false;
     });
   }
@@ -1208,6 +1378,8 @@
     var customHeaders = String(customHeadersEl ? customHeadersEl.value : (st.customHeaders || '{}')).trim();
     var customBodyTemplate = String(customBodyEl ? customBodyEl.value : (st.customBodyTemplate || CUSTOM_BODY_DEFAULT)).trim();
     var customResponsePath = String(customResponseEl ? customResponseEl.value : (st.customResponsePath || 'choices.0.message.content')).trim();
+    var profileName = String((q('#ank-ai-perfil-nombre') && q('#ank-ai-perfil-nombre').value) || st.activeProfileName || 'Mi conexión').trim().slice(0, 60);
+    if (!profileName) return aviso('Escribe un nombre para esta conexión.');
     if (!endpoint) return aviso('Introduce la URL completa del endpoint API.');
     if (protocol === 'custom-json') {
       try {
@@ -1225,37 +1397,30 @@
     if (!model) return aviso('Introduce el identificador exacto del modelo.');
     try { window.ANKAIEngine.endpointUrl(endpoint, protocol, model); }
     catch (e) { return aviso(e.message || 'La dirección API no es válida.'); }
-    var data = {
-      version: 3,
+    var perfil = {
+      id: st.activeProfileId || ('api-' + Date.now().toString(36)),
+      name: profileName,
       protocol: protocol,
       endpoint: endpoint,
       model: model,
       apiKey: apiKey,
-      temperature: 0.2,
       customAuthHeader: customAuthHeader,
       customAuthPrefix: customAuthPrefix,
       customHeaders: customHeaders,
       customBodyTemplate: customBodyTemplate,
       customResponsePath: customResponsePath
     };
-    return dirsIniciales().then(function () {
-      return escribir(rutaConfigApi(), JSON.stringify(data));
-    }).then(function () {
-      st.endpoint = endpoint; st.protocol = protocol; st.model = model; st.apiKey = apiKey;
-      st.customAuthHeader = customAuthHeader;
-      st.customAuthPrefix = customAuthPrefix;
-      st.customHeaders = customHeaders;
-      st.customBodyTemplate = customBodyTemplate;
-      st.customResponsePath = customResponsePath;
-      st.apiConfigured = true; st.credencial = 'listo';
+    actualizarPerfilEnLista(perfil);
+    return persistirPerfilesApi().then(function () {
+      aplicarPerfilApi(perfil);
       if (q('#ank-ai-key')) q('#ank-ai-key').value = '';
-      log('i', 'Configuración API guardada en el almacenamiento privado de ANK.');
-      aviso('Conexión API configurada.');
+      log('i', 'Conexión «' + profileName + '» guardada en el almacenamiento privado de ANK.');
+      aviso('Conexión guardada correctamente.');
       pintar();
       return true;
     }).catch(function (e) {
       log('e', 'No se pudo guardar la configuración API: ' + (e && e.message ? e.message : e));
-      aviso('No se pudo guardar la configuración API.');
+      aviso('No se pudo guardar la conexión API.');
       return false;
     });
   }
@@ -3526,7 +3691,27 @@
     }
   }
 
+  function pintarPerfilesApi() {
+    var select = q('#ank-ai-perfil');
+    if (!select) return;
+    var profiles = st.apiProfiles || [];
+    select.innerHTML = profiles.map(function (p) {
+      var label = p.name + ' · ' + (p.protocol === 'anthropic-messages' ? 'Anthropic' : p.protocol === 'gemini-generate-content' ? 'Gemini' : p.protocol === 'custom-json' ? 'Personalizada' : 'OpenAI compatible');
+      return '<option value="' + esc(p.id) + '">' + esc(label) + '</option>';
+    }).join('');
+    select.value = st.activeProfileId;
+    var name = q('#ank-ai-perfil-nombre');
+    if (name && name.value !== st.activeProfileName) name.value = st.activeProfileName || '';
+    var count = q('#ank-ai-profile-count');
+    if (count) count.textContent = profiles.length + ' / 12';
+    var remove = q('[data-accion="eliminar-perfil-api"]');
+    if (remove) remove.disabled = !profiles.length;
+    var add = q('[data-accion="nuevo-perfil-api"]');
+    if (add) add.disabled = profiles.length >= 12;
+  }
+
   function pintarModelos() {
+    pintarPerfilesApi();
     var model = q('#ank-ai-modelo');
     if (model && model.value !== st.model) model.value = st.model;
     var endpoint = q('#ank-ai-endpoint');
@@ -4233,6 +4418,14 @@
           '<section class="ank-ai-view" data-view="entorno">' +
             '<div class="ank-ai-setup">' +
               '<p class="ank-ai-lead">Conecta ANK directamente con tu proveedor. Admite OpenAI compatible, Anthropic Messages, Google Gemini y APIs JSON personalizadas. El terminal Linux es independiente y opcional.</p>' +
+              '<div class="ank-ai-profile-card">' +
+                '<div class="ank-ai-profile-head"><div><span class="ank-ai-eyebrow">PROVEEDORES</span><strong>Conexiones API</strong><small>Guarda varias cuentas y cambia entre ellas sin volver a escribir las claves.</small></div>' +
+                '<span class="ank-ai-profile-count" id="ank-ai-profile-count">1 / 12</span></div>' +
+                '<div class="ank-ai-profile-controls"><div class="ank-ai-profile-select"><label for="ank-ai-perfil">Conexión activa</label><select id="ank-ai-perfil"></select></div>' +
+                '<button type="button" class="ank-ai-btn" data-accion="nuevo-perfil-api">＋ Nueva</button>' +
+                '<button type="button" class="ank-ai-btn danger" data-accion="eliminar-perfil-api" title="Eliminar esta conexión">Eliminar</button></div>' +
+                '<div class="ank-ai-field ank-ai-profile-name"><label for="ank-ai-perfil-nombre">Nombre para identificarla</label><input id="ank-ai-perfil-nombre" type="text" maxlength="60" autocomplete="off" placeholder="Ej. OpenRouter personal" /></div>' +
+              '</div>' +
               '<div class="ank-ai-steps"></div>' +
               '<div class="ank-ai-field"><label>Formato de API</label><select id="ank-ai-protocolo">' +
                 '<option value="openai-chat-completions">OpenAI compatible (OpenAI, OpenRouter, DeepSeek, Groq, Mistral y otros)</option>' +
@@ -4485,6 +4678,8 @@
       case 'guardar-clave':
         guardarCredencial();
         break;
+      case 'nuevo-perfil-api': crearPerfilApi(); break;
+      case 'eliminar-perfil-api': eliminarPerfilApi(); break;
       case 'revisar':
         chequearTodo();
         break;
@@ -4553,6 +4748,14 @@
   }
 
   function manejarCambio(e) {
+    if (e.target.id === 'ank-ai-perfil') {
+      seleccionarPerfilApi(e.target.value);
+      return;
+    }
+    if (e.target.id === 'ank-ai-perfil-nombre') {
+      st.activeProfileName = String(e.target.value || '').trim().slice(0, 60) || 'Mi conexión';
+      return;
+    }
     if (e.target.id === 'ank-ai-stats-off') {
       alternarEstadistica(!e.target.checked);
       return;
