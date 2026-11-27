@@ -56,10 +56,14 @@ assert.ok(panel.includes('window.ANKAIEngine.normalizarPerfiles(') &&
 assert.ok(panel.includes("if (q('#ank-ai-key')) q('#ank-ai-key').value = '';") &&
   panel.includes("label.textContent = st.model ? st.activeProfileName + ' · ' + st.model : 'Sin modelo';"),
   'El cambio de perfil debe limpiar el campo secreto y mostrar la conexión activa.');
-assert.ok(panel.includes('version: 5') && panel.includes('profiles: profiles.map(function (perfil)'),
-  'Los perfiles deben persistirse en el formato v5 con límite de 12 conexiones.');
-assert.ok(panel.includes('delete safe.apiKey') && panel.includes('function guardarClaveSeguraPerfil(perfil)'),
-  'Las claves API no deben escribirse dentro de provider.json.');
+assert.ok(panel.includes('version: 6') && panel.includes('profiles: profiles.map(function (perfil)'),
+  'Los perfiles deben persistirse en el formato v6 con límite de 12 conexiones.');
+assert.ok(panel.includes('delete safe.apiKey') && panel.includes('delete safe.customHeaders') &&
+  panel.includes('delete safe.customBodyTemplate') && panel.includes('function guardarPerfilSeguro(perfil)'),
+  'Las claves, cabeceras personalizadas y plantillas JSON no deben escribirse dentro de provider.json.');
+assert.match(panel, /ank\.api\.profile\.v2\./, 'El vault debe usar el esquema de secretos versionado v2.');
+assert.match(panel, /function cargarPerfilSeguro\(perfil, rawProfile, necesitaMigracion\)/,
+  'Falta la migración de configuraciones privadas antiguas al vault v2.');
 assert.ok(panel.includes("conSistema('secureSet'") && panel.includes("conSistema('secureGet'") && panel.includes("conSistema('secureRemove'"),
   'El panel debe escribir, leer y borrar secretos mediante el almacén nativo cifrado.');
 assert.match(panel, /function eliminarClaveApi\(\)/, 'Falta la eliminación manual de la clave API cifrada.');
