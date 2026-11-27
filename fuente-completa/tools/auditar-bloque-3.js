@@ -13,6 +13,10 @@ const panel = read('decoded/assets/www/ank/ai.js');
 const panelMirror = read('update/ank/ai.js');
 const css = read('decoded/assets/www/ank/ai.css');
 const cssMirror = read('update/ank/ai.css');
+const rootPanel = fs.readFileSync(path.join(root, '..', 'ank', 'ai.js'), 'utf8');
+const rootCss = fs.readFileSync(path.join(root, '..', 'ank', 'ai.css'), 'utf8');
+const publicationPanel = read('.repo-publicacion/ank/ai.js');
+const publicationCss = read('.repo-publicacion/ank/ai.css');
 
 const begin = '/* ANK_AI_ENGINE_BUNDLE_BEGIN */';
 const end = '/* ANK_AI_ENGINE_BUNDLE_END */';
@@ -49,8 +53,19 @@ assert.match(panel, /escribir\(rutaConfigApi\(\), JSON\.stringify\(data\)\)/, 'N
 assert.match(panel, /window\.ANKAIEngine\.chat\(/, 'El chat no utiliza el motor multi-API.');
 assert.match(panel, /window\.ANKAIEngine\.normalizarModelo/, 'La interfaz no usa el normalizador de modelos.');
 assert.doesNotMatch(panel, /opencode/i, 'El panel activo aún contiene referencias al runtime OpenCode.');
+for (const [fileName, source] of [
+  ['ank/ai.js', rootPanel],
+  ['.repo-publicacion/ank/ai.js', publicationPanel],
+  ['update/ank/ai.js', panelMirror]
+]) {
+  assert.doesNotMatch(source, /opencode/i, fileName + ' conserva restos del runtime OpenCode.');
+}
 assert.equal(panelMirror, panel, 'El panel del actualizador debe coincidir con el incluido en Android.');
 assert.equal(cssMirror, css, 'Los estilos del actualizador deben coincidir con los estilos incluidos en Android.');
+assert.equal(rootPanel, panel, 'ank/ai.js todavía no coincide con la versión multi-API incluida en Android.');
+assert.equal(rootCss, css, 'ank/ai.css todavía no coincide con los estilos incluidos en Android.');
+assert.equal(publicationPanel, panel, 'La carpeta .repo-publicacion todavía contiene un panel antiguo.');
+assert.equal(publicationCss, css, 'La carpeta .repo-publicacion todavía contiene estilos antiguos.');
 assert.ok(css.includes('.ank-ai-profile-card') && css.includes('.ank-ai-profile-select select'),
   'Faltan estilos del administrador de perfiles API.');
 assert.ok(css.includes('@media (min-width: 720px)') && css.includes('@media (max-width: 719px)'),
