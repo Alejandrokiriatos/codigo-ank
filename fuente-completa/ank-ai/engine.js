@@ -619,7 +619,8 @@
       usage = data && data.usage || null;
       finishReason = choice.finish_reason || null;
     }
-    return { content: content, usage: usage, finishReason: finishReason, raw: data };
+    var toolCalls = normalizarLlamadasHerramienta(data, protocol, options);
+    return { content: content, toolCalls: toolCalls, usage: usage, finishReason: finishReason, raw: data };
   }
 
   function parsearSSE(response, onDelta, signal) {
@@ -823,8 +824,9 @@
 
     return pending.then(function (result) {
       control.dispose();
-      if (!result || !String(result.content || '').trim()) {
-        throw fail('La API respondió, pero no devolvió texto.', 'ANK_AI_EMPTY_RESPONSE');
+      if (!result || (!String(result.content || '').trim() &&
+          !(Array.isArray(result.toolCalls) && result.toolCalls.length))) {
+        throw fail('La API respondió, pero no devolvió texto ni llamadas de herramientas.', 'ANK_AI_EMPTY_RESPONSE');
       }
       return result;
     }, function (err) {
