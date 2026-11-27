@@ -751,7 +751,7 @@
     '  "max_tokens": "{{MAX_TOKENS}}"\n' +
     '}';
   /* Versión de este panel. Se sube en cada publicación del canal. */
-  var PANEL_VERSION = '2.4.1';
+  var PANEL_VERSION = '2.5.0';
 
   /* Fecha de esta publicación, visible en Entorno. */
   var PANEL_FECHA = '27/11/2026';
@@ -1348,8 +1348,16 @@
     st.activeProfileName = perfil.name;
   }
 
+  function limpiarIdPerfilSeguro(profileId) {
+    return String(profileId || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+  }
+
   function claveApiSeguraId(profileId) {
-    return 'ank.api.profile.' + String(profileId || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+    return 'ank.api.profile.v2.' + limpiarIdPerfilSeguro(profileId);
+  }
+
+  function claveApiLegacyId(profileId) {
+    return 'ank.api.profile.' + limpiarIdPerfilSeguro(profileId);
   }
 
   function vaultApiDisponible() {
@@ -1359,19 +1367,74 @@
       typeof window.system.secureRemove === 'function');
   }
 
-  function guardarClaveSeguraPerfil(perfil) {
-    var key = String(perfil && perfil.apiKey || '');
-    if (!key) return Promise.resolve(false);
+  function guardarPerfilSeguro(perfil) {
     if (!vaultApiDisponible()) {
-      return Promise.reject(new Error('El almacenamiento cifrado con Android Keystore no está disponible. No se guardará la clave en texto plano.'));
+      return Promise.reject(new Error('Android Keystore no está disponible. No se guardarán secretos ni cabeceras personalizadas en texto plano.'));
     }
-    return conSistema('secureSet', claveApiSeguraId(perfil.id), key).then(function () { return true; });
+    var payload = {
+      version: 2,
+      apiKey: String(perfil && perfil.apiKey || ''),
+      customHeaders: String(perfil && perfil.customHeaders || '{}'),
+      customBodyTemplate: String(perfil && perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT)
+    };
+    return conSistema('secureSet', claveApiSeguraId(perfil.id), JSON.stringify(payload)).then(function () {
+      return true;
+    });
   }
 
-  function leerClaveSeguraPerfil(profileId) {
-    if (!vaultApiDisponible()) return Promise.resolve('');
-    return conSistema('secureGet', claveApiSeguraId(profileId)).then(function (value) {
-      return String(value || '');
+  function cargarPerfilSeguro(perfil, rawProfile, necesitaMigracion) {
+    rawProfile = rawProfile && typeof rawProfile === 'object' ? rawProfile : {};
+    if (!vaultApiDisponible()) {
+      if (necesitaMigracion || rawProfile.apiKey ||
+          rawProfile.customHeaders || rawProfile.customBodyTemplate) {
+        return Promise.reject(new Error('El almacén Android Keystore no está disponible para migrar los campos privados de este perfil.'));
+      }
+      perfil.apiKey = '';
+      return Promise.resolve(false);
+    }
+
+    return conSistema('secureGet', claveApiSeguraId(perfil.id)).then(function (stored) {
+      if (stored) {
+        var payload;
+        try {
+          payload = JSON.parse(String(stored));
+        } catch (_) {
+          throw new Error('El registro privado del perfil no tiene un formato JSON válido.');
+        }
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new Error('El registro privado del perfil tiene una estructura no válida.');
+        }
+        perfil.apiKey = String(payload.apiKey || '');
+        perfil.customHeaders = String(payload.customHeaders || '{}');
+        perfil.customBodyTemplate = String(payload.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+        if (necesitaMigracion) {
+          return conSistema('secureRemove', claveApiLegacyId(perfil.id)).catch(function () {}).then(function () { return true; });
+        }
+        return true;
+      }
+
+      return conSistema('secureGet', claveApiLegacyId(perfil.id)).then(function (legacyKey) {
+        var necesitaMigrarCampos = necesitaMigracion || !!legacyKey ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'apiKey') ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'customHeaders') ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'customBodyTemplate');
+
+        if (!necesitaMigrarCampos) {
+          perfil.apiKey = '';
+          return false;
+        }
+
+        perfil.apiKey = String(rawProfile.apiKey || legacyKey || '');
+        perfil.customHeaders = String(rawProfile.customHeaders || perfil.customHeaders || '{}');
+        perfil.customBodyTemplate = String(rawProfile.customBodyTemplate || perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+
+        return guardarPerfilSeguro(perfil).then(function () {
+          if (legacyKey) {
+            return conSistema('secureRemove', claveApiLegacyId(perfil.id)).then(function () { return true; });
+          }
+          return true;
+        });
+      });
     });
   }
 
@@ -1379,8 +1442,11 @@
     if (!vaultApiDisponible()) {
       return Promise.reject(new Error('El almacén cifrado de Android no está disponible.'));
     }
-    return conSistema('secureRemove', claveApiSeguraId(profileId));
+    return conSistema('secureRemove', claveApiSeguraId(profileId)).then(function () {
+      return conSistema('secureRemove', claveApiLegacyId(profileId));
+    });
   }
+
 
   function procesarPerfilesEnSerie(perfiles, procesar) {
     return (perfiles || []).reduce(function (cadena, perfil, index) {
@@ -1391,18 +1457,20 @@
   function persistirPerfilesApi() {
     var profiles = st.apiProfiles.slice(0, 12);
     var data = {
-      version: 5,
+      version: 6,
       activeProfileId: st.activeProfileId,
       profiles: profiles.map(function (perfil) {
         var safe = Object.assign({}, perfil);
         delete safe.apiKey;
+        delete safe.customHeaders;
+        delete safe.customBodyTemplate;
         return safe;
       })
     };
     return dirsIniciales().then(function () {
       /* En serie: la inicialización de Tink/EncryptedSharedPreferences no debe
          competir consigo misma cuando el perfil todavía no existe. */
-      return procesarPerfilesEnSerie(profiles, guardarClaveSeguraPerfil);
+      return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro);
     }).then(function () {
       return escribir(rutaConfigApi(), JSON.stringify(data));
     });
@@ -1474,26 +1542,23 @@
       var rawProfiles = Array.isArray(data.profiles)
         ? data.profiles.slice(0, 12)
         : (data.endpoint || data.model || data.apiKey || data.protocol ? [data] : []);
-      var teniaClaveEnJson = rawProfiles.some(function (item) {
-        return !!(item && typeof item.apiKey === 'string' && item.apiKey.length);
+      var teniaDatosPrivadosEnJson = rawProfiles.some(function (item) {
+        return !!(item && (
+          (typeof item.apiKey === 'string' && item.apiKey.length) ||
+          Object.prototype.hasOwnProperty.call(item, 'customHeaders') ||
+          Object.prototype.hasOwnProperty.call(item, 'customBodyTemplate')
+        ));
       });
+      var necesitaMigracion = Number(data.version || 0) < 6;
       var migracionSeguraCorrecta = true;
 
       return procesarPerfilesEnSerie(normalized.profiles, function (perfil, index) {
-        var legacy = rawProfiles[index] && rawProfiles[index].apiKey;
-        if (typeof legacy === 'string' && legacy.length) {
-          perfil.apiKey = legacy;
-          return guardarClaveSeguraPerfil(perfil).catch(function (error) {
-            migracionSeguraCorrecta = false;
-            perfil.apiKey = '';
-            log('e', 'No se pudo migrar la clave del perfil «' + perfil.name + '» al Android Keystore: ' + (error.message || error));
-          });
-        }
-        return leerClaveSeguraPerfil(perfil.id).then(function (key) {
-          perfil.apiKey = key;
-        }).catch(function (error) {
+        return cargarPerfilSeguro(perfil, rawProfiles[index] || {}, necesitaMigracion).catch(function (error) {
+          migracionSeguraCorrecta = false;
           perfil.apiKey = '';
-          log('e', 'No se pudo recuperar la clave cifrada del perfil «' + perfil.name + '»: ' + (error.message || error));
+          perfil.customHeaders = '{}';
+          perfil.customBodyTemplate = CUSTOM_BODY_DEFAULT;
+          log('e', 'No se pudieron recuperar/migrar los campos privados de «' + perfil.name + '»: ' + (error.message || error));
         });
       }).then(function () {
         st.apiProfiles = normalized.profiles;
@@ -1502,13 +1567,13 @@
         })[0] || st.apiProfiles[0];
         aplicarPerfilApi(active);
 
-        if ((normalized.migrated || teniaClaveEnJson) && migracionSeguraCorrecta) {
+        if ((necesitaMigracion || normalized.migrated || teniaDatosPrivadosEnJson) && migracionSeguraCorrecta) {
           return persistirPerfilesApi().catch(function (error) {
-            log('e', 'No se pudo guardar provider.json sin secretos: ' + (error.message || error));
+            log('e', 'No se pudo guardar provider.json v6 sin campos privados: ' + (error.message || error));
           }).then(function () { return st.apiConfigured; });
         }
-        if (teniaClaveEnJson && !migracionSeguraCorrecta) {
-          log('e', 'La clave antigua sigue en la configuración previa porque falló su migración segura. No vuelvas a exportar ni compartir provider.json.');
+        if ((necesitaMigracion || teniaDatosPrivadosEnJson) && !migracionSeguraCorrecta) {
+          log('e', 'La migración de campos privados al Android Keystore no terminó. El provider.json anterior se conserva para evitar perder datos; no lo compartas ni lo publiques.');
         }
         return st.apiConfigured;
       });
@@ -1603,13 +1668,13 @@
     perfil.apiKey = '';
     actualizarPerfilEnLista(perfil);
     st.apiKey = '';
-    eliminarClaveSeguraPerfil(perfil.id).then(function () {
+    guardarPerfilSeguro(perfil).then(function () {
       return persistirPerfilesApi();
     }).then(function () {
       pintar();
-      aviso('Clave API eliminada del almacén cifrado.');
+      aviso('Clave API eliminada del almacén cifrado; los ajustes personalizados se conservaron.');
     }).catch(function (error) {
-      log('e', 'No se pudo eliminar la clave cifrada: ' + (error.message || error));
+      log('e', 'No se pudo actualizar el perfil privado: ' + (error.message || error));
       aviso('No se pudo eliminar la clave. Revisa el Registro.');
     });
   }
@@ -4633,9 +4698,9 @@
         '<div class="ank-ai-hint">Déjalo vacío junto con la clave API para servicios locales o públicos que no requieren autenticación.</div></div>' +
                 '<div class="ank-ai-field"><label>Prefijo de autenticación</label><input id="ank-ai-custom-auth-prefix" type="text" spellcheck="false" placeholder="Bearer (vacío = clave directa)" /></div>' +
                 '<div class="ank-ai-field"><label>Encabezados adicionales (JSON)</label><textarea id="ank-ai-custom-headers" spellcheck="false" rows="3" placeholder="{}"></textarea>' +
-                  '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}} en valores de encabezado. No pongas secretos en la URL.</div></div>' +
+                  '<div class="ank-ai-hint">Puedes usar {{API_KEY}} y {{MODEL}}. Este JSON se cifra junto con la clave en Android Keystore; nunca pongas credenciales en la URL.</div></div>' +
                 '<div class="ank-ai-field"><label>Plantilla del cuerpo JSON</label><textarea id="ank-ai-custom-body" spellcheck="false" rows="7"></textarea>' +
-                  '<div class="ank-ai-hint">Variables disponibles: {{MODEL}}, {{MESSAGES}}, {{SYSTEM}}, {{API_KEY}}, {{TEMPERATURE}} y {{MAX_TOKENS}}. Escribe {{MESSAGES}} entre comillas para insertar el historial como valor JSON.</div></div>' +
+                  '<div class="ank-ai-hint">Variables disponibles: {{MODEL}}, {{MESSAGES}}, {{SYSTEM}}, {{API_KEY}}, {{TEMPERATURE}} y {{MAX_TOKENS}}. La plantilla se cifra en el dispositivo. Escribe {{MESSAGES}} entre comillas para insertar el historial como valor JSON.</div></div>' +
                 '<div class="ank-ai-field"><label>Ruta del texto de respuesta</label><input id="ank-ai-custom-response" type="text" spellcheck="false" placeholder="choices.0.message.content" />' +
                   '<div class="ank-ai-hint">Ruta JSON con puntos e índices de array. Ejemplo: data.response.text o output.0.content.</div></div>' +
               '</div>' +
