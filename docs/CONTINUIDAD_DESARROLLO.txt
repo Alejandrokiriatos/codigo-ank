@@ -375,3 +375,52 @@ La prueba de emulador y la release tienen identidades de firma distintas
 intencionalmente: el emulador instala desde cero y no prueba actualización
 sobre una instalación anterior. La continuidad de firma queda como criterio
 obligatorio de aceptación para el bloque de entrega.
+
+================================================================
+14. BLOQUE 6 · CONTRATO DE HERRAMIENTAS Y PERMISOS · 27/11/2026
+================================================================
+
+Se incorporó la primera subfase del bloque 6 en:
+  fuente-completa/ank-ai/engine.js
+  fuente-completa/ank-ai/engine.test.js
+  docs/BLOQUE_6_HERRAMIENTAS_PERMISOS.md
+
+Catálogo normalizado:
+- project.list_files, project.read_file, project.search_files
+- project.create_backup, project.write_file, project.delete_file
+- project.restore_backup, terminal.run
+
+Separación de permisos:
+- read: lectura/listado/búsqueda.
+- write: escritura.
+- execute: terminal.
+- destructive: borrado/restauración.
+- backup: copias de seguridad.
+
+Protecciones:
+- Validador de esquema cerrado y tipos estrictos.
+- Solo rutas relativas al proyecto; rechaza traversal, URI, rutas absolutas
+  y archivos/directorios sensibles (env, credenciales, claves y vault).
+- Límites de tamaño, resultados, profundidad y duración.
+- Escritura/borrado requieren backup confirmado y confirmación del usuario.
+- Terminal siempre requiere permiso execute y confirmación por operación.
+- La bitácora guarda solo fecha, herramienta, riesgo, estado y ruta relativa;
+  no guarda comandos, contenido ni secretos.
+
+LÍMITE IMPORTANTE:
+Esta primera subfase define contrato, validación y decisiones de permiso.
+Todavía no integra llamadas tool/function calling de los proveedores ni
+ejecutores completos, pantalla de gestión de permisos, backups reales,
+restauración o ejecución delegada del terminal. El modelo aún no puede
+invocar estas herramientas autónomamente. El flujo existente de propuestas
+de archivo mantiene su aprobación manual.
+
+La prueba unitaria nueva cubre catálogo, rutas, argumentos, permisos,
+confirmaciones, backups requeridos y privacidad del registro. Esperar el
+resultado de CI antes de declarar esta subfase probada.
+
+El workflow Android ApiVault sigue pendiente en el emulador; la reconstrucción
+temporal de APK ya terminó, pero no se debe considerar validada la persistencia
+hasta que el ciclo put/get/force-stop/get/remove finalice correctamente.
+
+FIN DE LA ACTUALIZACIÓN
