@@ -104,12 +104,15 @@ jobs:
           })();
           </script>
           """.replace("SECRET_VALUE", secret)
-          path.write_text(html.replace("</body>", harness + "\\n</body>"), encoding="utf-8")
+          path.write_text(html.replace("</body>", harness + "\n</body>"), encoding="utf-8")
           PY
           apktool b fuente-completa/decoded -o "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
           keytool -genkeypair -v -keystore "$RUNNER_TEMP/ank-ci-debug.jks" -storepass android -keypass android -alias ank-ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=ANK CI,O=OpenAI,C=US"
-          apksigner sign --ks "$RUNNER_TEMP/ank-ci-debug.jks" --ks-pass pass:android --key-pass pass:android --out "$RUNNER_TEMP/CodigoANK-vault-ci.apk" "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
-          apksigner verify "$RUNNER_TEMP/CodigoANK-vault-ci.apk"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" sign --ks "$RUNNER_TEMP/ank-ci-debug.jks" --ks-pass pass:android --key-pass pass:android --out "$RUNNER_TEMP/CodigoANK-vault-ci.apk" "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
+          "$APKSIGNER" verify "$RUNNER_TEMP/CodigoANK-vault-ci.apk"
           echo "APK temporal de CI reconstruida y firmada con una clave efímera. No es una release." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ejecutar ciclo cifrado en emulador
