@@ -39,6 +39,118 @@
     return model;
   }
 
+  function crearPerfil(defaults, overrides) {
+    var d = defaults && typeof defaults === 'object' ? defaults : {};
+    var o = overrides && typeof overrides === 'object' ? overrides : {};
+    return {
+      id: String(o.id || ('api-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7))),
+      name: String(o.name || 'Nueva conexión').trim().slice(0, 60),
+      protocol: protocolName(o.protocol || d.protocol || PROTOCOLS.openai),
+      endpoint: String(o.endpoint || d.endpoint || '').trim(),
+      model: normalizarModelo(o.model == null ? '' : o.model),
+      apiKey: String(o.apiKey || ''),
+      customAuthHeader: String(o.customAuthHeader == null ? (d.customAuthHeader == null ? 'Authorization' : d.customAuthHeader) : o.customAuthHeader),
+      customAuthPrefix: String(o.customAuthPrefix == null ? (d.customAuthPrefix == null ? 'Bearer' : d.customAuthPrefix) : o.customAuthPrefix),
+      customHeaders: String(o.customHeaders || d.customHeaders || '{}'),
+      customBodyTemplate: String(o.customBodyTemplate || d.customBodyTemplate || '{}'),
+      customResponsePath: String(o.customResponsePath || d.customResponsePath || 'choices.0.message.content')
+    };
+  }
+
+  function normalizarPerfil(data, index, defaults) {
+    data = data && typeof data === 'object' ? data : {};
+    var d = defaults && typeof defaults === 'object' ? defaults : {};
+    var protocol;
+    try { protocol = protocolName(data.protocol || d.protocol || PROTOCOLS.openai); }
+    catch (_) { protocol = protocolName(d.protocol || PROTOCOLS.openai); }
+    var id = String(data.id || ('api-' + index + '-' + Date.now().toString(36)))
+      .replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+    if (!id) id = 'api-' + index + '-' + Date.now().toString(36);
+    var model = '';
+    try { model = normalizarModelo(data.model || ''); } catch (_) {}
+    return {
+      id: id,
+      name: String(data.name || ('Conexión ' + (index + 1))).trim().slice(0, 60) || ('Conexión ' + (index + 1)),
+      protocol: protocol,
+      endpoint: String(data.endpoint || d.endpoint || '').trim(),
+      model: model,
+      apiKey: String(data.apiKey || ''),
+      customAuthHeader: String(data.customAuthHeader == null ? (d.customAuthHeader == null ? 'Authorization' : d.customAuthHeader) : data.customAuthHeader),
+      customAuthPrefix: String(data.customAuthPrefix == null ? (d.customAuthPrefix == null ? 'Bearer' : d.customAuthPrefix) : data.customAuthPrefix),
+      customHeaders: String(data.customHeaders || d.customHeaders || '{}'),
+      customBodyTemplate: String(data.customBodyTemplate || d.customBodyTemplate || '{}'),
+      customResponsePath: String(data.customResponsePath || d.customResponsePath || 'choices.0.message.content')
+    };
+  }
+
+  function normalizarPerfiles(config, defaults, maxProfiles) {
+    var data = config && typeof config === 'object' ? config : {};
+    var d = defaults && typeof defaults === 'object' ? defaults : {};
+    var limit = Math.max(1, Math.min(50, Number(maxProfiles) || 12));
+    var profiles = [];
+    var migrated = false;
+    if (Array.isArray(data.profiles)) {
+      profiles = data.profiles.slice(0, limit).map(function (item, index) {
+        return normalizarPerfil(item, index, d);
+      });
+    } else if (data.endpoint || data.model || data.apiKey || data.protocol) {
+      profiles = [normalizarPerfil({
+        id: 'legacy-default',
+        name: data.name || data.profileName || 'Conexión principal',
+        protocol: data.protocol,
+        endpoint: data.endpoint,
+        model: data.model,
+        apiKey: data.apiKey,
+        customAuthHeader: data.customAuthHeader,
+        customAuthPrefix: data.customAuthPrefix,
+        customHeaders: data.customHeaders,
+        customBodyTemplate: data.customBodyTemplate,
+        customResponsePath: data.customResponsePath
+      }, 0, d)];
+      migrated = true;
+    } else {
+      profiles = [crearPerfil(d, { id: 'default', name: 'Mi conexión' })];
+      migrated = true;
+    }
+    var used = {};
+    profiles.forEach(function (profile, index) {
+      if (used[profile.id]) {
+        profile.id = 'api-' + index + '-' + Date.now().toString(36) + '-' + index;
+      }
+      used[profile.id] = true;
+    });
+    if (!profiles.length) {
+      profiles = [crearPerfil(d, { id: 'default', name: 'Mi conexión' })];
+      migrated = true;
+    }
+    var active = String(data.activeProfileId || profiles[0].id);
+    var found = profiles.some(function (profile) { return profile.id === active; });
+    if (!found) active = profiles[0].id;
+    return { profiles: profiles, activeProfileId: active, migrated: migrated };
+  }
+
+  function upsertPerfil(profiles, profile, maxProfiles) {
+    var list = Array.isArray(profiles) ? profiles.slice() : [];
+    if (!profile || !profile.id) throw fail('El perfil API necesita un identificador.', 'ANK_AI_PROFILE_INVALID');
+    var index = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].id === profile.id) { index = i; break; }
+    }
+    if (index < 0) list.push(profile);
+    else list[index] = profile;
+    var limit = Math.max(1, Math.min(50, Number(maxProfiles) || 12));
+    if (list.length > limit) list = list.slice(list.length - limit);
+    return list;
+  }
+
+  function eliminarPerfil(profiles, id, defaults) {
+    var list = (Array.isArray(profiles) ? profiles : []).filter(function (profile) {
+      return profile && profile.id !== id;
+    });
+    if (!list.length) list = [crearPerfil(defaults, { id: 'default', name: 'Mi conexión' })];
+    return { profiles: list, activeProfileId: list[0].id };
+  }
+
   function protocolName(value) {
     var p = String(value || PROTOCOLS.openai).trim().toLowerCase();
     if (p === 'openai' || p === 'openai-compatible' || p === 'openai-chat-completions') return PROTOCOLS.openai;
@@ -597,6 +709,11 @@
     protocols: PROTOCOLS,
     protocolName: protocolName,
     normalizarModelo: normalizarModelo,
+    crearPerfil: crearPerfil,
+    normalizarPerfil: normalizarPerfil,
+    normalizarPerfiles: normalizarPerfiles,
+    upsertPerfil: upsertPerfil,
+    eliminarPerfil: eliminarPerfil,
     endpointUrl: endpointUrl,
     chat: chat
   };
