@@ -114,7 +114,14 @@ jobs:
           test -x "$AAPT"
           PACKAGE_NAME="$("$AAPT" dump badging "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
           test "$PACKAGE_NAME" = "com.ank.codigoank" || { echo "Application ID inesperado: $PACKAGE_NAME"; exit 1; }
+          LAUNCH_ACTIVITY="$("$AAPT" dump badging "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk" | sed -n "s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+          test -n "$LAUNCH_ACTIVITY" || { echo "No se pudo detectar la actividad de inicio de la APK"; exit 1; }
+          {
+            echo "ANK_PACKAGE_NAME=$PACKAGE_NAME"
+            echo "ANK_LAUNCH_ACTIVITY=$LAUNCH_ACTIVITY"
+          } >> "$GITHUB_ENV"
           echo "Application ID verificado: $PACKAGE_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "Actividad de inicio detectada: $LAUNCH_ACTIVITY" >> "$GITHUB_STEP_SUMMARY"
           # Esta clave efímera solo sirve para instalar la build de prueba desde cero en el emulador.
           # Nunca reutilizarla para actualizaciones ni distribuir esta APK.
           keytool -genkeypair -v -keystore "$RUNNER_TEMP/ank-ci-debug.jks" -storepass android -keypass android -alias ank-ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=ANK CI,O=OpenAI,C=US"
@@ -126,36 +133,46 @@ jobs:
           echo "APK temporal de CI reconstruida y firmada con una clave efímera. No es una release." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ejecutar ciclo cifrado en emulador
+        timeout-minutes: 18
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
           arch: x86_64
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
             set -euo pipefail
             APK="$RUNNER_TEMP/CodigoANK-vault-ci.apk"
-            adb install "$APK"
+            PKG="$ANK_PACKAGE_NAME"
+            ACTIVITY="$ANK_LAUNCH_ACTIVITY"
+            test -n "$PKG"
+            test -n "$ACTIVITY"
+            timeout 90s adb wait-for-device
+            timeout 90s adb install "$APK"
+            timeout 30s adb shell pm path "$PKG"
             adb logcat -c
-            adb shell am start -n com.ank.codigoank/com.foxdebug.acode.MainActivity
+            timeout 60s adb shell am start -W -n "$PKG/$ACTIVITY"
             wait_marker() {
               expected="$1"
               for attempt in $(seq 1 90); do
-                if adb logcat -d | grep -F "ANK_VAULT_CI:$expected" >/dev/null; then
+                if adb logcat -d -t 3000 | grep -F "ANK_VAULT_CI:$expected" >/dev/null; then
                   echo "Android WebView reportó $expected"
                   return 0
                 fi
-                if adb logcat -d | grep -F "ANK_VAULT_CI:FAIL_" >/dev/null; then
-                  adb logcat -d | grep -F "ANK_VAULT_CI:"
+                if adb logcat -d -t 3000 | grep -F "ANK_VAULT_CI:FAIL_" >/dev/null; then
+                  adb logcat -d -t 3000 | grep -E "ANK_VAULT_CI:|FATAL EXCEPTION|AndroidRuntime" | tail -n 120 || true
                   return 1
                 fi
                 sleep 2
               done
-              adb logcat -d | grep -F 'ANK_VAULT_CI:' | tail -n 120
-              echo "No se recibió marcador $expected"
+              adb logcat -d -t 3000 | grep -E "ANK_VAULT_CI:|FATAL EXCEPTION|AndroidRuntime" | tail -n 120 || true
+              adb shell dumpsys activity activities | grep -E "ResumedActivity|mResumedActivity" | tail -n 10 || true
+              echo "No se recibió marcador $expected antes del límite"
               return 1
             }
             wait_marker STAGE1_OK
-            adb shell am force-stop com.ank.codigoank
-            adb shell am start -n com.ank.codigoank/com.foxdebug.acode.MainActivity
+            timeout 30s adb shell am force-stop "$PKG"
+            timeout 60s adb shell am start -W -n "$PKG/$ACTIVITY"
             wait_marker STAGE2_OK
             echo "PASS: put/get, persistencia tras force-stop, remove y lectura vacía en ApiVault real." >> "$GITHUB_STEP_SUMMARY"
