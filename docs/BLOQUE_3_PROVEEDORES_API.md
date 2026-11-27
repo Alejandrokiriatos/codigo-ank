@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-3-multiple-api`  
 **Base:** bloque 2, commit `ca27820463950bcd455e1349b49e47a43a1d16a6`  
-**Estado:** cuatro formatos API, perfiles múltiples y rediseño responsive implementados; auditoría estática y 21 pruebas automatizadas superadas; sigue pendiente la validación en Android físico y el endurecimiento del almacenamiento de claves.
+**Estado:** cuatro formatos API, perfiles múltiples y rediseño responsive implementados; auditoría estática y 28 pruebas automatizadas superadas; sigue pendiente la validación en Android físico y el endurecimiento del almacenamiento de claves.
 
 ## Objetivo
 
@@ -63,6 +63,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Los perfiles v3 de una sola conexión se migran automáticamente a v4 como «Conexión principal», sin descartar los valores anteriores.
 - La selección activa se restaura al abrir el panel.
 - Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
+- La lógica de creación, normalización, migración, actualización y eliminación de perfiles vive en `ank-ai/engine.js`, independiente de la vista. Esto permite probar las reglas del almacén sin depender del DOM.
 
 Las claves continúan en el archivo privado de la aplicación **sin cifrado Android Keystore**. El perfil múltiple organiza la configuración, pero no cambia ese límite de seguridad. No se debe compartir `provider.json` ni incluirlo en un repositorio.
 
@@ -111,12 +112,13 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 - Cancelación y timeout del transporte nativo.
 - Plantilla JSON, autenticación personalizable, variables, ruta de extracción y conservación de parámetros de consulta seguros.
 - Identificadores de modelo con `:`, `@` y `+`, rechazo de caracteres de control y límite de longitud.
+- Creación de perfiles, migración desde v3, restauración del perfil activo, normalización de identificadores, límite de 12, actualización y eliminación (incluida la última conexión).
 
 ### Resultado CI del 27/11/2026
 
-La ejecución [45969127377](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45969127377) terminó correctamente:
+La ejecución [45973107755](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45973107755) terminó correctamente:
 
-- 21 pruebas del motor: 21 correctas, 0 fallidas.
+- 28 pruebas del motor: 28 correctas, 0 fallidas.
 - Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
 - Auditoría estática de los perfiles: migración v3, formato v4, creación, selección y eliminación.
 - Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias del actualizador interno.
