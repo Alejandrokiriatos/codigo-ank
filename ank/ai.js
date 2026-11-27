@@ -1480,7 +1480,8 @@
   }
 
   function persistirPerfilesApi() {
-    var profiles = st.apiProfiles.slice(0, 12);
+    /* Snapshot inmutable: el formulario puede cambiar mientras esta escritura espera su turno. */
+    var profiles = st.apiProfiles.slice(0, 12).map(function (perfil) { return Object.assign({}, perfil); });
     var data = {
       version: 7,
       activeProfileId: st.activeProfileId,
