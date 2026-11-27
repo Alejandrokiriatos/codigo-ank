@@ -45,7 +45,9 @@ hook = r"""
         return ejecutarHerramientaProyecto(call, context || {});
       },
       backup: function (call) {
-        return backupAntesDeHerramienta(call);
+        return backupAntesDeHerramienta(call).then(function (snapshot) {
+          return { created: !!(snapshot && snapshot.id), id: snapshot && snapshot.id ? snapshot.id : '' };
+        });
       },
       readState: function (relative, maxBytes) {
         var target = rutaLocalHerramienta(relative, false);
