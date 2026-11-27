@@ -1348,13 +1348,54 @@
     st.activeProfileName = perfil.name;
   }
 
+  function claveApiSeguraId(profileId) {
+    return 'ank.api.profile.' + String(profileId || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+  }
+
+  function vaultApiDisponible() {
+    return !!(window.cordova && window.system &&
+      typeof window.system.secureGet === 'function' &&
+      typeof window.system.secureSet === 'function' &&
+      typeof window.system.secureRemove === 'function');
+  }
+
+  function guardarClaveSeguraPerfil(perfil) {
+    var key = String(perfil && perfil.apiKey || '');
+    if (!key) return Promise.resolve(false);
+    if (!vaultApiDisponible()) {
+      return Promise.reject(new Error('El almacenamiento cifrado con Android Keystore no está disponible. No se guardará la clave en texto plano.'));
+    }
+    return conSistema('secureSet', claveApiSeguraId(perfil.id), key).then(function () { return true; });
+  }
+
+  function leerClaveSeguraPerfil(profileId) {
+    if (!vaultApiDisponible()) return Promise.resolve('');
+    return conSistema('secureGet', claveApiSeguraId(profileId)).then(function (value) {
+      return String(value || '');
+    });
+  }
+
+  function eliminarClaveSeguraPerfil(profileId) {
+    if (!vaultApiDisponible()) {
+      return Promise.reject(new Error('El almacén cifrado de Android no está disponible.'));
+    }
+    return conSistema('secureRemove', claveApiSeguraId(profileId));
+  }
+
   function persistirPerfilesApi() {
+    var profiles = st.apiProfiles.slice(0, 12);
     var data = {
-      version: 4,
+      version: 5,
       activeProfileId: st.activeProfileId,
-      profiles: st.apiProfiles.slice(0, 12)
+      profiles: profiles.map(function (perfil) {
+        var safe = Object.assign({}, perfil);
+        delete safe.apiKey;
+        return safe;
+      })
     };
     return dirsIniciales().then(function () {
+      return Promise.all(profiles.map(guardarClaveSeguraPerfil));
+    }).then(function () {
       return escribir(rutaConfigApi(), JSON.stringify(data));
     });
   }
@@ -1400,15 +1441,20 @@
     if (!st.activeProfileId) return;
     if (typeof window.confirm === 'function' &&
         !window.confirm('¿Eliminar la conexión «' + st.activeProfileName + '»? Esta acción no se puede deshacer.')) return;
-    var result = window.ANKAIEngine.eliminarPerfil(st.apiProfiles, st.activeProfileId, opcionesDefectoPerfilApi());
+    var removedId = st.activeProfileId;
+    var result = window.ANKAIEngine.eliminarPerfil(st.apiProfiles, removedId, opcionesDefectoPerfilApi());
     st.apiProfiles = result.profiles;
     var siguiente = st.apiProfiles.filter(function (p) { return p.id === result.activeProfileId; })[0] || st.apiProfiles[0];
     aplicarPerfilApi(siguiente);
     persistirPerfilesApi().then(function () {
+      return eliminarClaveSeguraPerfil(removedId);
+    }).then(function () {
       pintar();
       aviso('Conexión eliminada.');
     }).catch(function (error) {
-      log('e', 'No se pudo eliminar la conexión: ' + (error.message || error));
+      log('e', 'No se pudo completar la eliminación segura de la conexión: ' + (error.message || error));
+      pintar();
+      aviso('Conexión retirada; revisa el Registro para confirmar la limpieza de la clave cifrada.');
     });
   }
 
@@ -1417,17 +1463,47 @@
     return leerTexto(rutaConfigApi()).then(function (raw) {
       var data = raw && raw.trim() ? JSON.parse(raw) : {};
       var normalized = window.ANKAIEngine.normalizarPerfiles(data, opcionesDefectoPerfilApi(), 12);
-      st.apiProfiles = normalized.profiles;
-      var active = st.apiProfiles.filter(function (p) {
-        return p.id === normalized.activeProfileId;
-      })[0] || st.apiProfiles[0];
-      aplicarPerfilApi(active);
-      if (normalized.migrated) {
-        return persistirPerfilesApi().catch(function (error) {
-          log('w', 'No se pudo migrar el formato de conexiones: ' + (error.message || error));
-        }).then(function () { return st.apiConfigured; });
-      }
-      return st.apiConfigured;
+      var rawProfiles = Array.isArray(data.profiles)
+        ? data.profiles.slice(0, 12)
+        : (data.endpoint || data.model || data.apiKey || data.protocol ? [data] : []);
+      var teniaClaveEnJson = rawProfiles.some(function (item) {
+        return !!(item && typeof item.apiKey === 'string' && item.apiKey.length);
+      });
+      var migracionSeguraCorrecta = true;
+
+      return Promise.all(normalized.profiles.map(function (perfil, index) {
+        var legacy = rawProfiles[index] && rawProfiles[index].apiKey;
+        if (typeof legacy === 'string' && legacy.length) {
+          perfil.apiKey = legacy;
+          return guardarClaveSeguraPerfil(perfil).catch(function (error) {
+            migracionSeguraCorrecta = false;
+            perfil.apiKey = '';
+            log('e', 'No se pudo migrar la clave del perfil «' + perfil.name + '» al Android Keystore: ' + (error.message || error));
+          });
+        }
+        return leerClaveSeguraPerfil(perfil.id).then(function (key) {
+          perfil.apiKey = key;
+        }).catch(function (error) {
+          perfil.apiKey = '';
+          log('e', 'No se pudo recuperar la clave cifrada del perfil «' + perfil.name + '»: ' + (error.message || error));
+        });
+      })).then(function () {
+        st.apiProfiles = normalized.profiles;
+        var active = st.apiProfiles.filter(function (p) {
+          return p.id === normalized.activeProfileId;
+        })[0] || st.apiProfiles[0];
+        aplicarPerfilApi(active);
+
+        if ((normalized.migrated || teniaClaveEnJson) && migracionSeguraCorrecta) {
+          return persistirPerfilesApi().catch(function (error) {
+            log('e', 'No se pudo guardar provider.json sin secretos: ' + (error.message || error));
+          }).then(function () { return st.apiConfigured; });
+        }
+        if (teniaClaveEnJson && !migracionSeguraCorrecta) {
+          log('e', 'La clave antigua sigue en la configuración previa porque falló su migración segura. No vuelvas a exportar ni compartir provider.json.');
+        }
+        return st.apiConfigured;
+      });
     }).catch(function (error) {
       st.apiProfiles = [nuevoPerfilApi('default', 'Mi conexión')];
       aplicarPerfilApi(st.apiProfiles[0]);
@@ -1508,6 +1584,25 @@
       log('e', 'No se pudo guardar la configuración API: ' + (e && e.message ? e.message : e));
       aviso('No se pudo guardar la conexión API.');
       return false;
+    });
+  }
+
+  function eliminarClaveApi() {
+    if (!st.activeProfileId || !st.apiKey) return aviso('Este perfil no tiene una clave guardada.');
+    if (typeof window.confirm === 'function' &&
+        !window.confirm('¿Eliminar la clave API cifrada de «' + st.activeProfileName + '»?')) return;
+    var perfil = capturarPerfilApi();
+    perfil.apiKey = '';
+    actualizarPerfilEnLista(perfil);
+    st.apiKey = '';
+    eliminarClaveSeguraPerfil(perfil.id).then(function () {
+      return persistirPerfilesApi();
+    }).then(function () {
+      pintar();
+      aviso('Clave API eliminada del almacén cifrado.');
+    }).catch(function (error) {
+      log('e', 'No se pudo eliminar la clave cifrada: ' + (error.message || error));
+      aviso('No se pudo eliminar la clave. Revisa el Registro.');
     });
   }
 
