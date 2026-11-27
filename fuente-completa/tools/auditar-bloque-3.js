@@ -248,6 +248,8 @@ assert.doesNotMatch(panel, /opencode/i, 'El panel activo aún contiene referenci
 assert.match(boot, /script\.src\s*=\s*['"]\.\/ank\/ai\.js['"]/, 'El arranque debe cargar el panel incluido en el APK.');
 assert.doesNotMatch(boot, /new Function|localStorage\.getItem|eval\s*\(/,
   'El arranque no debe ejecutar paneles o estilos locales no verificados.');
+assert.doesNotMatch(panel, /__ANK_CI_TOOL_TEST__|__ANK_CI_TOOL_TEST_API__/,
+  'El puente interno de pruebas de herramientas solo debe inyectarse en la APK temporal de CI, nunca en el panel publicado.');
 assert.ok(boot.includes("localStorage.removeItem(K_AI)") && boot.includes("localStorage.removeItem(K_CSS)"),
   'El arranque debe descartar paquetes web antiguos no firmados.');
 for (const [fileName, source] of [
