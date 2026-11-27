@@ -3,6 +3,7 @@
     <cloud-backup>
         <!-- The ciphertext cannot be restored without its device Keystore key. -->
         <exclude domain="sharedpref" path="ank_api_secrets.xml" />
+        <exclude domain="file" path="ank-ai/backups/" />
     </cloud-backup>
     <device-transfer>
         <!-- Never migrate the encrypted vault without its original Keystore key. -->
