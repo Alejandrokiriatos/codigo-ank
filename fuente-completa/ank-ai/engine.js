@@ -1093,7 +1093,8 @@
     }
     var parts = raw.split('/');
     var clean = [];
-    var denied = /^(?:\.git|\.svn|\.hg|\.ssh|\.aws|\.gnupg|\.config|\.local|\.ank)$/i;
+    var denied = /^(?:\.git|\.svn|\.hg|\.ssh|\.aws|\.gnupg|\.config|\.local|\.ank|\.docker|\.kube|\.terraform|\.azure|\.gcloud|\.firebase|\.m2)$/i;
+    var privateFile = /^(?:\.npmrc|\.netrc|\.pypirc|id_(?:rsa|dsa|ecdsa|ed25519)|authorized_keys|ank_api_secrets(?:\.xml)?)$/i;
     var secretName = /(?:^|[-_.])(?:secret|secrets|credential|credentials|password|passwd|token|apikey|api-key)(?:[-_.]|$)/i;
     parts.forEach(function (part) {
       if (!part || part === '.') return;
@@ -1101,8 +1102,7 @@
       if (part.length > 128 || /[:<>|"*?]/.test(part)) {
         throw fail('La ruta contiene un segmento no permitido.', 'ANK_TOOL_PATH_INVALID');
       }
-      if (denied.test(part) || /^\.env(?:$|\.)/i.test(part) || secretName.test(part) ||
-          /^(?:id_rsa|id_ed25519|ank_api_secrets(?:\.xml)?)$/i.test(part) ||
+      if (denied.test(part) || privateFile.test(part) || /^\.env(?:$|\.)/i.test(part) || secretName.test(part) ||
           /\.(?:keystore|jks|p12|pfx|pem|key)$/i.test(part)) {
         throw fail('La ruta apunta a datos privados o credenciales y no está disponible para herramientas.', 'ANK_TOOL_PATH_PRIVATE');
       }
