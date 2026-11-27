@@ -721,6 +721,392 @@
     });
   }
 
+  /* ------------------------------------------------------------------ *
+   * contrato de herramientas y control de permisos (bloque 6)
+   * ------------------------------------------------------------------ */
+
+  var TOOL_DEFINITIONS = [
+    {
+      name: 'project.list_files',
+      description: 'Lista archivos dentro del proyecto activo.',
+      permission: 'read',
+      risk: 'read',
+      requiresConfirmation: false,
+      requiresBackup: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Carpeta relativa; por defecto la raíz del proyecto.' },
+          maxDepth: { type: 'integer', minimum: 1, maximum: 4 }
+        },
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'project.read_file',
+      description: 'Lee un archivo de texto no sensible del proyecto activo.',
+      permission: 'read',
+      risk: 'read',
+      requiresConfirmation: false,
+      requiresBackup: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Ruta relativa al proyecto.' },
+          maxBytes: { type: 'integer', minimum: 1, maximum: 262144 }
+        },
+        required: ['path'],
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'project.search_files',
+      description: 'Busca texto en archivos del proyecto activo.',
+      permission: 'read',
+      risk: 'read',
+      requiresConfirmation: false,
+      requiresBackup: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', minLength: 1, maxLength: 200 },
+          path: { type: 'string' },
+          maxResults: { type: 'integer', minimum: 1, maximum: 50 }
+        },
+        required: ['query'],
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'project.create_backup',
+      description: 'Crea una copia de seguridad del proyecto o de una ruta antes de modificarla.',
+      permission: 'backup',
+      risk: 'backup',
+      requiresConfirmation: false,
+      requiresBackup: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Ruta relativa que se incluirá en la copia.' },
+          reason: { type: 'string', maxLength: 240 }
+        },
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'project.write_file',
+      description: 'Crea o reemplaza un archivo dentro del proyecto activo.',
+      permission: 'write',
+      risk: 'write',
+      requiresConfirmation: true,
+      requiresBackup: true,
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          content: { type: 'string', maxLength: 262144 },
+          expectedDigest: { type: 'string', maxLength: 128 }
+        },
+        required: ['path', 'content'],
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'project.delete_file',
+      description: 'Elimina un archivo del proyecto activo después de crear una copia de seguridad.',
+      permission: 'destructive',
+      risk: 'destructive',
+      requiresConfirmation: true,
+      requiresBackup: true,
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          expectedDigest: { type: 'string', maxLength: 128 }
+        },
+        required: ['path'],
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'project.restore_backup',
+      description: 'Restaura una copia de seguridad seleccionada por el usuario.',
+      permission: 'destructive',
+      risk: 'destructive',
+      requiresConfirmation: true,
+      requiresBackup: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          backupId: { type: 'string', minLength: 1, maxLength: 100 }
+        },
+        required: ['backupId'],
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'terminal.run',
+      description: 'Ejecuta un comando en el terminal del proyecto. Cada ejecución necesita confirmación.',
+      permission: 'execute',
+      risk: 'execute',
+      requiresConfirmation: true,
+      requiresBackup: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', minLength: 1, maxLength: 2000 },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'integer', minimum: 1000, maximum: 60000 }
+        },
+        required: ['command'],
+        additionalProperties: false
+      }
+    }
+  ];
+
+  var TOOL_BY_NAME = Object.create(null);
+  TOOL_DEFINITIONS.forEach(function (item) { TOOL_BY_NAME[item.name] = item; });
+
+  function clonarJSON(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizarRutaProyecto(value, allowRoot) {
+    if (value == null || value === '') {
+      if (allowRoot) return '.';
+      throw fail('Falta la ruta relativa al proyecto.', 'ANK_TOOL_PATH_REQUIRED');
+    }
+    if (typeof value !== 'string') throw fail('La ruta debe ser texto.', 'ANK_TOOL_PATH_INVALID');
+    var raw = value.trim();
+    if (!raw || raw.length > 512 || /[\u0000-\u001f\u007f]/.test(raw)) {
+      throw fail('La ruta está vacía, es demasiado larga o contiene caracteres de control.', 'ANK_TOOL_PATH_INVALID');
+    }
+    if (raw.indexOf('\\') !== -1 || /^(\/|~|[A-Za-z]:|[A-Za-z][A-Za-z0-9+.-]*:\/\/)/.test(raw)) {
+      throw fail('Solo se permiten rutas relativas dentro del proyecto.', 'ANK_TOOL_PATH_ABSOLUTE');
+    }
+    var parts = raw.split('/');
+    var clean = [];
+    var denied = /^(?:\.git|\.svn|\.hg|\.ssh|\.aws|\.gnupg|\.config|\.local|\.ank)$/i;
+    var secretName = /(?:^|[-_.])(?:secret|secrets|credential|credentials|password|passwd|token|apikey|api-key)(?:[-_.]|$)/i;
+    parts.forEach(function (part) {
+      if (!part || part === '.') return;
+      if (part === '..') throw fail('La ruta intenta salir del proyecto.', 'ANK_TOOL_PATH_TRAVERSAL');
+      if (part.length > 128 || /[:<>|"*?]/.test(part)) {
+        throw fail('La ruta contiene un segmento no permitido.', 'ANK_TOOL_PATH_INVALID');
+      }
+      if (denied.test(part) || /^\.env(?:$|\.)/i.test(part) || secretName.test(part) ||
+          /^(?:id_rsa|id_ed25519|ank_api_secrets(?:\.xml)?)$/i.test(part) ||
+          /\.(?:keystore|jks|p12|pfx|pem|key)$/i.test(part)) {
+        throw fail('La ruta apunta a datos privados o credenciales y no está disponible para herramientas.', 'ANK_TOOL_PATH_PRIVATE');
+      }
+      clean.push(part);
+    });
+    if (!clean.length) {
+      if (allowRoot) return '.';
+      throw fail('La ruta debe señalar un archivo dentro del proyecto.', 'ANK_TOOL_PATH_REQUIRED');
+    }
+    return clean.join('/');
+  }
+
+  function normalizarArgumentosHerramienta(name, args) {
+    var definition = TOOL_BY_NAME[String(name || '')];
+    if (!definition) throw fail('Herramienta no registrada: ' + String(name || ''), 'ANK_TOOL_UNKNOWN');
+    if (!args || typeof args !== 'object' || Array.isArray(args) ||
+        (Object.getPrototypeOf(args) !== Object.prototype && Object.getPrototypeOf(args) !== null)) {
+      throw fail('Los argumentos de la herramienta deben ser un objeto JSON.', 'ANK_TOOL_ARGUMENTS_INVALID');
+    }
+    var serialized;
+    try { serialized = JSON.stringify(args); }
+    catch (_) { throw fail('Los argumentos no se pueden serializar como JSON.', 'ANK_TOOL_ARGUMENTS_INVALID'); }
+    if (!serialized || serialized.length > 300000) {
+      throw fail('Los argumentos superan el límite permitido.', 'ANK_TOOL_ARGUMENTS_TOO_LARGE');
+    }
+    var safe = {};
+    Object.keys(args).forEach(function (key) {
+      if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+        throw fail('Los argumentos contienen una propiedad no permitida.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      }
+      safe[key] = args[key];
+    });
+    function only(allowed) {
+      Object.keys(safe).forEach(function (key) {
+        if (allowed.indexOf(key) === -1) throw fail('Argumento no reconocido: ' + key, 'ANK_TOOL_ARGUMENTS_INVALID');
+      });
+    }
+    var output = {};
+    if (name === 'project.list_files') {
+      only(['path', 'maxDepth']);
+      output.path = normalizarRutaProyecto(safe.path, true);
+      output.maxDepth = safe.maxDepth == null ? 2 : safe.maxDepth;
+      if (typeof output.maxDepth !== 'number' || !isFinite(output.maxDepth) || Math.floor(output.maxDepth) !== output.maxDepth || output.maxDepth < 1 || output.maxDepth > 4) {
+        throw fail('maxDepth debe ser un entero entre 1 y 4.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      }
+    } else if (name === 'project.read_file') {
+      only(['path', 'maxBytes']);
+      output.path = normalizarRutaProyecto(safe.path, false);
+      output.maxBytes = safe.maxBytes == null ? 65536 : safe.maxBytes;
+      if (typeof output.maxBytes !== 'number' || !isFinite(output.maxBytes) || Math.floor(output.maxBytes) !== output.maxBytes || output.maxBytes < 1 || output.maxBytes > 262144) {
+        throw fail('maxBytes debe ser un entero entre 1 y 262144.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      }
+    } else if (name === 'project.search_files') {
+      only(['query', 'path', 'maxResults']);
+      if (typeof safe.query !== 'string') throw fail('La consulta debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      output.query = safe.query.trim();
+      if (!output.query || output.query.length > 200 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(output.query)) {
+        throw fail('La consulta debe tener entre 1 y 200 caracteres imprimibles.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      }
+      output.path = normalizarRutaProyecto(safe.path, true);
+      output.maxResults = safe.maxResults == null ? 20 : safe.maxResults;
+      if (typeof output.maxResults !== 'number' || !isFinite(output.maxResults) || Math.floor(output.maxResults) !== output.maxResults || output.maxResults < 1 || output.maxResults > 50) {
+        throw fail('maxResults debe ser un entero entre 1 y 50.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      }
+    } else if (name === 'project.create_backup') {
+      only(['path', 'reason']);
+      output.path = normalizarRutaProyecto(safe.path, true);
+      if (safe.reason != null && typeof safe.reason !== 'string') throw fail('reason debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      output.reason = String(safe.reason || '').trim().slice(0, 240);
+    } else if (name === 'project.write_file') {
+      only(['path', 'content', 'expectedDigest']);
+      output.path = normalizarRutaProyecto(safe.path, false);
+      if (typeof safe.content !== 'string' || safe.content.length > 262144) {
+        throw fail('El contenido debe ser texto y no superar 256 KiB.', 'ANK_TOOL_CONTENT_INVALID');
+      }
+      output.content = safe.content;
+      if (safe.expectedDigest != null) {
+        if (typeof safe.expectedDigest !== 'string') throw fail('expectedDigest debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+        output.expectedDigest = safe.expectedDigest.slice(0, 128);
+      }
+    } else if (name === 'project.delete_file') {
+      only(['path', 'expectedDigest']);
+      output.path = normalizarRutaProyecto(safe.path, false);
+      if (safe.expectedDigest != null) {
+        if (typeof safe.expectedDigest !== 'string') throw fail('expectedDigest debe ser texto.', 'ANK_TOOL_ARGUMENTS_INVALID');
+        output.expectedDigest = safe.expectedDigest.slice(0, 128);
+      }
+    } else if (name === 'project.restore_backup') {
+      only(['backupId']);
+      if (typeof safe.backupId !== 'string') throw fail('backupId debe ser texto.', 'ANK_TOOL_BACKUP_ID_INVALID');
+      output.backupId = safe.backupId.trim();
+      if (!/^[A-Za-z0-9._-]{1,100}$/.test(output.backupId)) {
+        throw fail('El identificador de copia de seguridad no es válido.', 'ANK_TOOL_BACKUP_ID_INVALID');
+      }
+    } else if (name === 'terminal.run') {
+      only(['command', 'cwd', 'timeoutMs']);
+      if (typeof safe.command !== 'string') throw fail('command debe ser texto.', 'ANK_TOOL_COMMAND_INVALID');
+      output.command = safe.command;
+      if (!output.command.trim() || output.command.length > 2000 || /\u0000/.test(output.command)) {
+        throw fail('El comando está vacío o supera el límite de 2000 caracteres.', 'ANK_TOOL_COMMAND_INVALID');
+      }
+      output.cwd = normalizarRutaProyecto(safe.cwd, true);
+      output.timeoutMs = safe.timeoutMs == null ? 15000 : safe.timeoutMs;
+      if (typeof output.timeoutMs !== 'number' || !isFinite(output.timeoutMs) || Math.floor(output.timeoutMs) !== output.timeoutMs ||
+          output.timeoutMs < 1000 || output.timeoutMs > 60000) {
+        throw fail('timeoutMs debe ser un entero entre 1000 y 60000.', 'ANK_TOOL_ARGUMENTS_INVALID');
+      }
+    }
+    return output;
+  }
+
+  function validarLlamadaHerramienta(name, args) {
+    var definition = TOOL_BY_NAME[String(name || '')];
+    if (!definition) throw fail('Herramienta no registrada: ' + String(name || ''), 'ANK_TOOL_UNKNOWN');
+    return {
+      name: definition.name,
+      arguments: normalizarArgumentosHerramienta(definition.name, args || {}),
+      permission: definition.permission,
+      risk: definition.risk,
+      requiresConfirmation: definition.requiresConfirmation,
+      requiresBackup: definition.requiresBackup
+    };
+  }
+
+  function evaluarPermisoHerramienta(name, args, grants, context) {
+    var call = validarLlamadaHerramienta(name, args);
+    var permissions = grants && typeof grants === 'object' ? grants : {};
+    var runtime = context && typeof context === 'object' ? context : {};
+    var granted = permissions[call.permission] === true || permissions[call.name] === true;
+    if (!granted) {
+      return {
+        status: 'permission_required',
+        allowed: false,
+        permission: call.permission,
+        risk: call.risk,
+        requiresConfirmation: call.requiresConfirmation,
+        requiresBackup: call.requiresBackup
+      };
+    }
+    if (call.requiresBackup && runtime.backupCreated !== true) {
+      return {
+        status: 'backup_required',
+        allowed: false,
+        permission: call.permission,
+        risk: call.risk,
+        requiresConfirmation: call.requiresConfirmation,
+        requiresBackup: true
+      };
+    }
+    if (call.requiresConfirmation && runtime.userConfirmed !== true) {
+      return {
+        status: 'confirmation_required',
+        allowed: false,
+        permission: call.permission,
+        risk: call.risk,
+        requiresConfirmation: true,
+        requiresBackup: call.requiresBackup
+      };
+    }
+    return {
+      status: 'allowed',
+      allowed: true,
+      permission: call.permission,
+      risk: call.risk,
+      requiresConfirmation: call.requiresConfirmation,
+      requiresBackup: call.requiresBackup,
+      call: call
+    };
+  }
+
+  function crearRegistroActividad(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var maxEntries = Math.max(1, Math.min(500, Number(opts.maxEntries) || 100));
+    var now = typeof opts.now === 'function' ? opts.now : function () { return Date.now(); };
+    var entries = [];
+    return {
+      record: function (event) {
+        var item = event && typeof event === 'object' ? event : {};
+        var definition = TOOL_BY_NAME[String(item.tool || '')];
+        if (!definition) throw fail('No se puede registrar una herramienta desconocida.', 'ANK_TOOL_UNKNOWN');
+        var status = String(item.status || 'completed');
+        if (['requested', 'permission_denied', 'cancelled', 'completed', 'failed'].indexOf(status) === -1) {
+          status = 'failed';
+        }
+        var relativePath = '';
+        if (item.path != null && item.path !== '') {
+          try { relativePath = normalizarRutaProyecto(item.path, true); }
+          catch (_) { relativePath = '[ruta omitida]'; }
+        }
+        var stamp = Number(now());
+        if (!isFinite(stamp) || stamp < 0) stamp = Date.now();
+        var entry = {
+          timestamp: new Date(stamp).toISOString(),
+          tool: definition.name,
+          risk: definition.risk,
+          status: status,
+          path: relativePath
+        };
+        entries.push(entry);
+        if (entries.length > maxEntries) entries.splice(0, entries.length - maxEntries);
+        return clonarJSON(entry);
+      },
+      list: function () { return clonarJSON(entries); },
+      clear: function () { entries.length = 0; }
+    };
+  }
+
+  function herramientasAgente() {
+    return clonarJSON(TOOL_DEFINITIONS);
+  }
+
   return {
     version: VERSION,
     protocols: PROTOCOLS,
@@ -732,6 +1118,12 @@
     upsertPerfil: upsertPerfil,
     eliminarPerfil: eliminarPerfil,
     endpointUrl: endpointUrl,
+    herramientasAgente: herramientasAgente,
+    normalizarRutaProyecto: normalizarRutaProyecto,
+    normalizarArgumentosHerramienta: normalizarArgumentosHerramienta,
+    validarLlamadaHerramienta: validarLlamadaHerramienta,
+    evaluarPermisoHerramienta: evaluarPermisoHerramienta,
+    crearRegistroActividad: crearRegistroActividad,
     chat: chat
   };
 });
