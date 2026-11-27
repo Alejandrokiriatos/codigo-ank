@@ -120,6 +120,10 @@ assert.ok(manifest.includes('android:fullBackupContent="@xml/ank_backup_rules"')
   'El manifiesto debe aplicar exclusiones de backup para el almacén Keystore.');
 assert.ok(backupRules.includes('domain="sharedpref" path="ank_api_secrets.xml"'),
   'El backup clásico debe excluir las preferencias cifradas ligadas al dispositivo.');
+assert.ok(backupRules.includes('domain="file" path="ank-ai/backups/"'),
+  'El backup clásico no debe copiar los snapshots locales de código.');
+assert.ok(extractionRules.includes('domain="file" path="ank-ai/backups/"'),
+  'Android 12+ no debe transferir snapshots locales a otro dispositivo.');
 assert.ok(extractionRules.includes('<cloud-backup>') && extractionRules.includes('<device-transfer>') &&
   (extractionRules.match(/domain="sharedpref" path="ank_api_secrets.xml"/g) || []).length === 2,
   'Android 12+ debe excluir el vault tanto del backup cloud como de la transferencia.');
@@ -193,7 +197,19 @@ assert.match(panel, /function rutaConfigApi\(\)\s*\{\s*return st\.prefix \+ '\/a
   'La configuración API debe guardarse bajo el directorio privado de la aplicación.');
 assert.match(panel, /leerTexto\(rutaConfigApi\(\)\)/, 'No se restaura provider.json.');
 assert.match(panel, /escribir\(rutaConfigApi\(\), JSON\.stringify\(data\)\)/, 'No se persiste provider.json.');
-assert.match(panel, /window\.ANKAIEngine\.chat\(/, 'El chat no utiliza el motor multi-API.');
+assert.match(panel, /window\.ANKAIEngine\.chat\(/, 'El transporte API del chat debe seguir disponible.');
+assert.match(panel, /window\.ANKAIEngine\.runAgent\(/, 'El chat de protocolos compatibles debe utilizar el orquestador de herramientas.');
+assert.match(engine, /function runAgent\(options\)/, 'El motor no contiene el orquestador multi-ronda.');
+assert.match(engine, /function evaluarPermisoHerramienta\(/, 'Falta la política de autorización del motor.');
+assert.match(panel, /function ejecutarHerramientaProyecto\(call\)/, 'Faltan ejecutores de archivos confinados al proyecto.');
+assert.match(panel, /function permisoHerramientaPanel\(info\)/, 'Falta la solicitud explícita de permisos.');
+assert.match(panel, /function confirmarHerramientaPanel\(info\)/, 'Falta la confirmación por operación sensible.');
+assert.match(panel, /function backupAntesDeHerramienta\(call\)/, 'Falta el respaldo previo a las mutaciones.');
+assert.match(panel, /tools\.filter\(function \(tool\) \{ return tool\.name !== 'terminal\.run'; \}\)/,
+  'La terminal no debe exponerse como herramienta hasta contar con cancelación fiable.');
+assert.match(panel, /function sanitizarContenidoHerramienta\(value\)/, 'Las lecturas del proyecto deben ocultar claves y tokens.');
+assert.match(panel, /function restaurarSnapshotHerramienta\(id\)/, 'Falta restaurar desde copias locales.');
+assert.match(panel, /function rutaRaizBackupsHerramienta\(\)/, 'Falta el directorio interno de copias de seguridad.');
 assert.match(panel, /window\.ANKAIEngine\.normalizarModelo/, 'La interfaz no usa el normalizador de modelos.');
 assert.doesNotMatch(panel, /opencode/i, 'El panel activo aún contiene referencias al runtime OpenCode.');
 assert.match(boot, /script\.src\s*=\s*['"]\.\/ank\/ai\.js['"]/, 'El arranque debe cargar el panel incluido en el APK.');
@@ -239,7 +255,10 @@ for (const capability of [
   'API personalizada',
   'cancela la petición HTTP nativa',
   'timeout del transporte nativo',
-  'conserva identificadores de modelo'
+  'conserva identificadores de modelo',
+  'Bloque 6 · ejecuta rondas OpenAI',
+  'deniega por defecto',
+  'secuencia permiso, confirmación, backup y ejecución'
 ]) {
   assert.ok(tests.toLowerCase().includes(capability.toLowerCase()),
     'Falta una prueba importante: ' + capability);
