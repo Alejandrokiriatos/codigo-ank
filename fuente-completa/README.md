@@ -79,13 +79,13 @@ requieren un adaptador específico.
 
 ### Perfiles de conexión y ajustes visuales
 
-El panel 2.4.1 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. Las configuraciones antiguas se migran automáticamente a `provider.json v6`.
+El panel 2.5.0 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. Las configuraciones antiguas se migran automáticamente a `provider.json v6`.
 
 El diseño del asistente se reorganizó para teléfono y escritorio: ventana adaptable, navegación de pestañas más clara, tarjetas de estado, controles táctiles grandes, formularios con foco visible y contraste reforzado. El chat identifica el perfil y el modelo activos. Al cambiar de conexión se limpia el campo de clave para que un secreto tecleado en un perfil no se arrastre al siguiente.
 
 ### Seguridad de las claves API
 
-Las claves API, las cabeceras personalizadas y las plantillas JSON del cuerpo no se guardan en `localStorage` ni en `provider.json`. En Android se guardan juntas por perfil en preferencias cifradas con una clave maestra respaldada por Android Keystore: AES256-GCM para valores y AES256-SIV para nombres de claves. Desde Entorno puedes eliminar la clave cifrada sin borrar el perfil.
+Las claves API, las cabeceras personalizadas y las plantillas JSON del cuerpo no se guardan en `localStorage` ni en `provider.json`. En Android se guardan juntas por perfil en preferencias cifradas (vault v2) con una clave maestra respaldada por Android Keystore: AES256-GCM para valores y AES256-SIV para nombres de claves. Desde Entorno puedes eliminar la clave cifrada sin borrar el perfil.
 
 El archivo de preferencias cifradas queda excluido del backup clásico y de Android 12+ tanto en la copia cloud como en la transferencia entre dispositivos, porque el ciphertext depende de una clave Android Keystore no exportable. Las configuraciones v3, v4 y v5 con campos privados en `provider.json` se migran al almacén seguro; si el cifrado falla, el archivo antiguo se conserva y los campos privados no se activan en esa sesión, para no perder datos ni utilizarlos sin protección.
 
