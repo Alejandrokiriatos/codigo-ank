@@ -64,6 +64,13 @@ assert.ok(panel.includes('delete safe.apiKey') && panel.includes('delete safe.cu
 assert.match(panel, /ank\.api\.profile\.v2\./, 'El vault debe usar el esquema de secretos versionado v2.');
 assert.match(panel, /function cargarPerfilSeguro\(perfil, rawProfile, necesitaMigracion\)/,
   'Falta la migración de configuraciones privadas antiguas al vault v2.');
+assert.match(panel, /function procesarPerfilesEnSerie\(perfiles, procesar\)/,
+  'Las lecturas y escrituras del vault deben ejecutarse en serie para evitar inicializaciones simultáneas de Tink.');
+assert.ok(panel.includes('return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro)'),
+  'Los perfiles deben guardar su bloque privado completo dentro del almacén cifrado.');
+assert.ok(panel.includes('customHeaders: String(perfil && perfil.customHeaders ||') &&
+  panel.includes('customBodyTemplate: String(perfil && perfil.customBodyTemplate ||'),
+  'El registro cifrado debe incluir cabeceras personalizadas y plantillas JSON.');
 assert.ok(panel.includes("conSistema('secureSet'") && panel.includes("conSistema('secureGet'") && panel.includes("conSistema('secureRemove'"),
   'El panel debe escribir, leer y borrar secretos mediante el almacén nativo cifrado.');
 assert.match(panel, /function eliminarClaveApi\(\)/, 'Falta la eliminación manual de la clave API cifrada.');
