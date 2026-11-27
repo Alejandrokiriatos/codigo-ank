@@ -735,6 +735,7 @@ test('valida estrictamente argumentos de lectura y escritura', () => {
   assert.throws(() => Engine.normalizarArgumentosHerramienta('project.write_file', { path: 'src/a.js', content: 42 }), /contenido debe ser texto/);
   assert.throws(() => Engine.normalizarArgumentosHerramienta('project.write_file', { path: 'src/a.js', content: 'x', confirmed: true }), /Argumento no reconocido/);
   assert.throws(() => Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/a.js', maxBytes: '65536' }), /maxBytes debe ser un entero/);
+  assert.throws(() => Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/a.js', maxBytes: 24577 }), /maxBytes debe ser un entero entre 1 y 24576/);
 });
 
 test('requiere permiso explícito incluso para herramientas de lectura', () => {
