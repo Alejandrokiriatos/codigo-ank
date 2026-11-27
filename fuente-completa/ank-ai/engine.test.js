@@ -1003,3 +1003,288 @@ test('Bloque 6 · rechaza herramientas en el protocolo JSON personalizado sin co
   );
 });
 
+test('Bloque 6 · ejecuta rondas OpenAI, valida permiso y devuelve resultado al modelo', async () => {
+  const requests = [];
+  let callCount = 0;
+  const http = {
+    sendRequest(_url, options, success) {
+      requests.push(JSON.parse(JSON.stringify(options.data)));
+      callCount += 1;
+      if (callCount === 1) {
+        success({ status: 200, data: JSON.stringify({
+          choices: [{
+            message: {
+              content: null,
+              tool_calls: [{
+                id: 'call_roundtrip_1',
+                type: 'function',
+                function: { name: 'project_read_file', arguments: '{"path":"src/main.js"}' }
+              }]
+            },
+            finish_reason: 'tool_calls'
+          }]
+        }) });
+      } else {
+        success({ status: 200, data: JSON.stringify({
+          choices: [{ message: { content: 'El archivo contiene const x = 1;' }, finish_reason: 'stop' }]
+        }) });
+      }
+      return callCount;
+    },
+    abort() {}
+  };
+  const executed = [];
+  const result = await Engine.runAgent({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'agent-secret',
+    model: 'agent-model',
+    http,
+    messages: [{ role: 'user', content: 'Lee src/main.js' }],
+    permissions: { read: true },
+    executeTool: async (call) => {
+      executed.push(call.name);
+      return 'const x = 1;';
+    }
+  });
+  assert.deepEqual(executed, ['project.read_file']);
+  assert.equal(result.content, 'El archivo contiene const x = 1;');
+  assert.equal(result.rounds, 2);
+  assert.equal(result.toolCallsExecuted, 1);
+  assert.equal(result.activity.length, 2);
+  assert.equal(result.activity[1].status, 'completed');
+  assert.ok(requests[1].messages.some((m) =>
+    m.role === 'assistant' && m.tool_calls && m.tool_calls[0].id === 'call_roundtrip_1'
+  ));
+  assert.ok(requests[1].messages.some((m) =>
+    m.role === 'tool' && m.tool_call_id === 'call_roundtrip_1' && m.content === 'const x = 1;'
+  ));
+});
+
+test('Bloque 6 · deniega por defecto cuando falta permiso y no ejecuta la herramienta', async () => {
+  let request = 0;
+  let executed = false;
+  const http = {
+    sendRequest(_url, options, success) {
+      request += 1;
+      if (request === 1) {
+        success({ status: 200, data: JSON.stringify({
+          choices: [{
+            message: {
+              tool_calls: [{
+                id: 'call_denied_1',
+                function: { name: 'project_read_file', arguments: '{"path":"src/main.js"}' }
+              }]
+            }
+          }]
+        }) });
+      } else {
+        assert.ok(options.data.messages.some((m) =>
+          m.role === 'tool' && /Permiso denegado/.test(m.content)
+        ));
+        success({ status: 200, data: JSON.stringify({
+          choices: [{ message: { content: 'No tengo permiso para leerlo.' } }]
+        }) });
+      }
+      return request;
+    },
+    abort() {}
+  };
+  const result = await Engine.runAgent({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'secret',
+    model: 'm',
+    http,
+    messages: [{ role: 'user', content: 'Lee src/main.js' }],
+    executeTool: async () => { executed = true; return 'no debe ocurrir'; }
+  });
+  assert.equal(executed, false);
+  assert.equal(result.toolCallsExecuted, 0);
+  assert.equal(result.activity[1].status, 'permission_denied');
+});
+
+test('Bloque 6 · escritura exige confirmación y copia previa real antes del ejecutor', async () => {
+  let n = 0;
+  const order = [];
+  const http = {
+    sendRequest(_url, options, success) {
+      n += 1;
+      if (n === 1) {
+        success({ status: 200, data: JSON.stringify({
+          choices: [{
+            message: {
+              tool_calls: [{
+                id: 'call_write_1',
+                function: {
+                  name: 'project_write_file',
+                  arguments: JSON.stringify({ path: 'src/main.js', content: 'updated' })
+                }
+              }]
+            }
+          }]
+        }) });
+      } else {
+        assert.ok(options.data.messages.some((m) =>
+          m.role === 'tool' && /copia previa/.test(m.content)
+        ));
+        success({ status: 200, data: JSON.stringify({
+          choices: [{ message: { content: 'No se modificó el archivo.' } }]
+        }) });
+      }
+      return n;
+    },
+    abort() {}
+  };
+  let executed = false;
+  const result = await Engine.runAgent({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'secret',
+    model: 'm',
+    http,
+    messages: [{ role: 'user', content: 'Actualiza src/main.js' }],
+    permissions: { write: true },
+    confirmTool: async () => { order.push('confirm'); return true; },
+    createBackup: async () => { order.push('backup'); return { created: false }; },
+    executeTool: async () => { executed = true; return true; }
+  });
+  assert.deepEqual(order, ['confirm', 'backup']);
+  assert.equal(executed, false);
+  assert.equal(result.toolCallsExecuted, 0);
+});
+
+test('Bloque 6 · secuencia permiso, confirmación, backup y ejecución para escritura', async () => {
+  let n = 0;
+  const order = [];
+  const http = {
+    sendRequest(_url, options, success) {
+      n += 1;
+      if (n === 1) {
+        success({ status: 200, data: JSON.stringify({
+          choices: [{
+            message: {
+              tool_calls: [{
+                id: 'call_write_2',
+                function: {
+                  name: 'project_write_file',
+                  arguments: '{"path":"src/app.js","content":"safe"}'
+                }
+              }]
+            }
+          }]
+        }) });
+      } else {
+        success({ status: 200, data: JSON.stringify({
+          choices: [{ message: { content: 'Archivo modificado con respaldo.' } }]
+        }) });
+      }
+      return n;
+    },
+    abort() {}
+  };
+  const result = await Engine.runAgent({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'secret',
+    model: 'm',
+    http,
+    messages: [{ role: 'user', content: 'Actualiza src/app.js' }],
+    permissions: { write: true },
+    confirmTool: async () => { order.push('confirm'); return true; },
+    createBackup: async () => { order.push('backup'); return { created: true, id: 'backup-1' }; },
+    executeTool: async (call, context) => {
+      order.push('execute');
+      assert.equal(call.arguments.content, 'safe');
+      assert.equal(context.backupId, 'backup-1');
+      return { written: true };
+    }
+  });
+  assert.deepEqual(order, ['confirm', 'backup', 'execute']);
+  assert.equal(result.toolCallsExecuted, 1);
+  assert.equal(result.activity[1].status, 'completed');
+});
+
+test('Bloque 6 · limita rondas y no permite ejecución ilimitada del agente', async () => {
+  let n = 0;
+  const http = {
+    sendRequest(_url, _options, success) {
+      n += 1;
+      success({ status: 200, data: JSON.stringify({
+        choices: [{
+          message: {
+            tool_calls: [{
+              id: 'loop-' + n,
+              function: { name: 'project_list_files', arguments: '{}' }
+            }]
+          }
+        }]
+      }) });
+      return n;
+    },
+    abort() {}
+  };
+  await assert.rejects(
+    Engine.runAgent({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: 'secret',
+      model: 'm',
+      http,
+      messages: [{ role: 'user', content: 'Continúa' }],
+      permissions: { read: true },
+      maxToolRounds: 2,
+      executeTool: async () => ['file.txt']
+    }),
+    (error) => error.code === 'ANK_TOOL_ROUND_LIMIT'
+  );
+  assert.equal(n, 2);
+});
+
+test('Bloque 6 · transporta tool_use y tool_result en Anthropic', async () => {
+  const captured = {};
+  await Engine.chat({
+    protocol: 'anthropic-messages',
+    endpoint: 'https://api.anthropic.com/v1',
+    apiKey: 'anthropic-secret',
+    model: 'claude-agent-model',
+    tools: Engine.herramientasAgente(),
+    messages: [
+      { role: 'user', content: 'Lee un archivo' },
+      { role: 'assistant', content: '', toolCalls: [{
+        id: 'toolu_1', name: 'project.read_file', arguments: { path: 'src/a.js' }
+      }] },
+      { role: 'tool', toolCallId: 'toolu_1', name: 'project.read_file', content: 'contenido' }
+    ],
+    http: nativeSuccess({ content: [{ type: 'text', text: 'Siguiente paso' }] }, captured)
+  });
+  const assistant = captured.options.data.messages[1];
+  const toolResult = captured.options.data.messages[2];
+  assert.equal(assistant.role, 'assistant');
+  assert.equal(assistant.content[0].type, 'tool_use');
+  assert.equal(assistant.content[0].name, 'project_read_file');
+  assert.equal(toolResult.role, 'user');
+  assert.equal(toolResult.content[0].type, 'tool_result');
+  assert.equal(toolResult.content[0].tool_use_id, 'toolu_1');
+});
+
+test('Bloque 6 · transporta functionCall y functionResponse en Gemini', async () => {
+  const captured = {};
+  await Engine.chat({
+    protocol: 'gemini-generate-content',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    apiKey: 'gemini-secret',
+    model: 'gemini-agent-model',
+    tools: Engine.herramientasAgente(),
+    messages: [
+      { role: 'user', content: 'Lee un archivo' },
+      { role: 'assistant', content: '', toolCalls: [{
+        id: 'gemini-call-1', name: 'project.read_file', arguments: { path: 'src/a.js' }
+      }] },
+      { role: 'tool', toolCallId: 'gemini-call-1', name: 'project.read_file', content: 'contenido' }
+    ],
+    http: nativeSuccess({ candidates: [{ content: { parts: [{ text: 'Siguiente paso' }] } }] }, captured)
+  });
+  const modelParts = captured.options.data.contents[1].parts;
+  const resultParts = captured.options.data.contents[2].parts;
+  assert.equal(modelParts[0].functionCall.name, 'project_read_file');
+  assert.equal(modelParts[0].functionCall.args.path, 'src/a.js');
+  assert.equal(resultParts[0].functionResponse.name, 'project_read_file');
+  assert.equal(resultParts[0].functionResponse.response.result, 'contenido');
+});
+
