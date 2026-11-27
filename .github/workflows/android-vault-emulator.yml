@@ -108,9 +108,11 @@ jobs:
                     step = "SEED";
                     await api.seed("probe.txt", original);
                     await api.seed("secret.txt", 'OPENAI_API_KEY="ANK-TOOL-CI-DUMMY-SECRET"');
+                    await api.seed(".editorconfig", "root = true");
                     step = "LIST";
                     var listing = await api.execute("project.list_files", { path: ".", maxDepth: 2 });
                     assert(listing.files.some(function (x) { return x.path === "probe.txt"; }), "LIST_MISSING_FILE");
+                    assert(listing.files.some(function (x) { return x.path === ".editorconfig"; }), "LIST_HIDDEN_CONFIG_SKIPPED");
                     step = "READ";
                     var read = await api.execute("project.read_file", { path: "probe.txt" });
                     assert(read.content === original && typeof read.digest === "string" && read.digest.indexOf("fnv1a32-") === 0, "READ_MISMATCH");
@@ -161,6 +163,7 @@ jobs:
                     step = "CLEANUP";
                     await api.removeFile("probe.txt").catch(function () {});
                     await api.removeFile("secret.txt").catch(function () {});
+                    await api.removeFile(".editorconfig").catch(function () {});
                     for (var backup of [originalBackup, beforeRestoreBackup, beforeDeleteBackup, beforeMissingRestoreBackup]) {
                       if (backup && backup.id) await api.removeBackup(backup.id).catch(function () {});
                     }
