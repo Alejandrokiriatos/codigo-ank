@@ -79,19 +79,19 @@ requieren un adaptador específico.
 
 ### Perfiles de conexión y ajustes visuales
 
-El panel 2.4.1 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. Las configuraciones antiguas se migran automáticamente a `provider.json v5`.
+El panel 2.4.1 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. Las configuraciones antiguas se migran automáticamente a `provider.json v6`.
 
 El diseño del asistente se reorganizó para teléfono y escritorio: ventana adaptable, navegación de pestañas más clara, tarjetas de estado, controles táctiles grandes, formularios con foco visible y contraste reforzado. El chat identifica el perfil y el modelo activos. Al cambiar de conexión se limpia el campo de clave para que un secreto tecleado en un perfil no se arrastre al siguiente.
 
 ### Seguridad de las claves API
 
-Las claves no se guardan en `localStorage` ni en `provider.json`. En Android se guardan en preferencias cifradas con una clave maestra respaldada por Android Keystore: AES256-GCM para valores y AES256-SIV para nombres de claves. Desde Entorno puedes eliminar la clave cifrada sin borrar el perfil.
+Las claves API, las cabeceras personalizadas y las plantillas JSON del cuerpo no se guardan en `localStorage` ni en `provider.json`. En Android se guardan juntas por perfil en preferencias cifradas con una clave maestra respaldada por Android Keystore: AES256-GCM para valores y AES256-SIV para nombres de claves. Desde Entorno puedes eliminar la clave cifrada sin borrar el perfil.
 
-El archivo de preferencias cifradas queda excluido del backup clásico y de Android 12+ tanto en la copia cloud como en la transferencia entre dispositivos, porque el ciphertext depende de una clave Android Keystore no exportable. Las configuraciones antiguas con clave en `provider.json` se migran al almacén seguro; si el cifrado falla, el archivo antiguo se conserva y el problema queda registrado para no perder la clave.
+El archivo de preferencias cifradas queda excluido del backup clásico y de Android 12+ tanto en la copia cloud como en la transferencia entre dispositivos, porque el ciphertext depende de una clave Android Keystore no exportable. Las configuraciones v3, v4 y v5 con campos privados en `provider.json` se migran al almacén seguro; si el cifrado falla, el archivo antiguo se conserva y los campos privados no se activan en esa sesión, para no perder datos ni utilizarlos sin protección.
 
 El arranque siempre carga el panel incluido en el APK. No ejecuta JavaScript o CSS guardados en `localStorage`; elimina los paquetes web antiguos mientras el actualizador remoto siga desactivado. La actualización remota solo se reabrirá cuando la firma Ed25519 se valide antes de ejecutar el contenido.
 
-Las configuraciones antiguas sin campo `protocol` siguen leyéndose como OpenAI Chat Completions para conservar compatibilidad; los perfiles antiguos se migran automáticamente a `provider.json v5` sin descartar los parámetros guardados. Android utiliza el transporte HTTP nativo de Cordova; fuera de Cordova se utiliza `fetch`. OpenAI compatible ofrece streaming cuando la respuesta y el entorno lo permiten; Anthropic, Gemini y API personalizada utilizan respuesta JSON completa en esta versión.
+Las configuraciones antiguas sin campo `protocol` siguen leyéndose como OpenAI Chat Completions para conservar compatibilidad; los perfiles antiguos se migran automáticamente a `provider.json v6` sin descartar los parámetros guardados. Android utiliza el transporte HTTP nativo de Cordova; fuera de Cordova se utiliza `fetch`. OpenAI compatible ofrece streaming cuando la respuesta y el entorno lo permiten; Anthropic, Gemini y API personalizada utilizan respuesta JSON completa en esta versión.
 
 El almacenamiento cifrado y el arranque seguro ya pasan la auditoría estática y la reconstrucción Smali con Apktool. Aun así, la lectura/escritura de Android Keystore debe probarse en un teléfono real antes de distribuir una APK release firmada.
 
