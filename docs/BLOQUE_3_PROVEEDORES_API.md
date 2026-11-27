@@ -60,18 +60,18 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Cada perfil mantiene protocolo, endpoint, modelo y opciones personalizadas. Los secretos y los campos libres de cabeceras/cuerpo se almacenan cifrados fuera de `provider.json`.
 - El selector cambia entre perfiles sin volver a pegar las claves. Las ediciones del perfil anterior se capturan antes de cambiar o crear uno nuevo.
 - Se puede crear una conexión nueva y eliminar la conexión activa; al borrar la última se genera una ficha vacía para no dejar los ajustes inutilizables.
-- Los perfiles v3 de una sola conexión se migran automáticamente a `provider.json` v6 como «Conexión principal»; los formatos v3/v4/v5 transfieren las claves, cabeceras personalizadas y plantillas JSON al almacén cifrado antes de retirar esos campos del archivo.
+- Los perfiles v3 de una sola conexión se migran automáticamente a `provider.json` v7 como «Conexión principal»; los formatos v3/v4/v5 transfieren las claves, cabeceras personalizadas y plantillas JSON al almacén cifrado antes de retirar esos campos del archivo.
 - La selección activa se restaura al abrir el panel.
 - Al cambiar, crear o eliminar perfiles, se limpia el campo de clave API para que una clave escrita en un perfil no termine accidentalmente en otro.
 - En el chat se identifica el perfil activo junto al modelo.
 - Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
 - La lógica de creación, normalización, migración, actualización y eliminación de perfiles vive en `ank-ai/engine.js`, independiente de la vista. Esto permite probar las reglas del almacén sin depender del DOM.
 
-Las claves API, los prefijos de autenticación personalizados, las cabeceras adicionales y las plantillas JSON del cuerpo ya no se escriben en `provider.json`: se almacenan juntos por perfil en `EncryptedSharedPreferences` (AES256-SIV para nombres y AES256-GCM para valores), con una clave maestra `AES256_GCM` respaldada por Android Keystore. El puente Cordova del plugin `System` expone lectura, escritura y borrado para cada perfil. `provider.json` v6 conserva solo los parámetros no sensibles. Las configuraciones v3, v4, v5 y v6 se migran al almacén cifrado antes de retirar esos campos del archivo; si falla, se conserva el archivo previo y los campos privados no se activan en esa sesión hasta poder cifrarlos. No se debe compartir `provider.json` ni incluirlo en un repositorio.
+Las claves API, los prefijos de autenticación personalizados, las cabeceras adicionales y las plantillas JSON del cuerpo ya no se escriben en `provider.json`: se almacenan juntos por perfil en `EncryptedSharedPreferences` (AES256-SIV para nombres y AES256-GCM para valores), con una clave maestra `AES256_GCM` respaldada por Android Keystore. El puente Cordova del plugin `System` expone lectura, escritura y borrado para cada perfil. `provider.json` v7 conserva solo los parámetros no sensibles. Las configuraciones v3, v4, v5 y v6 se migran al almacén cifrado antes de retirar esos campos del archivo; si falla, se conserva el archivo previo y los campos privados no se activan en esa sesión hasta poder cifrarlos. No se debe compartir `provider.json` ni incluirlo en un repositorio.
 
 Las reglas de copia de seguridad clásicas y Android 12+ excluyen `ank_api_secrets.xml` tanto de copia cloud como de transferencia entre dispositivos. El ciphertext depende de una clave Android Keystore que no puede trasladarse con el archivo cifrado.
 
-### Diseño del panel 2.6.0
+### Diseño del panel 2.6.1
 
 - El arranque del APK solo carga `./ank/ai.js`, que es el panel integrado en la aplicación. Ya no ejecuta JavaScript o CSS guardados en `localStorage`; los paquetes antiguos no firmados se eliminan al iniciar.
 - Mientras el actualizador remoto siga desactivado, no se aceptan paquetes web. La reactivación exige validación de firma Ed25519 en el arranque, antes de ejecutar el contenido.
@@ -122,13 +122,13 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 
 ### Resultado CI del 27/11/2026
 
-La ejecución [45976502430](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45976502430) terminó correctamente:
+La ejecución [45977352553](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45977352553) terminó correctamente:
 
 - 28 pruebas del motor: 28 correctas, 0 fallidas.
 - Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
-- Auditoría estática de los perfiles: migración v3–v5, formato v6, creación, selección y eliminación.
+- Auditoría estática de los perfiles: migración v3–v6, formato v7, creación, selección y eliminación.
 - Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias de publicación y del actualizador interno.
-- Auditoría del almacenamiento de secretos: puente Cordova, `System.smali`, `ApiVault.smali` y `EncryptedSharedPreferences` detectados y conectados; claves, cabeceras personalizadas y plantillas JSON excluidas de `provider.json` v6.
+- Auditoría del almacenamiento de secretos: puente Cordova, `System.smali`, `ApiVault.smali` y `EncryptedSharedPreferences` detectados y conectados; claves, prefijos de autenticación, cabeceras personalizadas y plantillas JSON excluidas de `provider.json` v7.
 - Copias de seguridad: `ank_api_secrets.xml` excluido del backup clásico y de Android 12+ cloud/device transfer.
 - Arranque: no se evalúa código guardado localmente; el inicio siempre carga el panel del APK y elimina los bundles web previos no verificados.
 - Lecturas, escrituras y borrados del vault serializados para evitar carreras de Tink/SharedPreferences entre perfiles; escritura síncrona verificada mediante `commit()`.
