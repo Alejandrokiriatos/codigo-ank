@@ -382,6 +382,9 @@
 
   function normalizarHerramientasProveedor(tools, protocol) {
     var source = Array.isArray(tools) ? tools : [];
+    if (source.length && protocol === PROTOCOLS.custom) {
+      throw fail('El protocolo JSON personalizado no define un formato común de tool calling.', 'ANK_TOOL_PROTOCOL_UNSUPPORTED');
+    }
     if (source.length > 20) throw fail('Se permiten como máximo 20 herramientas por solicitud.', 'ANK_TOOL_LIMIT');
     var seen = Object.create(null);
     var declarations = source.map(function (tool) {
