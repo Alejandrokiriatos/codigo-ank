@@ -544,3 +544,53 @@ test('la normalización de perfiles descarta modelos con caracteres de control',
   assert.equal(result.model, '');
 });
 
+
+
+test('Anthropic conserva el mensaje system en transporte fetch', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  let request;
+  global.fetch = async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: 'text', text: 'Respuesta web Anthropic' }], stop_reason: 'end_turn' })
+    };
+  };
+  const result = await Engine.chat({
+    protocol: 'anthropic-messages',
+    endpoint: 'https://api.anthropic.com/v1',
+    apiKey: 'anthropic-secret',
+    model: 'claude-example',
+    messages: [
+      { role: 'system', content: 'Instrucción del sistema.' },
+      { role: 'user', content: 'Hola' }
+    ]
+  });
+  assert.equal(request.url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(JSON.parse(request.options.body).system, 'Instrucción del sistema.');
+  assert.equal(result.content, 'Respuesta web Anthropic');
+});
+
+test('el timeout de fetch se informa como timeout y no como cancelación manual', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  global.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      reject(error);
+    }, { once: true });
+  });
+  await assert.rejects(
+    Engine.chat({
+      endpoint: 'https://api.example.com/v1',
+      apiKey: 'secret',
+      model: 'm',
+      messages: [{ role: 'user', content: 'espera' }],
+      timeoutMs: 10
+    }),
+    (error) => error.code === 'ANK_AI_TIMEOUT'
+  );
+});
