@@ -122,7 +122,7 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 
 ### Resultado CI del 27/11/2026
 
-La ejecución [45977352553](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45977352553) terminó correctamente:
+La ejecución final del bloque [45978318715](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45978318715) terminó correctamente:
 
 - 28 pruebas del motor: 28 correctas, 0 fallidas.
 - Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
@@ -133,6 +133,7 @@ La ejecución [45977352553](https://github.com/Alejandrokiriatos/codigo-ank/acti
 - Arranque: no se evalúa código guardado localmente; el inicio siempre carga el panel del APK y elimina los bundles web previos no verificados.
 - Lecturas, escrituras y borrados del vault serializados para evitar carreras de Tink/SharedPreferences entre perfiles; escritura síncrona verificada mediante `commit()`.
 - Se comprobó además que `ank/ai.js`, `.repo-publicacion/ank/ai.js`, `update/ank/ai.js` y las copias incluidas en Android coinciden byte a byte; los paneles de publicación no contienen el runtime OpenCode.
+- Auditoría del conjunto de fuentes: 334 archivos JavaScript/MJS pasan `node --check`; el workflow del bloque 1 también termina correctamente.
 - Se incorporó una corrección de aislamiento: al cambiar, crear o eliminar perfiles, se vacía el campo de clave, evitando reutilizar accidentalmente una clave que quedó escrita en el perfil anterior.
 - Diseño responsive: reglas verificadas para teléfono y escritorio.
 - Sin referencias de OpenCode en el panel activo; las claves no se guardan en `localStorage`.
@@ -148,6 +149,4 @@ La ejecución [45892806329](https://github.com/Alejandrokiriatos/codigo-ank/acti
 
 La CI valida el comportamiento simulado y la integración estática. No sustituye la prueba real con claves y endpoints de los proveedores, ni la prueba en un teléfono Android con el plugin Cordova instalado.
 
-La reconstrucción Apktool del commit validado volvió a completarse: **15.486.346 bytes**, sin firma release. El workflow solo genera un APK diagnóstico; no se publica como artefacto instalable ni sustituye la firma original. Alpine/AXS/proot sigue excluido y la terminal Linux completa no está disponible en esa reconstrucción.
-
-El workflow de reconstrucción volvió a generar un APK diagnóstico sin firma release de **15.484.081 bytes**. Se deja como resultado técnico de compilación, no como archivo instalable para el usuario: continúan faltando los assets Alpine/AXS/proot del terminal opcional y no está disponible el keystore legítimo de distribución.
+La reconstrucción Apktool más reciente, en la ejecución [45978318765](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45978318765), terminó correctamente y generó un APK diagnóstico de **15.487.151 bytes**. Es un APK **sin firma release** y no se publicó como archivo instalable. La reconstrucción no incluye los assets Alpine/AXS/proot; por ello, el terminal Linux completo sigue sin estar disponible. Tampoco se ha probado en un teléfono ni firmado con la clave legítima de distribución.
