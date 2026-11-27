@@ -985,7 +985,7 @@
     },
     {
       name: 'project.create_backup',
-      description: 'Crea una copia de seguridad del proyecto o de una ruta antes de modificarla.',
+      description: 'Crea una copia de seguridad de un archivo del proyecto.',
       permission: 'backup',
       risk: 'backup',
       requiresConfirmation: false,
