@@ -135,6 +135,9 @@ jobs:
       - name: Ejecutar ciclo cifrado en emulador
         timeout-minutes: 18
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # Emulator 37+ requires explicit opt-in when the GitHub Linux runner has no KVM.
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           api-level: 30
           arch: x86_64
