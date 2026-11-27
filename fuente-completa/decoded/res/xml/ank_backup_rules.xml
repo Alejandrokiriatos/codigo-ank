@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- EncryptedSharedPreferences requires the Android Keystore master key.
+         The keystore key is not portable in an ordinary app-data backup. -->
+    <exclude domain="sharedpref" path="ank_api_secrets.xml" />
+</full-backup-content>
