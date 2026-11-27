@@ -51,8 +51,21 @@
 
     move-result-object v0
 
-    invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
+    invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->commit()Z
 
+    move-result v1
+
+    if-nez v1, :cond_put_saved
+
+    new-instance v0, Ljava/lang/IllegalStateException;
+
+    const-string v1, "Could not persist encrypted API secret"
+
+    invoke-direct {v0, v1}, Ljava/lang/IllegalStateException;-><init>(Ljava/lang/String;)V
+
+    throw v0
+
+    :cond_put_saved
     return-void
 .end method
 
@@ -87,8 +100,21 @@
 
     move-result-object v0
 
-    invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->apply()V
+    invoke-interface {v0}, Landroid/content/SharedPreferences$Editor;->commit()Z
 
+    move-result v1
+
+    if-nez v1, :cond_remove_saved
+
+    new-instance v0, Ljava/lang/IllegalStateException;
+
+    const-string v1, "Could not remove encrypted API secret"
+
+    invoke-direct {v0, v1}, Ljava/lang/IllegalStateException;-><init>(Ljava/lang/String;)V
+
+    throw v0
+
+    :cond_remove_saved
     return-void
 .end method
 
