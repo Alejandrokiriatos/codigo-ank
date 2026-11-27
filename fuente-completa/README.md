@@ -77,9 +77,15 @@ requieren un adaptador específico.
 4. Pega la clave API y pulsa **Guardar conexión**.
 5. Pulsa **Probar conexión** y revisa el resultado en Registro.
 
-Las configuraciones anteriores sin campo `protocol` siguen leyéndose como
-OpenAI Chat Completions para conservar compatibilidad con las conexiones
-guardadas en la versión 2.0.0. Android utiliza el transporte HTTP nativo de
+### Perfiles de conexión y ajustes visuales
+
+El panel 2.4.1 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo, clave y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. La configuración única antigua se migra automáticamente al formato v4.
+
+El diseño del asistente se reorganizó para teléfono y escritorio: ventana adaptable, navegación de pestañas más clara, tarjetas de estado, controles táctiles grandes, formularios con foco visible y contraste reforzado. El chat identifica el perfil y el modelo activos. Al cambiar de conexión se limpia el campo de clave para que un secreto tecleado en un perfil no se arrastre al siguiente.
+
+Las configuraciones antiguas sin campo `protocol` siguen leyéndose como
+OpenAI Chat Completions para conservar compatibilidad; los perfiles v3 de una
+sola conexión se migran a provider.json v4 sin descartar los valores guardados. Android utiliza el transporte HTTP nativo de
 Cordova; fuera de Cordova se utiliza `fetch`. OpenAI compatible ofrece
 streaming cuando la respuesta y el entorno lo permiten; Anthropic, Gemini y
 API personalizada utilizan respuesta JSON completa en esta versión.
@@ -106,8 +112,9 @@ aprobaciones y rollback se desarrollará en el bloque 4.
 - Memoria por proyecto y bitácora.
 - Pestaña Apps y sus mini aplicaciones.
 - Terminal Linux opcional y consola manual.
-- Estadísticas, diagnóstico, registro y actualizador del panel (sin publicar
-  todavía esta versión nueva).
+- Estadísticas, diagnóstico, registro y ajustes multi-proveedor.
+- Canal de actualización remota detenido hasta reemplazar la firma HMAC retirada
+  por verificación asimétrica Ed25519; no se distribuye esta rama por el canal antiguo.
 
 ## Apps
 
