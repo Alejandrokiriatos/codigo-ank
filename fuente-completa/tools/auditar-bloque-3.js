@@ -164,9 +164,9 @@ for (const [method, savedMessage] of [
     method + ' debe confirmar commit y devolver error si falla.');
 }
 for (const [action, success, error] of [
-  ['secureGet', 'CallbackContext;->success(Ljava/lang/String;)V', 'CallbackContext;->error(Ljava/lang/String;)V'],
-  ['securePut', 'CallbackContext;->success()V', 'CallbackContext;->error(Ljava/lang/String;)V'],
-  ['secureRemove', 'CallbackContext;->success()V', 'CallbackContext;->error(Ljava/lang/String;)V']
+  ['secureGet', 'Lorg/apache/cordova/CallbackContext;->success(Ljava/lang/String;)V', 'Lorg/apache/cordova/CallbackContext;->error(Ljava/lang/String;)V'],
+  ['securePut', 'Lorg/apache/cordova/CallbackContext;->success()V', 'Lorg/apache/cordova/CallbackContext;->error(Ljava/lang/String;)V'],
+  ['secureRemove', 'Lorg/apache/cordova/CallbackContext;->success()V', 'Lorg/apache/cordova/CallbackContext;->error(Ljava/lang/String;)V']
 ]) {
   const start = vault.indexOf('const-string v0, "' + action + '"');
   assert.ok(start >= 0, 'ApiVault.execute no reconoce ' + action + '.');
