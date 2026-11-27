@@ -376,8 +376,110 @@
     return headers;
   }
 
+  function nombreHerramientaProveedor(name) {
+    return String(name || '').replace(/\./g, '_');
+  }
+
+  function normalizarHerramientasProveedor(tools, protocol) {
+    var source = Array.isArray(tools) ? tools : [];
+    if (source.length > 20) throw fail('Se permiten como máximo 20 herramientas por solicitud.', 'ANK_TOOL_LIMIT');
+    var seen = Object.create(null);
+    var declarations = source.map(function (tool) {
+      if (!tool || typeof tool !== 'object') throw fail('Definición de herramienta no válida.', 'ANK_TOOL_SCHEMA_INVALID');
+      var original = String(tool.name || '');
+      var name = nombreHerramientaProveedor(original);
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name) || seen[name]) {
+        throw fail('Nombre de herramienta no válido o duplicado: ' + original, 'ANK_TOOL_SCHEMA_INVALID');
+      }
+      seen[name] = original;
+      var parameters = tool.parameters;
+      if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters) ||
+          parameters.type !== 'object' || !parameters.properties || typeof parameters.properties !== 'object' ||
+          parameters.additionalProperties !== false) {
+        throw fail('El esquema de ' + original + ' debe ser un objeto JSON cerrado.', 'ANK_TOOL_SCHEMA_INVALID');
+      }
+      var description = String(tool.description || '').slice(0, 1000);
+      if (protocol === PROTOCOLS.anthropic) {
+        return { name: name, description: description, input_schema: clonarJSON(parameters) };
+      }
+      if (protocol === PROTOCOLS.gemini) {
+        return { name: name, description: description, parameters: clonarJSON(parameters) };
+      }
+      return {
+        type: 'function',
+        function: { name: name, description: description, parameters: clonarJSON(parameters) }
+      };
+    });
+    return { declarations: declarations, names: seen };
+  }
+
+  function analizarArgumentosHerramienta(raw, name) {
+    if (raw == null) return {};
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); }
+      catch (_) { throw fail('El proveedor devolvió argumentos JSON inválidos para ' + name + '.', 'ANK_TOOL_CALL_INVALID'); }
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw fail('Los argumentos de ' + name + ' no son un objeto JSON.', 'ANK_TOOL_CALL_INVALID');
+    }
+    return clonarJSON(raw);
+  }
+
+  function normalizarLlamadasHerramienta(data, protocol, options) {
+    var names = options && options.toolNameMap || {};
+    var rawCalls = [];
+    if (protocol === PROTOCOLS.anthropic) {
+      var blocks = data && Array.isArray(data.content) ? data.content : [];
+      blocks.forEach(function (block) {
+        if (block && block.type === 'tool_use') {
+          rawCalls.push({ id: block.id, name: block.name, arguments: block.input });
+        }
+      });
+    } else if (protocol === PROTOCOLS.gemini) {
+      var candidate = data && data.candidates && data.candidates[0] || {};
+      var parts = candidate.content && candidate.content.parts || [];
+      parts.forEach(function (part, index) {
+        if (part && part.functionCall) {
+          rawCalls.push({
+            id: part.functionCall.id || ('gemini-call-' + index),
+            name: part.functionCall.name,
+            arguments: part.functionCall.args
+          });
+        }
+      });
+    } else {
+      var message = data && data.choices && data.choices[0] && data.choices[0].message || {};
+      (Array.isArray(message.tool_calls) ? message.tool_calls : []).forEach(function (call) {
+        var fn = call && call.function || {};
+        rawCalls.push({ id: call.id, name: fn.name, arguments: fn.arguments });
+      });
+      if (message.function_call) {
+        rawCalls.push({
+          id: 'legacy-function-call',
+          name: message.function_call.name,
+          arguments: message.function_call.arguments
+        });
+      }
+    }
+    return rawCalls.map(function (call) {
+      var providerName = String(call.name || '');
+      var canonical = names[providerName] || providerName.replace(/_/g, '.');
+      if (!TOOL_BY_NAME[canonical]) {
+        throw fail('El proveedor solicitó una herramienta no registrada: ' + providerName, 'ANK_TOOL_UNKNOWN');
+      }
+      var args = analizarArgumentosHerramienta(call.arguments, canonical);
+      var validated = validarLlamadaHerramienta(canonical, args);
+      return {
+        id: String(call.id || ('call-' + canonical)),
+        name: validated.name,
+        arguments: validated.arguments
+      };
+    });
+  }
+
   function crearSolicitud(options, protocol) {
     var messages = normalizarMensajes(options.messages);
+    var toolSet = normalizarHerramientasProveedor(options.tools, protocol);
     var system = messages.filter(function (m) { return m.role === 'system'; })
       .map(function (m) { return m.content; }).join('\n\n');
     var chatMessages = messages.filter(function (m) { return m.role !== 'system'; });
@@ -420,6 +522,10 @@
         temperature: temperature
       };
       if (system) anthropicBody.system = system;
+      if (toolSet.declarations.length) {
+        anthropicBody.tools = toolSet.declarations;
+        anthropicBody.tool_choice = { type: 'auto' };
+      }
       return {
         body: anthropicBody,
         headers: {
@@ -444,6 +550,9 @@
       if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
       var body = { contents: contents, generationConfig: generationConfig };
       if (system) body.systemInstruction = { parts: [{ text: system }] };
+      if (toolSet.declarations.length) {
+        body.tools = [{ functionDeclarations: toolSet.declarations }];
+      }
       return {
         body: body,
         headers: {
@@ -458,10 +567,14 @@
     var openBody = {
       model: String(options.model).trim(),
       messages: messages,
-      stream: true
+      stream: toolSet.declarations.length ? false : true
     };
     if (options.temperature != null && isFinite(Number(options.temperature))) openBody.temperature = temperature;
     if (maxTokens) openBody.max_tokens = maxTokens;
+    if (toolSet.declarations.length) {
+      openBody.tools = toolSet.declarations;
+      openBody.tool_choice = 'auto';
+    }
     return {
       body: openBody,
       headers: {
