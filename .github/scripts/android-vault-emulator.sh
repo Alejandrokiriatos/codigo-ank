@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APK="\${RUNNER_TEMP:?RUNNER_TEMP no está definido}/CodigoANK-vault-ci.apk"
+APK="${RUNNER_TEMP:?RUNNER_TEMP no está definido}/CodigoANK-vault-ci.apk"
 PKG="com.ank.codigoank"
-SDK_ROOT="\${ANDROID_HOME:-\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 
 if [[ ! -f "$APK" ]]; then
   echo "No se encontró la APK temporal: $APK"
@@ -13,7 +13,7 @@ fi
 AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
 if [[ -z "$AAPT" || ! -x "$AAPT" ]]; then
   echo "No se encontró aapt en el SDK: $SDK_ROOT"
-  printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "\${ANDROID_HOME:-}" "\${ANDROID_SDK_ROOT:-}"
+  printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}"
   exit 1
 fi
 
