@@ -3466,7 +3466,7 @@
 
   function esArchivoNoEncontrado(error) {
     if (!error) return false;
-    return error.code === 1 || error.code === 8 ||
+    return error.code === 1 ||
       error.name === 'NotFoundError' || error.name === 'NOT_FOUND_ERR';
   }
 
@@ -3775,13 +3775,26 @@
     var args = info.arguments || {};
     var detail = args.path ? '\nRuta: ' + args.path : '';
     if (info.tool === 'project.write_file') {
-      detail += '\n\nContenido propuesto:\n' + String(args.content || '').slice(0, 1800);
-      if (String(args.content || '').length > 1800) detail += '\n… contenido recortado';
+      detail += '\n\nContenido propuesto (' + String(args.content || '').length + ' caracteres):\n' +
+        String(args.content || '').slice(0, 1800);
+      if (String(args.content || '').length > 1800) {
+        detail += '\n… vista previa recortada; ANK conservará el archivo anterior en un respaldo local.';
+      }
     }
-    if (info.tool === 'project.restore_backup') detail += '\nCopia: ' + args.backupId;
-    var message = 'Confirmación necesaria: ' + info.tool + detail +
-      '\n\nSe creará un respaldo antes de modificar o borrar. ¿Continuar?';
-    return Promise.resolve(typeof window.confirm === 'function' && window.confirm(message));
+    function confirmar(pathExtra) {
+      var message = 'Confirmación necesaria: ' + info.tool + detail + (pathExtra || '') +
+        '\n\nSe creará un respaldo local antes de modificar, borrar o restaurar. ¿Continuar?';
+      return Promise.resolve(typeof window.confirm === 'function' && window.confirm(message));
+    }
+    if (info.tool === 'project.restore_backup') {
+      return leerSnapshotHerramienta(args.backupId).then(function (snapshot) {
+        return confirmar('\nArchivo que se restaurará: ' + snapshot.path + '\nCopia: ' + args.backupId);
+      }).catch(function (error) {
+        aviso('No se puede restaurar esa copia: ' + (error && error.message ? error.message : error));
+        return false;
+      });
+    }
+    return confirmar('');
   }
 
   function herramientasDisponiblesPanel() {
