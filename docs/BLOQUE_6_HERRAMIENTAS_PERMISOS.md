@@ -70,7 +70,7 @@ Siguientes subfases:
 
 ## Pruebas
 
-Se añadieron pruebas para catálogo, rutas, argumentos, permisos de lectura, secuencia permiso/backup/confirmación, terminal, operaciones destructivas y privacidad de la bitácora. El resultado de CI se añadirá cuando la ejecución de la rama termine; no se considera validado únicamente por haber añadido los tests.
+La ejecución CI `45994215921` terminó correctamente: 48 tests, 48 aprobados, 0 fallidos; sintaxis del motor y del panel, comprobación del bundle y auditoría estática también terminaron correctamente. Incluye cobertura del catálogo y política de permisos, adaptadores OpenAI/Anthropic/Gemini, argumentos inválidos, rutas privadas y respuestas de tool calling. Esta validación es de motor JavaScript y bundle, no prueba todavía el bucle de ejecución real de herramientas en Android.
 
 ## Restricciones de distribución
 
