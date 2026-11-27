@@ -6893,6 +6893,53 @@
     move-object/from16 v3, p2
 
     move-object/from16 v4, p3
+    /* API credentials use EncryptedSharedPreferences backed by Android Keystore.
+       These Cordova actions are intercepted before the legacy System dispatcher. */
+    const-string v0, "secureGet"
+
+    invoke-virtual {v2, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_ank_secure_check_put
+
+    goto :cond_ank_secure_dispatch
+
+    :cond_ank_secure_check_put
+    const-string v0, "securePut"
+
+    invoke-virtual {v2, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_ank_secure_check_remove
+
+    goto :cond_ank_secure_dispatch
+
+    :cond_ank_secure_check_remove
+    const-string v0, "secureRemove"
+
+    invoke-virtual {v2, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_ank_secure_fallback
+
+    :cond_ank_secure_dispatch
+    iget-object v0, v1, Lcom/foxdebug/system/System;->context:Landroid/content/Context;
+
+    invoke-static {v0, v2, v3, v4}, Lcom/foxdebug/system/ApiVault;->execute(Landroid/content/Context;Ljava/lang/String;Lorg/json/JSONArray;Lorg/apache/cordova/CallbackContext;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_ank_secure_fallback
+
+    const/4 v11, 0x1
+
+    return v11
+
+    :cond_ank_secure_fallback
+
 
     const-string v0, "package:"
 
