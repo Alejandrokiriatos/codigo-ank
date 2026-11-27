@@ -248,10 +248,11 @@
 
   function crearControl(signal, timeoutMs) {
     if (typeof AbortController === 'undefined') {
-      return { controller: null, signal: signal || undefined, dispose: function () {} };
+      return { controller: null, signal: signal || undefined, isTimedOut: function () { return false; }, dispose: function () {} };
     }
     var controller = new AbortController();
     var timer = null;
+    var timedOut = false;
     var externalAbort = null;
     if (signal) {
       if (signal.aborted) controller.abort();
@@ -260,10 +261,14 @@
         signal.addEventListener('abort', externalAbort, { once: true });
       }
     }
-    if (timeoutMs > 0) timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+    if (timeoutMs > 0) timer = setTimeout(function () {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     return {
       controller: controller,
       signal: controller.signal,
+      isTimedOut: function () { return timedOut; },
       dispose: function () {
         if (timer) clearTimeout(timer);
         if (signal && externalAbort) signal.removeEventListener('abort', externalAbort);
@@ -399,15 +404,17 @@
     }
 
     if (protocol === PROTOCOLS.anthropic) {
+      var anthropicBody = {
+        model: String(options.model).trim(),
+        max_tokens: maxTokens || 4096,
+        messages: chatMessages.map(function (m) {
+          return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
+        }),
+        temperature: temperature
+      };
+      if (system) anthropicBody.system = system;
       return {
-        body: {
-          model: String(options.model).trim(),
-          max_tokens: maxTokens || 4096,
-          messages: chatMessages.map(function (m) {
-            return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
-          }),
-          temperature: temperature
-        },
+        body: anthropicBody,
         headers: {
           'x-api-key': String(options.apiKey),
           'anthropic-version': '2023-06-01',
@@ -682,7 +689,10 @@
         }).catch(function (err) {
           if (err && err.code) throw err;
           if (err && err.name === 'AbortError') {
-            throw fail('La solicitud se canceló o superó el tiempo de espera.', 'ANK_AI_ABORTED');
+            if (control.isTimedOut()) {
+              throw fail('La solicitud superó el tiempo de espera.', 'ANK_AI_TIMEOUT');
+            }
+            throw fail('La solicitud fue cancelada.', 'ANK_AI_ABORTED');
           }
           var message = err && err.message ? err.message : String(err || 'Error de red');
           if (/failed to fetch|networkerror|load failed/i.test(message)) {
