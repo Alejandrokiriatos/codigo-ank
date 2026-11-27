@@ -65,10 +65,11 @@ jobs:
             var secret = SECRET_VALUE;
             var key = "__ank_ci_vault_probe_v1";
             var phaseKey = "__ank_ci_vault_phase_v1";
-            var finished = false;
+            window.__ANK_CI_TOOL_TEST__ = true;
+            var reported = Object.create(null);
             function report(code) {
-              if (finished) return;
-              finished = true;
+              if (reported[code]) return;
+              reported[code] = true;
               console.log("ANK_VAULT_CI:" + code);
               document.documentElement.setAttribute("data-ank-vault-ci", code);
             }
@@ -77,6 +78,102 @@ jobs:
               try {
                 cordova.exec(ok, function () { bad(); }, "System", action, args);
               } catch (_) { bad(); }
+            }
+            function runToolTests() {
+              var attempts = 0;
+              var timeout = setTimeout(function () { fail("TOOL_TEST_TIMEOUT"); }, 150000);
+              function assert(ok, code) { if (!ok) throw new Error(code); }
+              async function rejected(fn, code) {
+                var didReject = false;
+                try { await fn(); } catch (_) { didReject = true; }
+                assert(didReject, code);
+              }
+              function waitForPanelTools() {
+                var api = window.__ANK_CI_TOOL_TEST_API__;
+                if (!api) {
+                  attempts += 1;
+                  if (attempts > 120) { clearTimeout(timeout); return fail("TOOL_API_UNAVAILABLE"); }
+                  setTimeout(waitForPanelTools, 500);
+                  return;
+                }
+                (async function () {
+                  var step = "INIT";
+                  var original = "alpha needle omega\nline-two";
+                  var originalBackup = null;
+                  var beforeRestoreBackup = null;
+                  var beforeDeleteBackup = null;
+                  var beforeMissingRestoreBackup = null;
+                  try {
+                    await api.init("ank-ci-tools");
+                    step = "SEED";
+                    await api.seed("probe.txt", original);
+                    await api.seed("secret.txt", 'OPENAI_API_KEY="ANK-TOOL-CI-DUMMY-SECRET"');
+                    step = "LIST";
+                    var listing = await api.execute("project.list_files", { path: ".", maxDepth: 2 });
+                    assert(listing.files.some(function (x) { return x.path === "probe.txt"; }), "LIST_MISSING_FILE");
+                    step = "READ";
+                    var read = await api.execute("project.read_file", { path: "probe.txt" });
+                    assert(read.content === original && typeof read.digest === "string" && read.digest.indexOf("fnv1a32-") === 0, "READ_MISMATCH");
+                    step = "SEARCH";
+                    var found = await api.execute("project.search_files", { query: "needle", path: ".", maxResults: 10 });
+                    assert(found.matches.some(function (x) { return x.path === "probe.txt" && x.line === 1; }), "SEARCH_MISMATCH");
+                    step = "SECRET_REDACTION";
+                    var secretRead = await api.execute("project.read_file", { path: "secret.txt" });
+                    assert(secretRead.content.indexOf("ANK-TOOL-CI-DUMMY-SECRET") === -1 &&
+                      secretRead.content.indexOf("[CLAVE OCULTA]") !== -1 && secretRead.digest === null, "SECRET_NOT_REDACTED");
+                    step = "WRITE_REQUIRES_DIGEST";
+                    await rejected(function () {
+                      return api.execute("project.write_file", { path: "probe.txt", content: "unsafe overwrite" });
+                    }, "WRITE_WITHOUT_DIGEST_ACCEPTED");
+                    step = "BACKUP";
+                    originalBackup = await api.backup("project.write_file", { path: "probe.txt" });
+                    assert(originalBackup && originalBackup.created && originalBackup.id, "BACKUP_NOT_CREATED");
+                    step = "WRITE";
+                    await api.execute("project.write_file", {
+                      path: "probe.txt", content: "updated safely", expectedDigest: read.digest
+                    });
+                    var changed = await api.execute("project.read_file", { path: "probe.txt" });
+                    assert(changed.content === "updated safely", "WRITE_MISMATCH");
+                    step = "RESTORE_BACKUP_BEFORE";
+                    beforeRestoreBackup = await api.backup("project.restore_backup", { backupId: originalBackup.id });
+                    assert(beforeRestoreBackup.created && beforeRestoreBackup.id, "RESTORE_ROLLBACK_NOT_CREATED");
+                    step = "RESTORE";
+                    await api.execute("project.restore_backup", { backupId: originalBackup.id });
+                    var restored = await api.execute("project.read_file", { path: "probe.txt" });
+                    assert(restored.content === original, "RESTORE_MISMATCH");
+                    step = "DELETE_REQUIRES_DIGEST";
+                    await rejected(function () {
+                      return api.execute("project.delete_file", { path: "probe.txt" });
+                    }, "DELETE_WITHOUT_DIGEST_ACCEPTED");
+                    step = "BACKUP_BEFORE_DELETE";
+                    beforeDeleteBackup = await api.backup("project.delete_file", { path: "probe.txt" });
+                    step = "DELETE";
+                    await api.execute("project.delete_file", { path: "probe.txt", expectedDigest: restored.digest });
+                    await rejected(function () {
+                      return api.execute("project.read_file", { path: "probe.txt" });
+                    }, "DELETED_FILE_STILL_READABLE");
+                    step = "BACKUP_BEFORE_MISSING_RESTORE";
+                    beforeMissingRestoreBackup = await api.backup("project.restore_backup", { backupId: beforeDeleteBackup.id });
+                    step = "RESTORE_AFTER_DELETE";
+                    await api.execute("project.restore_backup", { backupId: beforeDeleteBackup.id });
+                    var afterDeleteRestore = await api.execute("project.read_file", { path: "probe.txt" });
+                    assert(afterDeleteRestore.content === original, "RESTORE_AFTER_DELETE_MISMATCH");
+                    step = "CLEANUP";
+                    await api.removeFile("probe.txt").catch(function () {});
+                    await api.removeFile("secret.txt").catch(function () {});
+                    for (var backup of [originalBackup, beforeRestoreBackup, beforeDeleteBackup, beforeMissingRestoreBackup]) {
+                      if (backup && backup.id) await api.removeBackup(backup.id).catch(function () {});
+                    }
+                    clearTimeout(timeout);
+                    report("STAGE3_TOOL_OK");
+                  } catch (error) {
+                    clearTimeout(timeout);
+                    console.log("ANK_TOOL_CI_ERROR:" + step + ":" + String(error && error.message || "failure"));
+                    fail("TOOL_" + step + "_FAILED");
+                  }
+                })();
+              }
+              waitForPanelTools();
             }
             document.addEventListener("deviceready", function () {
               var timer = setTimeout(function () { fail("CALLBACK_TIMEOUT"); }, 25000);
@@ -100,6 +197,7 @@ jobs:
                     if (String(after) !== "") return fail("REMOVE_NOT_EMPTY");
                     localStorage.removeItem(phaseKey);
                     done("STAGE2_OK");
+                    runToolTests();
                   }, function () { fail("POST_REMOVE_GET_ERROR"); });
                 }, function () { fail("REMOVE_ERROR"); });
               }, function () { fail("RESTART_GET_ERROR"); });
@@ -107,7 +205,46 @@ jobs:
           })();
           </script>
           """.replace("SECRET_VALUE", secret)
-          path.write_text(html.replace("</body>", harness + "\n</body>"), encoding="utf-8")
+          panel_path = Path("fuente-completa/decoded/assets/www/ank/ai.js")
+          panel = panel_path.read_text(encoding="utf-8")
+          footer = """  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+            else iniciar();
+          })();"""
+          if panel.count(footer) != 1:
+              raise SystemExit("No se encontró el cierre único del panel para instrumentar pruebas de herramientas.")
+          test_hook = """
+            if (window.__ANK_CI_TOOL_TEST__ === true) {
+              window.__ANK_CI_TOOL_TEST_API__ = {
+                init: function (project) {
+                  var safe = window.ANKAIEngine.normalizarRutaProyecto(project, false);
+                  return dirsIniciales().then(function () {
+                    st.project = safe;
+                    return conSistema('mkdirs', st.prefix + '/public/proyectos/' + safe);
+                  });
+                },
+                seed: function (relative, content) {
+                  var target = rutaLocalHerramienta(relative, false);
+                  return conSistema('mkdirs', target.absolute.replace(/\\/[^\\/]+$/, '')).then(function () {
+                    return escribir(target.absolute, content);
+                  });
+                },
+                execute: function (name, args) {
+                  return ejecutarHerramientaProyecto({ name: name, arguments: args || {} });
+                },
+                backup: function (name, args) {
+                  return backupAntesDeHerramienta({ tool: name, arguments: args || {} });
+                },
+                removeFile: function (relative) {
+                  return conSistema('deleteFile', rutaLocalHerramienta(relative, false).absolute);
+                },
+                removeBackup: function (id) {
+                  return conSistema('deleteFile', rutaBackupHerramienta(id));
+                }
+              };
+            }
+          """
+          panel_path.write_text(panel.replace(footer, test_hook + "\\n" + footer), encoding="utf-8")
+          path.write_text(html.replace("</body>", harness + "\\n</body>"), encoding="utf-8")
           PY
           apktool b fuente-completa/decoded -o "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
