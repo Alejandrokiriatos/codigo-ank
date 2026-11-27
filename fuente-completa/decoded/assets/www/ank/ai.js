@@ -1348,8 +1348,16 @@
     st.activeProfileName = perfil.name;
   }
 
+  function limpiarIdPerfilSeguro(profileId) {
+    return String(profileId || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+  }
+
   function claveApiSeguraId(profileId) {
-    return 'ank.api.profile.' + String(profileId || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
+    return 'ank.api.profile.v2.' + limpiarIdPerfilSeguro(profileId);
+  }
+
+  function claveApiLegacyId(profileId) {
+    return 'ank.api.profile.' + limpiarIdPerfilSeguro(profileId);
   }
 
   function vaultApiDisponible() {
@@ -1359,19 +1367,76 @@
       typeof window.system.secureRemove === 'function');
   }
 
-  function guardarClaveSeguraPerfil(perfil) {
-    var key = String(perfil && perfil.apiKey || '');
-    if (!key) return Promise.resolve(false);
+  function guardarPerfilSeguro(perfil) {
     if (!vaultApiDisponible()) {
-      return Promise.reject(new Error('El almacenamiento cifrado con Android Keystore no está disponible. No se guardará la clave en texto plano.'));
+      return Promise.reject(new Error('Android Keystore no está disponible. No se guardarán secretos ni cabeceras personalizadas en texto plano.'));
     }
-    return conSistema('secureSet', claveApiSeguraId(perfil.id), key).then(function () { return true; });
+    var payload = {
+      version: 2,
+      apiKey: String(perfil && perfil.apiKey || ''),
+      customHeaders: String(perfil && perfil.customHeaders || '{}'),
+      customBodyTemplate: String(perfil && perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT)
+    };
+    return conSistema('secureSet', claveApiSeguraId(perfil.id), JSON.stringify(payload)).then(function () {
+      return true;
+    });
   }
 
-  function leerClaveSeguraPerfil(profileId) {
-    if (!vaultApiDisponible()) return Promise.resolve('');
-    return conSistema('secureGet', claveApiSeguraId(profileId)).then(function (value) {
-      return String(value || '');
+  function cargarPerfilSeguro(perfil, rawProfile, necesitaMigracion) {
+    rawProfile = rawProfile && typeof rawProfile === 'object' ? rawProfile : {};
+    if (!vaultApiDisponible()) {
+      if (necesitaMigracion || rawProfile.apiKey ||
+          rawProfile.customHeaders || rawProfile.customBodyTemplate) {
+        return Promise.reject(new Error('El almacén Android Keystore no está disponible para migrar los campos privados de este perfil.'));
+      }
+      perfil.apiKey = '';
+      return Promise.resolve(false);
+    }
+
+    return conSistema('secureGet', claveApiSeguraId(perfil.id)).then(function (stored) {
+      if (stored) {
+        var payload;
+        try {
+          payload = JSON.parse(String(stored));
+        } catch (_) {
+          payload = null;
+        }
+        if (payload && typeof payload === 'object') {
+          perfil.apiKey = String(payload.apiKey || '');
+          perfil.customHeaders = String(payload.customHeaders || '{}');
+          perfil.customBodyTemplate = String(payload.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+          return true;
+        }
+        /* Compatibilidad defensiva si una compilación previa dejó la clave
+           simple bajo la clave v2 en vez del objeto cifrado. */
+        perfil.apiKey = String(stored);
+        perfil.customHeaders = String(rawProfile.customHeaders || perfil.customHeaders || '{}');
+        perfil.customBodyTemplate = String(rawProfile.customBodyTemplate || perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+        return guardarPerfilSeguro(perfil);
+      }
+
+      return conSistema('secureGet', claveApiLegacyId(perfil.id)).then(function (legacyKey) {
+        var necesitaMigrarCampos = necesitaMigracion || !!legacyKey ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'apiKey') ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'customHeaders') ||
+          Object.prototype.hasOwnProperty.call(rawProfile, 'customBodyTemplate');
+
+        if (!necesitaMigrarCampos) {
+          perfil.apiKey = '';
+          return false;
+        }
+
+        perfil.apiKey = String(rawProfile.apiKey || legacyKey || '');
+        perfil.customHeaders = String(rawProfile.customHeaders || perfil.customHeaders || '{}');
+        perfil.customBodyTemplate = String(rawProfile.customBodyTemplate || perfil.customBodyTemplate || CUSTOM_BODY_DEFAULT);
+
+        return guardarPerfilSeguro(perfil).then(function () {
+          if (legacyKey) {
+            return conSistema('secureRemove', claveApiLegacyId(perfil.id)).then(function () { return true; });
+          }
+          return true;
+        });
+      });
     });
   }
 
@@ -1379,8 +1444,11 @@
     if (!vaultApiDisponible()) {
       return Promise.reject(new Error('El almacén cifrado de Android no está disponible.'));
     }
-    return conSistema('secureRemove', claveApiSeguraId(profileId));
+    return conSistema('secureRemove', claveApiSeguraId(profileId)).then(function () {
+      return conSistema('secureRemove', claveApiLegacyId(profileId));
+    });
   }
+
 
   function procesarPerfilesEnSerie(perfiles, procesar) {
     return (perfiles || []).reduce(function (cadena, perfil, index) {
@@ -1391,18 +1459,20 @@
   function persistirPerfilesApi() {
     var profiles = st.apiProfiles.slice(0, 12);
     var data = {
-      version: 5,
+      version: 6,
       activeProfileId: st.activeProfileId,
       profiles: profiles.map(function (perfil) {
         var safe = Object.assign({}, perfil);
         delete safe.apiKey;
+        delete safe.customHeaders;
+        delete safe.customBodyTemplate;
         return safe;
       })
     };
     return dirsIniciales().then(function () {
       /* En serie: la inicialización de Tink/EncryptedSharedPreferences no debe
          competir consigo misma cuando el perfil todavía no existe. */
-      return procesarPerfilesEnSerie(profiles, guardarClaveSeguraPerfil);
+      return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro);
     }).then(function () {
       return escribir(rutaConfigApi(), JSON.stringify(data));
     });
