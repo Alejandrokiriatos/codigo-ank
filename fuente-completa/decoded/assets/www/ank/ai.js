@@ -3448,10 +3448,11 @@
   }
 
   function uriArchivoHerramienta(path) {
-    var value = String(path || '');
-    return /^file:\/\//i.test(value)
-      ? value
-      : 'file://' + (value.charAt(0) === '/' ? '' : '/') + value;
+    var value = String(path || '').replace(/^file:\/\//i, '');
+    var encoded = value.split('/').map(function (part) {
+      return encodeURIComponent(part);
+    }).join('/');
+    return 'file://' + (encoded.charAt(0) === '/' ? '' : '/') + encoded;
   }
 
   function resolverEntradaHerramienta(path) {
@@ -3566,6 +3567,31 @@
     return 'fnv1a32-' + (hash >>> 0).toString(16).padStart(8, '0');
   }
 
+  function sanitizarContenidoHerramienta(value) {
+    var text = String(value == null ? '' : value);
+    var redacted = false;
+    text = text.replace(/((?:["']?)[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password|passwd|authorization)[A-Za-z0-9_-]*(?:["']?)\s*[:=]\s*)(["'])(.*?)\2/gi,
+      function (_match, prefix, quote) {
+        redacted = true;
+        return prefix + quote + '[CLAVE OCULTA]' + quote;
+      });
+    text = text.replace(/((?:API|ACCESS|REFRESH|GITHUB|AWS|STRIPE|DATABASE|DB)[A-Z0-9_-]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*)([^\r\n]+)/gi,
+      function (_match, prefix) {
+        redacted = true;
+        return prefix + '[CLAVE OCULTA]';
+      });
+    text = text.replace(/(Bearer\s+)[A-Za-z0-9._~+/-]{8,}/gi, function (_match, prefix) {
+      redacted = true;
+      return prefix + '[CLAVE OCULTA]';
+    });
+    text = text.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+      function () {
+        redacted = true;
+        return '[CLAVE PRIVADA OCULTA]';
+      });
+    return { content: text, redacted: redacted };
+  }
+
   function rutaRaizBackupsHerramienta() {
     return st.prefix + '/ank-ai/backups/' + nombreProyectoHerramientas();
   }
@@ -3655,7 +3681,11 @@
             var lines = state.content.split(/\r?\n/);
             for (var i = 0; i < lines.length && matches.length < limit; i++) {
               if (lines[i].toLowerCase().indexOf(wanted) !== -1) {
-                matches.push({ path: path, line: i + 1, text: lines[i].slice(0, 500) });
+                matches.push({
+                  path: path,
+                  line: i + 1,
+                  text: sanitizarContenidoHerramienta(lines[i].slice(0, 500)).content
+                });
               }
             }
           }
@@ -3676,7 +3706,13 @@
       var readTarget = rutaLocalHerramienta(args.path, false);
       return leerEstadoArchivoHerramienta(readTarget.absolute, args.maxBytes).then(function (state) {
         if (!state.exists) throw new Error('No existe el archivo ' + readTarget.relative + '.');
-        return { path: readTarget.relative, content: state.content, digest: hashTextoHerramienta(state.content) };
+        var safe = sanitizarContenidoHerramienta(state.content);
+        return {
+          path: readTarget.relative,
+          content: safe.content,
+          digest: safe.redacted ? null : hashTextoHerramienta(state.content),
+          secretsRedacted: safe.redacted
+        };
       });
     }
     if (call.name === 'project.search_files') {
