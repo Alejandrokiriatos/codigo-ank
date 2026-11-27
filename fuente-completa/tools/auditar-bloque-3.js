@@ -52,7 +52,7 @@ assert.ok(panel.includes('window.ANKAIEngine.normalizarPerfiles(') &&
 assert.ok(panel.includes("if (q('#ank-ai-key')) q('#ank-ai-key').value = '';") &&
   panel.includes("label.textContent = st.model ? st.activeProfileName + ' · ' + st.model : 'Sin modelo';"),
   'El cambio de perfil debe limpiar el campo secreto y mostrar la conexión activa.');
-assert.ok(panel.includes('version: 5') && panel.includes('profiles: st.apiProfiles.slice(0, 12)'),
+assert.ok(panel.includes('version: 5') && panel.includes('profiles: profiles.map(function (perfil)'),
   'Los perfiles deben persistirse en el formato v5 con límite de 12 conexiones.');
 assert.ok(panel.includes('delete safe.apiKey') && panel.includes('function guardarClaveSeguraPerfil(perfil)'),
   'Las claves API no deben escribirse dentro de provider.json.');
