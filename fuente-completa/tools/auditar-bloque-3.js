@@ -201,6 +201,8 @@ assert.match(panel, /window\.ANKAIEngine\.chat\(/, 'El transporte API del chat d
 assert.match(panel, /window\.ANKAIEngine\.runAgent\(/, 'El chat de protocolos compatibles debe utilizar el orquestador de herramientas.');
 assert.match(engine, /function runAgent\(options\)/, 'El motor no contiene el orquestador multi-ronda.');
 assert.match(engine, /function evaluarPermisoHerramienta\(/, 'Falta la política de autorización del motor.');
+assert.match(engine, /var canonical = names\[providerName\]/, 'El motor debe rechazar herramientas no incluidas en la petición al proveedor.');
+assert.match(engine, /ANK_TOOL_NOT_OFFERED/, 'Falta el error para llamadas de herramientas no anunciadas.');
 assert.match(panel, /function ejecutarHerramientaProyecto\(call\)/, 'Faltan ejecutores de archivos confinados al proyecto.');
 assert.match(panel, /function permisoHerramientaPanel\(info\)/, 'Falta la solicitud explícita de permisos.');
 assert.match(panel, /function confirmarHerramientaPanel\(info\)/, 'Falta la confirmación por operación sensible.');
