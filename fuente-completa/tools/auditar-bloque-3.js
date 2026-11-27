@@ -203,7 +203,7 @@ assert.match(engine, /function runAgent\(options\)/, 'El motor no contiene el or
 assert.match(engine, /function evaluarPermisoHerramienta\(/, 'Falta la política de autorización del motor.');
 assert.match(engine, /var canonical = names\[providerName\]/, 'El motor debe rechazar herramientas no incluidas en la petición al proveedor.');
 assert.match(engine, /ANK_TOOL_NOT_OFFERED/, 'Falta el error para llamadas de herramientas no anunciadas.');
-assert.match(panel, /function ejecutarHerramientaProyecto\(call\)/, 'Faltan ejecutores de archivos confinados al proyecto.');
+assert.match(panel, /function ejecutarHerramientaProyecto\(call, context\)/, 'Faltan ejecutores de archivos confinados al proyecto con contexto de rollback.');
 assert.doesNotMatch(panel, /name\.charAt\(0\) === ['"]\.['"]/, 'El listado no debe ocultar todos los archivos de configuración: el validador de rutas decide qué nombres ocultos son sensibles.');
 assert.match(panel, /function permisoHerramientaPanel\(info\)/, 'Falta la solicitud explícita de permisos.');
 assert.match(panel, /function confirmarHerramientaPanel\(info\)/, 'Falta la confirmación por operación sensible.');
