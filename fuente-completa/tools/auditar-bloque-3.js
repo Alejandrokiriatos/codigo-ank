@@ -75,6 +75,12 @@ assert.match(panel, /var apiVaultQueue = Promise\.resolve\(\)/,
   'Las transacciones del vault deben serializarse también entre varios guardados de perfiles.');
 assert.match(panel, /function encolarOperacionVault\(operacion\)/,
   'Falta la cola transaccional del almacén de perfiles.');
+assert.match(panel, /function guardarPerfilSeguroNoEncolado\(perfil\)/,
+  'Falta la escritura interna protegida del vault.');
+assert.match(panel, /function guardarPerfilSeguro\(perfil\)\s*\{\s*return encolarOperacionVault/,
+  'Toda escritura individual del vault debe pasar por la cola transaccional.');
+assert.ok(panel.includes('procesarPerfilesEnSerie(profiles, guardarPerfilSeguroNoEncolado)'),
+  'Los lotes de perfiles deben reutilizar la cola sin anidarla.');
 assert.match(vault, /SharedPreferences\$Editor;->commit\(\)Z/,
   'El almacén cifrado debe confirmar la persistencia en disco antes de completar la operación.');
 assert.doesNotMatch(vault, /SharedPreferences\$Editor;->apply\(\)V/,
