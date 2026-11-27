@@ -2,7 +2,7 @@
 
 **Rama:** `ank/block-3-multiple-api`  
 **Base:** bloque 2, commit `ca27820463950bcd455e1349b49e47a43a1d16a6`  
-**Estado:** cuatro modos API implementados; auditoría estática y 21 pruebas automatizadas superadas; sigue pendiente la validación en Android físico y el endurecimiento del almacenamiento de claves.
+**Estado:** cuatro formatos API, perfiles múltiples y rediseño responsive implementados; auditoría estática y 21 pruebas automatizadas superadas; sigue pendiente la validación en Android físico y el endurecimiento del almacenamiento de claves.
 
 ## Objetivo
 
@@ -54,6 +54,26 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 
 ## Panel y persistencia
 
+### Perfiles de conexión (provider.json v4)
+
+- Se pueden guardar hasta **12 conexiones** con nombre propio.
+- Cada perfil mantiene protocolo, endpoint, modelo, clave, cabeceras y plantilla JSON de forma independiente.
+- El selector cambia entre perfiles sin volver a pegar las claves. Las ediciones del perfil anterior se capturan antes de cambiar o crear uno nuevo.
+- Se puede crear una conexión nueva y eliminar la conexión activa; al borrar la última se genera una ficha vacía para no dejar los ajustes inutilizables.
+- Los perfiles v3 de una sola conexión se migran automáticamente a v4 como «Conexión principal», sin descartar los valores anteriores.
+- La selección activa se restaura al abrir el panel.
+- Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
+
+Las claves continúan en el archivo privado de la aplicación **sin cifrado Android Keystore**. El perfil múltiple organiza la configuración, pero no cambia ese límite de seguridad. No se debe compartir `provider.json` ni incluirlo en un repositorio.
+
+### Diseño del panel 2.4.0
+
+- Panel adaptable: pantalla completa en teléfono y ventana centrada en escritorio.
+- Cabecera y pestañas con navegación táctil, botones de al menos 42–46 px, campos con foco visible y contraste reforzado.
+- La pestaña Entorno agrupa perfiles, estado del entorno y campos de conexión; la terminal aparece como componente opcional independiente.
+- El chat, los bloques de código, las propuestas de archivos, el registro y las tarjetas de Apps comparten el nuevo lenguaje visual oscuro con acento cobre.
+- Se respetan las preferencias del sistema para reducir animaciones.
+
 - La pestaña Entorno permite elegir el formato de API.
 - El endpoint de ejemplo cambia al cambiar de protocolo, pero conserva un endpoint personalizado que el usuario haya escrito.
 - La configuración se guarda en `provider.json` en el directorio privado de la aplicación.
@@ -91,6 +111,17 @@ El actualizador web permanece desactivado porque la verificación HMAC anterior 
 - Cancelación y timeout del transporte nativo.
 - Plantilla JSON, autenticación personalizable, variables, ruta de extracción y conservación de parámetros de consulta seguros.
 - Identificadores de modelo con `:`, `@` y `+`, rechazo de caracteres de control y límite de longitud.
+
+### Resultado CI del 27/11/2026
+
+La ejecución [45969127377](https://github.com/Alejandrokiriatos/codigo-ank/actions/runs/45969127377) terminó correctamente:
+
+- 21 pruebas del motor: 21 correctas, 0 fallidas.
+- Integración del motor embebido en Android comprobada con `tools/build-ai.js --check`.
+- Auditoría estática de los perfiles: migración v3, formato v4, creación, selección y eliminación.
+- Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias del actualizador interno.
+- Diseño responsive: reglas verificadas para teléfono y escritorio.
+- Sin referencias de OpenCode en el panel activo; las claves no se guardan en `localStorage`.
 
 ### Resultado CI del 26/11/2026
 
