@@ -107,3 +107,18 @@ Se añadió el workflow `.github/workflows/android-vault-emulator.yml`. En CI:
 La prueba de emulador cubre persistencia tras muerte del proceso, no reinicio completo del sistema operativo, migración desde una versión instalada ni interacción completa de la pantalla de perfiles. Esas pruebas siguen en la matriz manual. La APK de CI está firmada con una clave efímera de debug y nunca se distribuye como release.
 
 Resultado de CI: consultar la ejecución del workflow **Prueba Android real · ApiVault Cordova** en Actions. No se declarará superada hasta que el job del emulador termine en `success`; la auditoría estática por sí sola no cuenta como ejecución del vault.
+
+
+## Identidad de paquete y continuidad de firma (regla obligatoria)
+
+El manifiesto y la configuración de Apktool muestran:
+- `apktool.yml`: `renameManifestPackage: com.ank.codigoank`, `versionCode: 1027`, `versionName: 1.7.0`.
+- `AndroidManifest.xml` decodificado conserva el package de origen `com.foxdebug.acode`; Apktool aplica el nombre renombrado al reconstruir. El identificador final esperado se verifica sobre el APK compilado, no se deduce únicamente del XML decodificado.
+
+El workflow de emulador ahora comprueba con `aapt dump badging` que el APK reconstruido tenga exactamente el application ID `com.ank.codigoank`. La clave efímera creada en CI es exclusivamente para instalar la build de prueba desde cero en un emulador limpio; nunca sirve para actualizar una instalación existente ni para distribución.
+
+**Regla para cualquier APK actualizable:** conservar el certificado de firma original de la aplicación instalada. El application ID debe seguir siendo idéntico y el certificado debe coincidir con el de la versión instalada (o formar parte de una rotación de certificados compatible y deliberada). Cambiar el keystore/certificado impedirá que Android instale la actualización sobre la aplicación existente.
+
+En el árbol inspeccionado de esta rama no se encontró un APK original, keystore ni certificado de firma que permita verificar la huella SHA-256 del certificado de distribución. Por tanto, la identidad criptográfica de la firma original aún no está demostrada y no se puede generar una APK release actualizable hasta disponer del mecanismo original de firma y verificar su huella. No subir el keystore, contraseña ni claves privadas al repositorio ni al chat; si ya existe un secreto protegido en GitHub Actions, la futura tarea release deberá consumirlo como secreto y validar la huella antes de firmar. Si el original está en Google Play App Signing, se debe usar la clave de carga correspondiente y respetar la cadena de firma administrada por Play.
+
+No se debe confundir el éxito del APK de emulador firmado temporalmente con una compilación release. No distribuir ese artefacto.
