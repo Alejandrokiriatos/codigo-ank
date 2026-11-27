@@ -4632,9 +4632,10 @@
                   '<div class="ank-ai-hint">Ruta JSON con puntos e índices de array. Ejemplo: data.response.text o output.0.content.</div></div>' +
               '</div>' +
               '<div class="ank-ai-field"><label>Clave API</label><input id="ank-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Nueva clave API (vacío = conservar la actual)" />' +
-                '<div class="ank-ai-hint">Se guarda en el almacenamiento privado de la app. El cifrado con Android Keystore se incorpora en el bloque de seguridad.</div></div>' +
+                '<div class="ank-ai-hint">Se cifra con Android Keystore en el dispositivo. La clave no se incluye en provider.json ni en el repositorio.</div></div>' +
               '<div class="ank-ai-field ank-ai-appbar"><button class="ank-ai-btn primary" data-accion="guardar-clave">Guardar conexión</button>' +
-                '<button class="ank-ai-btn" data-accion="probar">Probar conexión</button></div>' +
+                '<button class="ank-ai-btn" data-accion="probar">Probar conexión</button>' +
+                '<button class="ank-ai-btn danger" data-accion="eliminar-clave-api">Eliminar clave guardada</button></div>' +
               '<div class="ank-ai-field"><label>Carpeta de trabajo</label><input id="ank-ai-proj" type="text" spellcheck="false" value="' + esc(limpioRuta(st.project) || 'ank') + '" />' +
                 '<div class="ank-ai-hint">Relativa a /public/proyectos. Se crea al primer mensaje.</div></div>' +
             '</div></section>' +
@@ -4864,6 +4865,7 @@
         break;
       case 'nuevo-perfil-api': crearPerfilApi(); break;
       case 'eliminar-perfil-api': eliminarPerfilApi(); break;
+      case 'eliminar-clave-api': eliminarClaveApi(); break;
       case 'revisar':
         chequearTodo();
         break;
