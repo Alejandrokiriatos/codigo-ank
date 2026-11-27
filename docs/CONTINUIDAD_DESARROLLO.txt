@@ -240,3 +240,43 @@ cifrada en un Android físico con una clave de prueba. Después, pruebas de
 401/403/429/5xx, timeout, cancelación, desconexión y respuesta malformada.
 
 FIN DE LA ACTUALIZACIÓN
+
+================================================================
+10. AUDITORÍA DE PERSISTENCIA CIFRADA · 27/11/2026
+================================================================
+
+Se inspeccionaron directamente:
+- decoded/smali/com/foxdebug/system/ApiVault.smali
+- decoded/smali/com/foxdebug/system/System.smali
+- decoded/assets/www/plugins/cordova-plugin-system/www/plugin.js
+- decoded/AndroidManifest.xml
+- decoded/res/xml/ank_backup_rules.xml
+- decoded/res/xml/ank_data_extraction_rules.xml
+- decoded/assets/www/ank/ai.js
+
+Hallazgos:
+- ApiVault usa MasterKey AES-256-GCM con alias ank_api_master_key_v1.
+- EncryptedSharedPreferences usa el archivo ank_api_secrets, AES-256-SIV
+  para claves y AES-256-GCM para valores.
+- El puente Cordova traduce secureSet a securePut con argumentos [key, value].
+- System.smali enruta secureGet/securePut/secureRemove al ApiVault.
+- Las escrituras y eliminaciones usan commit() síncrono.
+- provider.json omite apiKey, prefijo, cabeceras y plantilla privada.
+- Las reglas de backup excluyen ank_api_secrets.xml en backup clásico,
+  cloud backup y device transfer; el nombre coincide con el archivo real.
+
+Se reforzó fuente-completa/tools/auditar-bloque-3.js con aserciones exactas
+para el contrato JS/Cordova/Smali, el alias Keystore y la coincidencia entre
+el archivo cifrado y las reglas de backup.
+
+Informe y protocolo de prueba física:
+  docs/BLOQUE_5_AUDITORIA_PERSISTENCIA.md
+
+Límite:
+Esta auditoría es estática. No se dispone de Android físico/emulador conectado
+para probar guardado, cierre forzado, reinicio, eliminación y restauración.
+No declarar validada la persistencia física ni publicar APK release hasta
+completar esa matriz. La siguiente acción es ejecutar la CI de la auditoría
+reforzada y después realizar el protocolo en un Android real.
+
+FIN DE LA ACTUALIZACIÓN
