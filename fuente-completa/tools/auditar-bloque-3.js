@@ -145,6 +145,33 @@ assert.ok(backupRules.includes('path="ank_api_secrets.xml"') &&
 assert.match(vault, /const-string v1, "ank_api_master_key_v1"/,
   'No se encuentra el alias versionado de Android Keystore; revisar migraciones de claves.');
 
+/* Contrato nativo completo: no basta con que aparezcan los nombres de las acciones. */
+assert.match(systemSmali,
+  /:cond_ank_secure_dispatch[\\s\\S]*?ApiVault;->execute\\(Landroid\\/content\\/Context;Ljava\\/lang\\/String;Lorg\\/json\\/JSONArray;Lorg\\/apache\\/cordova\\/CallbackContext;\\)Z[\\s\\S]*?if-eqz v0, :cond_ank_secure_fallback[\\s\\S]*?const\\/4 v11, 0x1[\\s\\S]*?return v11/,
+  'System.smali debe delegar las tres acciones al vault y detener el dispatcher heredado cuando se procesan.');
+assert.match(vault,
+  /\.method public static put\\([\\s\\S]*?SharedPreferences\\$Editor;->commit\\(\\)Z[\\s\\S]*?if-nez v1, :cond_put_saved[\\s\\S]*?Could not persist encrypted API secret/,
+  'put debe confirmar commit y devolver error si no se pudo persistir.');
+assert.match(vault,
+  /\.method public static remove\\([\\s\\S]*?SharedPreferences\\$Editor;->commit\\(\\)Z[\\s\\S]*?if-nez v1, :cond_remove_saved[\\s\\S]*?Could not remove encrypted API secret/,
+  'remove debe confirmar commit y devolver error si no se pudo eliminar.');
+for (const [action, success, error] of [
+  ['secureGet', 'CallbackContext;->success(Ljava/lang/String;)V', 'CallbackContext;->error(Ljava/lang/String;)V'],
+  ['securePut', 'CallbackContext;->success()V', 'CallbackContext;->error(Ljava/lang/String;)V'],
+  ['secureRemove', 'CallbackContext;->success()V', 'CallbackContext;->error(Ljava/lang/String;)V']
+]) {
+  const start = vault.indexOf('const-string v0, "' + action + '"');
+  assert.ok(start >= 0, 'ApiVault.execute no reconoce ' + action + '.');
+  const next = vault.indexOf(':cond_secure_', start + 1);
+  const block = vault.slice(start, next < 0 ? vault.length : next);
+  assert.ok(block.includes(success), action + ' debe enviar callback de éxito solo tras completar la operación.');
+  assert.ok(block.includes(error), action + ' debe propagar los errores al callback Cordova.');
+}
+assert.match(vault, /\.method public static get\\([\\s\\S]*?getString\\(Ljava\\/lang\\/String;Ljava\\/lang\\/String;\\)Ljava\\/lang\\/String;/,
+  'get debe leer la cadena del almacén cifrado y no de preferencias normales.');
+assert.doesNotMatch(vault, /Log;->(?:d|i|w|e)\\(/,
+  'ApiVault no debe escribir datos del vault en Logcat.');
+
 assert.ok(panel.includes('id="ank-ai-perfil"') && panel.includes('id="ank-ai-perfil-nombre"'),
   'Faltan controles para elegir y nombrar conexiones.');
 assert.ok(panel.includes('data-accion="nuevo-perfil-api"') && panel.includes('data-accion="eliminar-perfil-api"'),
