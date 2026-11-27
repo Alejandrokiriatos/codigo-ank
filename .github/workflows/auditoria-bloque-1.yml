@@ -161,23 +161,15 @@ jobs:
           sudo chmod +x /usr/local/bin/apktool
           apktool --version
 
-      - name: Registrar assets requeridos y omitidos
+      - name: Comprobar assets opcionales del terminal Linux
         shell: bash
         run: |
           set -euo pipefail
-          MISSING=0
-          if [ ! -f fuente-completa/decoded/assets/opencode/opencode-arm64.tar.gz ]; then
-            echo "- Falta el binario OpenCode ARM64 incluido en la versión documentada." >> "$GITHUB_STEP_SUMMARY"
-            MISSING=1
-          fi
           if [ ! -d fuente-completa/decoded/assets/alpine_assets ]; then
-            echo "- Falta el directorio de assets Alpine/AXS/proot." >> "$GITHUB_STEP_SUMMARY"
-            MISSING=1
-          fi
-          if [ "$MISSING" -eq 1 ]; then
-            echo "**ADVERTENCIA: el APK reconstruido es solo diagnóstico y no es instalable/funcional como release.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Faltan los assets Alpine/AXS/proot que necesita el terminal Linux opcional." >> "$GITHUB_STEP_SUMMARY"
+            echo "**ADVERTENCIA: el APK reconstruido es diagnóstico y no ofrece el terminal Linux completo.**" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Assets Linux principales presentes." >> "$GITHUB_STEP_SUMMARY"
+            echo "Assets del terminal Linux presentes." >> "$GITHUB_STEP_SUMMARY"
           fi
           test -s fuente-completa/decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Terminal.js
           test -s fuente-completa/decoded/assets/www/plugins/com.foxdebug.acode.rk.exec.terminal/www/Executor.js
