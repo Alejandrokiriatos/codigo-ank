@@ -2540,3 +2540,27 @@
     transition: none !important;
   }
 }
+
+
+/* El selector de perfiles vive fuera de .ank-ai-field, conserva el mismo control visual. */
+.ank-ai-profile-select select {
+  display: block;
+  width: 100%;
+  min-height: 43px;
+  margin-top: 7px;
+  padding: 10px 38px 10px 12px;
+  border: 1px solid #405555;
+  border-radius: 10px;
+  background: #0a1518;
+  color: #e9f0e9;
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ank-ai-profile-select select:focus-visible {
+  outline: 2px solid #e6ad68;
+  outline-offset: 2px;
+}
