@@ -280,3 +280,24 @@ completar esa matriz. La siguiente acción es ejecutar la CI de la auditoría
 reforzada y después realizar el protocolo en un Android real.
 
 FIN DE LA ACTUALIZACIÓN
+
+================================================================
+11. SEGUNDA CAPA DE CONTRATOS DEL VAULT · 27/11/2026
+================================================================
+
+Se reforzó fuente-completa/tools/auditar-bloque-3.js para verificar:
+- Dispatch exacto de System.smali hacia ApiVault.execute y retorno temprano.
+- put/remove: commit() síncrono, comprobación del booleano y error si falla.
+- secureGet/securePut/secureRemove: callback de éxito y callback de error.
+- get: lectura a través de SharedPreferences.getString del almacén cifrado.
+- ApiVault no registra valores del vault en Logcat.
+
+Commit del refuerzo inicial: 5d8dbb605c5f2fb92db0a83845e154413e91636f
+Informe actualizado: docs/BLOQUE_5_AUDITORIA_PERSISTENCIA.md
+
+La CI de la rama debe validar estas aserciones. No confundir este análisis
+estático con una ejecución real de Android. Sigue pendiente el test en
+emulador/dispositivo que escriba, cierre, reinicie, lea y borre una clave
+desechable a través del puente Cordova real.
+
+FIN DE LA ACTUALIZACIÓN
