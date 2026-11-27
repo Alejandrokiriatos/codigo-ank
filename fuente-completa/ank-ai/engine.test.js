@@ -838,3 +838,168 @@ test('rechaza herramientas no registradas y argumentos con prototipos extraños'
   assert.throws(() => Engine.validarLlamadaHerramienta('project.read_file', args), /objeto JSON/);
 });
 
+test('Bloque 6 · normaliza tool calling OpenAI y desactiva SSE en turnos con herramientas', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'tool-openai-secret',
+    model: 'agent-model',
+    messages: [{ role: 'user', content: 'Lee src/main.js' }],
+    tools: Engine.herramientasAgente(),
+    http: nativeSuccess({
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: 'call_read_1',
+            type: 'function',
+            function: {
+              name: 'project_read_file',
+              arguments: '{"path":"src/main.js","maxBytes":4096}'
+            }
+          }]
+        },
+        finish_reason: 'tool_calls'
+      }],
+      usage: { total_tokens: 20 }
+    }, captured)
+  });
+  assert.equal(captured.options.data.stream, false);
+  assert.equal(captured.options.data.tool_choice, 'auto');
+  assert.ok(captured.options.data.tools.some((tool) => tool.function.name === 'project_read_file'));
+  assert.equal(result.content, '');
+  assert.deepEqual(result.toolCalls, [{
+    id: 'call_read_1',
+    name: 'project.read_file',
+    arguments: { path: 'src/main.js', maxBytes: 4096 }
+  }]);
+});
+
+test('Bloque 6 · normaliza tool_use de Anthropic', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    protocol: 'anthropic-messages',
+    endpoint: 'https://api.anthropic.com/v1',
+    apiKey: 'tool-anthropic-secret',
+    model: 'claude-agent-model',
+    messages: [{ role: 'user', content: 'Enumera el proyecto' }],
+    tools: Engine.herramientasAgente(),
+    http: nativeSuccess({
+      id: 'msg_tool_1',
+      content: [{
+        type: 'tool_use',
+        id: 'toolu_read_1',
+        name: 'project_list_files',
+        input: { path: 'src', maxDepth: 3 }
+      }],
+      stop_reason: 'tool_use'
+    }, captured)
+  });
+  assert.equal(captured.options.data.tool_choice.type, 'auto');
+  assert.ok(captured.options.data.tools.some((tool) => tool.name === 'project_list_files' && tool.input_schema.type === 'object'));
+  assert.deepEqual(result.toolCalls, [{
+    id: 'toolu_read_1',
+    name: 'project.list_files',
+    arguments: { path: 'src', maxDepth: 3 }
+  }]);
+});
+
+test('Bloque 6 · normaliza functionCall de Gemini', async () => {
+  const captured = {};
+  const result = await Engine.chat({
+    protocol: 'gemini-generate-content',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    apiKey: 'tool-gemini-secret',
+    model: 'gemini-agent-model',
+    messages: [{ role: 'user', content: 'Busca TODO' }],
+    tools: Engine.herramientasAgente(),
+    http: nativeSuccess({
+      candidates: [{
+        content: {
+          parts: [{
+            functionCall: {
+              name: 'project_search_files',
+              args: { query: 'TODO', path: '.', maxResults: 10 }
+            }
+          }]
+        },
+        finishReason: 'STOP'
+      }]
+    }, captured)
+  });
+  const declarations = captured.options.data.tools[0].functionDeclarations;
+  assert.ok(declarations.some((tool) => tool.name === 'project_search_files'));
+  assert.deepEqual(result.toolCalls, [{
+    id: 'gemini-call-0',
+    name: 'project.search_files',
+    arguments: { query: 'TODO', path: '.', maxResults: 10 }
+  }]);
+});
+
+test('Bloque 6 · rechaza llamadas de herramientas desconocidas o con argumentos inválidos', async () => {
+  const base = {
+    endpoint: 'https://api.example.com/v1',
+    apiKey: 'tool-invalid-secret',
+    model: 'agent-model',
+    messages: [{ role: 'user', content: 'Haz algo' }],
+    tools: Engine.herramientasAgente()
+  };
+  const unknown = {
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: 'unknown-call',
+          function: { name: 'admin_root', arguments: '{"command":"id"}' }
+        }]
+      }
+    }]
+  };
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { http: nativeSuccess(unknown) })),
+    (error) => error.code === 'ANK_TOOL_UNKNOWN'
+  );
+  const invalidArgs = {
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: 'bad-path-call',
+          function: { name: 'project_read_file', arguments: '{"path":"../../private.txt"}' }
+        }]
+      }
+    }]
+  };
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { http: nativeSuccess(invalidArgs) })),
+    (error) => error.code === 'ANK_TOOL_PATH_TRAVERSAL'
+  );
+  const invalidJSON = {
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: 'bad-json-call',
+          function: { name: 'project_read_file', arguments: '{not-json' }
+        }]
+      }
+    }]
+  };
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, { http: nativeSuccess(invalidJSON) })),
+    (error) => error.code === 'ANK_TOOL_CALL_INVALID'
+  );
+});
+
+test('Bloque 6 · rechaza herramientas en el protocolo JSON personalizado sin contrato de tool calling', async () => {
+  await assert.rejects(
+    Engine.chat({
+      protocol: 'custom-json',
+      endpoint: 'https://api.example.com/infer',
+      apiKey: 'custom-secret',
+      model: 'custom-model',
+      messages: [{ role: 'user', content: 'Prueba' }],
+      tools: Engine.herramientasAgente(),
+      http: nativeSuccess({ answer: 'ok' })
+    }),
+    (error) => error.code === 'ANK_TOOL_PROTOCOL_UNSUPPORTED'
+  );
+});
+
