@@ -1,0 +1,148 @@
+name: Prueba Android real · ApiVault Cordova
+
+on:
+  push:
+    branches:
+      - ank/block-3-multiple-api
+    paths:
+      - "fuente-completa/decoded/**"
+      - ".github/workflows/android-vault-emulator.yml"
+  pull_request:
+    branches:
+      - ank/block-3-multiple-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vault-emulator:
+    name: Ciclo put/get/remove en emulador Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Descargar rama de trabajo
+        uses: actions/checkout@v4
+
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Apktool
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/iBotPeaches/Apktool/releases/download/v2.11.1/apktool_2.11.1.jar -o "$RUNNER_TEMP/apktool.jar"
+          printf '#!/usr/bin/env bash\nexec java -jar "%s" "$@"\n' "$RUNNER_TEMP/apktool.jar" | sudo tee /usr/local/bin/apktool >/dev/null
+          sudo chmod +x /usr/local/bin/apktool
+          apktool --version
+
+      - name: Inyectar harness efímero de CI y reconstruir APK
+        shell: bash
+        env:
+          ANK_VAULT_TEST_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          export ANK_VAULT_TEST_SECRET="ANK-VAULT-CI-$(openssl rand -hex 24)-$ANK_VAULT_TEST_NONCE"
+          python3 <<'PY'
+          import json, os
+          from pathlib import Path
+
+          path = Path("fuente-completa/decoded/assets/www/index.html")
+          html = path.read_text(encoding="utf-8")
+          if html.count("</body>") != 1:
+              raise SystemExit("No se encontró un único cierre body para inyectar el harness.")
+          secret = json.dumps(os.environ["ANK_VAULT_TEST_SECRET"])
+          harness = """
+          <script>
+          (function () {
+            "use strict";
+            var secret = SECRET_VALUE;
+            var key = "__ank_ci_vault_probe_v1";
+            var phaseKey = "__ank_ci_vault_phase_v1";
+            var finished = false;
+            function report(code) {
+              if (finished) return;
+              finished = true;
+              console.log("ANK_VAULT_CI:" + code);
+              document.documentElement.setAttribute("data-ank-vault-ci", code);
+            }
+            function fail(code) { report("FAIL_" + code); }
+            function call(action, args, ok, bad) {
+              try {
+                cordova.exec(ok, function () { bad(); }, "System", action, args);
+              } catch (_) { bad(); }
+            }
+            document.addEventListener("deviceready", function () {
+              var timer = setTimeout(function () { fail("CALLBACK_TIMEOUT"); }, 25000);
+              var done = function (code) { clearTimeout(timer); report(code); };
+              var phase = localStorage.getItem(phaseKey);
+              if (!phase) {
+                call("securePut", [key, secret], function () {
+                  call("secureGet", [key], function (value) {
+                    if (String(value) !== secret) return fail("FIRST_READ_MISMATCH");
+                    localStorage.setItem(phaseKey, "written");
+                    done("STAGE1_OK");
+                  }, function () { fail("FIRST_GET_ERROR"); });
+                }, function () { fail("PUT_ERROR"); });
+                return;
+              }
+              if (phase !== "written") return fail("INVALID_PHASE");
+              call("secureGet", [key], function (value) {
+                if (String(value) !== secret) return fail("RESTART_READ_MISMATCH");
+                call("secureRemove", [key], function () {
+                  call("secureGet", [key], function (after) {
+                    if (String(after) !== "") return fail("REMOVE_NOT_EMPTY");
+                    localStorage.removeItem(phaseKey);
+                    done("STAGE2_OK");
+                  }, function () { fail("POST_REMOVE_GET_ERROR"); });
+                }, function () { fail("REMOVE_ERROR"); });
+              }, function () { fail("RESTART_GET_ERROR"); });
+            }, { once: true });
+          })();
+          </script>
+          """.replace("SECRET_VALUE", secret)
+          path.write_text(html.replace("</body>", harness + "\\n</body>"), encoding="utf-8")
+          PY
+          apktool b fuente-completa/decoded -o "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/ank-ci-debug.jks" -storepass android -keypass android -alias ank-ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=ANK CI,O=OpenAI,C=US"
+          apksigner sign --ks "$RUNNER_TEMP/ank-ci-debug.jks" --ks-pass pass:android --key-pass pass:android --out "$RUNNER_TEMP/CodigoANK-vault-ci.apk" "$RUNNER_TEMP/CodigoANK-vault-ci-unsigned.apk"
+          apksigner verify "$RUNNER_TEMP/CodigoANK-vault-ci.apk"
+          echo "APK temporal de CI reconstruida y firmada con una clave efímera. No es una release." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ejecutar ciclo cifrado en emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="$RUNNER_TEMP/CodigoANK-vault-ci.apk"
+            adb install "$APK"
+            adb logcat -c
+            adb shell am start -n com.foxdebug.acode/com.foxdebug.acode.MainActivity
+            wait_marker() {
+              expected="$1"
+              for attempt in $(seq 1 90); do
+                if adb logcat -d -s chromium:I '*:S' | grep -Fq "ANK_VAULT_CI:$expected"; then
+                  echo "Android WebView reportó $expected"
+                  return 0
+                fi
+                if adb logcat -d | grep -Fq "ANK_VAULT_CI:FAIL_"; then
+                  adb logcat -d -s chromium:I '*:S' | grep -F "ANK_VAULT_CI:"
+                  return 1
+                fi
+                sleep 2
+              done
+              adb logcat -d -s chromium:I '*:S' | tail -n 120
+              echo "No se recibió marcador $expected"
+              return 1
+            }
+            wait_marker STAGE1_OK
+            adb shell am force-stop com.foxdebug.acode
+            adb shell am start -n com.foxdebug.acode/com.foxdebug.acode.MainActivity
+            wait_marker STAGE2_OK
+            echo "PASS: put/get, persistencia tras force-stop, remove y lectura vacía en ApiVault real." >> "$GITHUB_STEP_SUMMARY"
