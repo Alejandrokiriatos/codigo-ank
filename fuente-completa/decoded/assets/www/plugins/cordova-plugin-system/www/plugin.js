@@ -46,6 +46,15 @@ module.exports = {
   getFilesDir: function (success, error) {
     cordova.exec(success, error, 'System', 'getFilesDir', []);
   },
+  secureGet: function (key, success, error) {
+    cordova.exec(success, error, 'System', 'secureGet', [key]);
+  },
+  secureSet: function (key, value, success, error) {
+    cordova.exec(success, error, 'System', 'securePut', [key, value]);
+  },
+  secureRemove: function (key, success, error) {
+    cordova.exec(success, error, 'System', 'secureRemove', [key]);
+  },
   getRewardStatus: function (success, error) {
     cordova.exec(success, error, 'System', 'getRewardStatus', []);
   },
