@@ -1367,7 +1367,7 @@
       typeof window.system.secureRemove === 'function');
   }
 
-  function guardarPerfilSeguro(perfil) {
+  function guardarPerfilSeguroNoEncolado(perfil) {
     if (!vaultApiDisponible()) {
       return Promise.reject(new Error('Android Keystore no está disponible. No se guardarán claves, prefijos ni ajustes privados en texto plano.'));
     }
@@ -1380,6 +1380,12 @@
     };
     return conSistema('secureSet', claveApiSeguraId(perfil.id), JSON.stringify(payload)).then(function () {
       return true;
+    });
+  }
+
+  function guardarPerfilSeguro(perfil) {
+    return encolarOperacionVault(function () {
+      return guardarPerfilSeguroNoEncolado(perfil);
     });
   }
 
@@ -1491,7 +1497,7 @@
       return dirsIniciales().then(function () {
         /* En serie: la inicialización de Tink/EncryptedSharedPreferences no debe
            competir consigo misma cuando el perfil todavía no existe. */
-        return procesarPerfilesEnSerie(profiles, guardarPerfilSeguro);
+        return procesarPerfilesEnSerie(profiles, guardarPerfilSeguroNoEncolado);
       }).then(function () {
         return escribir(rutaConfigApi(), JSON.stringify(data));
       });
