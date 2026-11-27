@@ -1353,6 +1353,7 @@
       ? Object.assign({}, options.permissions) : {};
     var sessionGrants = Object.create(null);
     var activity = crearRegistroActividad({ maxEntries: 100 });
+    var callsRequested = 0;
     var callsExecuted = 0;
     var roundCount = 0;
     var lastContent = '';
@@ -1443,10 +1444,10 @@
           status: 'failed'
         });
       }
-      if (callsExecuted >= maxToolCalls) {
+      if (callsRequested >= maxToolCalls) {
         return Promise.resolve({ message: 'Se alcanzó el límite de llamadas de herramientas de esta ejecución.', status: 'failed' });
       }
-      callsExecuted += 1;
+      callsRequested += 1;
       activity.record({ tool: call.name, status: 'requested', path: call.arguments.path });
       return getPermission(call).then(function (granted) {
         aborted();
@@ -1482,6 +1483,7 @@
               };
             }
             eventFor(call, 'executing', { backupId: backup.id });
+            callsExecuted += 1;
             return Promise.resolve().then(function () {
               return options.executeTool(clonarJSON(call), {
                 signal: options.signal || null,
