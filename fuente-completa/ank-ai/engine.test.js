@@ -967,7 +967,28 @@ test('Bloque 6 · rechaza llamadas de herramientas desconocidas o con argumentos
   };
   await assert.rejects(
     Engine.chat(Object.assign({}, base, { http: nativeSuccess(unknown) })),
-    (error) => error.code === 'ANK_TOOL_UNKNOWN'
+    (error) => error.code === 'ANK_TOOL_NOT_OFFERED'
+  );
+  const hiddenTerminal = {
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: 'hidden-terminal-call',
+          function: { name: 'terminal_run', arguments: '{"command":"id"}' }
+        }]
+      }
+    }]
+  };
+  const readOnlyTools = Engine.herramientasAgente().filter((tool) =>
+    tool.name !== 'terminal.run' && tool.name !== 'project.write_file' &&
+    tool.name !== 'project.delete_file' && tool.name !== 'project.restore_backup'
+  );
+  await assert.rejects(
+    Engine.chat(Object.assign({}, base, {
+      tools: readOnlyTools,
+      http: nativeSuccess(hiddenTerminal)
+    })),
+    (error) => error.code === 'ANK_TOOL_NOT_OFFERED'
   );
   const invalidArgs = {
     choices: [{
