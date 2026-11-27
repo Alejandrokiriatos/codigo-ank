@@ -54,7 +54,7 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 
 ## Panel y persistencia
 
-### Perfiles de conexión (provider.json v5)
+### Perfiles de conexión (provider.json v6)
 
 - Se pueden guardar hasta **12 conexiones** con nombre propio.
 - Cada perfil mantiene protocolo, endpoint, modelo, clave, cabeceras y plantilla JSON de forma independiente.
