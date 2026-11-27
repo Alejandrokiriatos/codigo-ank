@@ -1040,7 +1040,7 @@
       permission: 'destructive',
       risk: 'destructive',
       requiresConfirmation: true,
-      requiresBackup: false,
+      requiresBackup: true,
       parameters: {
         type: 'object',
         properties: {
