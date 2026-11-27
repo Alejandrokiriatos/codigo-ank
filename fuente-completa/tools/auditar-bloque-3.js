@@ -10,6 +10,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const engine = read('ank-ai/engine.js').trim();
 const tests = read('ank-ai/engine.test.js');
 const panel = read('decoded/assets/www/ank/ai.js');
+const boot = read('decoded/assets/www/ank/boot-ai.js');
 const panelMirror = read('update/ank/ai.js');
 const css = read('decoded/assets/www/ank/ai.css');
 const cssMirror = read('update/ank/ai.css');
@@ -92,6 +93,11 @@ assert.match(panel, /escribir\(rutaConfigApi\(\), JSON\.stringify\(data\)\)/, 'N
 assert.match(panel, /window\.ANKAIEngine\.chat\(/, 'El chat no utiliza el motor multi-API.');
 assert.match(panel, /window\.ANKAIEngine\.normalizarModelo/, 'La interfaz no usa el normalizador de modelos.');
 assert.doesNotMatch(panel, /opencode/i, 'El panel activo aún contiene referencias al runtime OpenCode.');
+assert.match(boot, /script\.src\s*=\s*['"]\.\/ank\/ai\.js['"]/, 'El arranque debe cargar el panel incluido en el APK.');
+assert.doesNotMatch(boot, /new Function|localStorage\.getItem|eval\s*\(/,
+  'El arranque no debe ejecutar paneles o estilos locales no verificados.');
+assert.ok(boot.includes("localStorage.removeItem(K_AI)") && boot.includes("localStorage.removeItem(K_CSS)"),
+  'El arranque debe descartar paquetes web antiguos no firmados.');
 for (const [fileName, source] of [
   ['ank/ai.js', rootPanel],
   ['.repo-publicacion/ank/ai.js', publicationPanel],
