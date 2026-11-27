@@ -313,3 +313,28 @@ fallos en las 34 pruebas del motor.
 Sigue pendiente una ejecución Android real de ApiVault para probar el ciclo
 put/get/remove y persistencia después de cierre forzado y reinicio.
 
+
+
+================================================================
+12. HARNESS DE EMULADOR PARA ApiVault · 27/11/2026
+================================================================
+
+Se añadió .github/workflows/android-vault-emulator.yml.
+
+El workflow reconstruye una APK temporal a partir de decoded/, inyecta un
+harness de CI no persistente en index.html y ejecuta el servicio Cordova
+System real dentro de un emulador Android API 30. La secuencia automatizada:
+1. securePut con valor aleatorio desechable.
+2. secureGet y comparación exacta dentro del WebView.
+3. force-stop del proceso Android.
+4. Segundo arranque y secureGet del valor persistido.
+5. secureRemove y secureGet vacío.
+
+El harness no registra el secreto, no se incluye en commits ni en APK release,
+y la clave de firma de CI es efímera. La prueba acredita persistencia después
+de muerte del proceso si el job termina en success. No acredita reinicio del
+sistema operativo, migración de instalación ni prueba física en TECNO.
+
+El workflow se activa en cambios del código Android y de estos documentos.
+No modificar main ni publicar el APK temporal.
+
