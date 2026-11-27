@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+# Evita consumir varios emuladores para commits sucesivos de la misma rama.
+concurrency:
+  group: ank-file-tools-emulator-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   file-tools-emulator:
     name: Listar, leer, buscar, escribir, respaldar y restaurar
