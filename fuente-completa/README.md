@@ -79,7 +79,7 @@ requieren un adaptador específico.
 
 ### Perfiles de conexión y ajustes visuales
 
-El panel 2.6.0 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. Las configuraciones antiguas se migran automáticamente a `provider.json v7`.
+El panel 2.6.1 permite guardar hasta **12 perfiles API independientes**. Cada perfil tiene nombre, protocolo, endpoint, modelo y opciones personalizadas. Puedes crear, seleccionar y eliminar perfiles; se recuerda cuál estaba activo. Las configuraciones antiguas se migran automáticamente a `provider.json v7`.
 
 El diseño del asistente se reorganizó para teléfono y escritorio: ventana adaptable, navegación de pestañas más clara, tarjetas de estado, controles táctiles grandes, formularios con foco visible y contraste reforzado. El chat identifica el perfil y el modelo activos. Al cambiar de conexión se limpia el campo de clave para que un secreto tecleado en un perfil no se arrastre al siguiente.
 
