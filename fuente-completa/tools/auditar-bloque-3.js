@@ -38,6 +38,17 @@ assert.match(panel, /function normalizarPerfilApi\(data, index\)/, 'Falta migrac
 assert.match(panel, /function crearPerfilApi\(\)/, 'Falta crear conexiones API adicionales.');
 assert.match(panel, /function eliminarPerfilApi\(\)/, 'Falta eliminar conexiones API.');
 assert.match(panel, /function seleccionarPerfilApi\(id\)/, 'Falta cambiar de conexión API.');
+assert.match(engine, /function crearPerfil\(/, 'El motor no contiene las funciones reutilizables para crear perfiles.');
+assert.match(engine, /function normalizarPerfiles\(/, 'El motor no contiene la migración/normalización del almacén de perfiles.');
+assert.match(engine, /function upsertPerfil\(/, 'El motor no contiene la actualización del almacén de perfiles.');
+assert.match(engine, /function eliminarPerfil\(/, 'El motor no contiene la eliminación del almacén de perfiles.');
+assert.ok(panel.includes('window.ANKAIEngine.normalizarPerfiles(') &&
+  panel.includes('window.ANKAIEngine.upsertPerfil(') &&
+  panel.includes('window.ANKAIEngine.eliminarPerfil('),
+  'La interfaz debe delegar el almacenamiento de perfiles en el motor probado.');
+assert.ok(panel.includes("if (q('#ank-ai-key')) q('#ank-ai-key').value = '';") &&
+  panel.includes("label.textContent = st.model ? st.activeProfileName + ' · ' + st.model : 'Sin modelo';"),
+  'El cambio de perfil debe limpiar el campo secreto y mostrar la conexión activa.');
 assert.ok(panel.includes('version: 4') && panel.includes('profiles: st.apiProfiles.slice(0, 12)'),
   'Los perfiles deben persistirse en el formato v4 con límite de 12 conexiones.');
 assert.ok(panel.includes('id="ank-ai-perfil"') && panel.includes('id="ank-ai-perfil-nombre"'),
