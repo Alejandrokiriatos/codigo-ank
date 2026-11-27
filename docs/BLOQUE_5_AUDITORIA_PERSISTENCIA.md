@@ -92,3 +92,18 @@ La auditoría reforzada quedó validada en la ejecución final:
 Durante el desarrollo, la CI detectó dos defectos en las nuevas aserciones (firmas exactas de callbacks y delimitación de etiquetas Smali). Se corrigieron y se volvió a ejecutar el flujo completo hasta obtener éxito. Esos fallos correspondieron al test nuevo, no a una regresión de las 34 pruebas del motor.
 
 **Límite sin cambios:** el resultado CI es estático y no sustituye la prueba de escritura/lectura real con Android Keystore en dispositivo o emulador.
+
+
+## Harness automatizado de Android · ciclo Cordova real
+
+Se añadió el workflow `.github/workflows/android-vault-emulator.yml`. En CI:
+- Reconstruye temporalmente el APK diagnosticado con Apktool.
+- Inyecta en `assets/www/index.html` un pequeño harness efímero, que no se guarda en la rama ni forma parte de APKs normales.
+- El harness espera `deviceready` y ejecuta `securePut`, `secureGet` y `secureRemove` mediante `cordova.exec(..., "System", ...)`; por tanto atraviesa el servicio Cordova y el dispatcher Smali hasta `ApiVault`.
+- Usa un valor aleatorio y desechable generado dentro del runner. El valor no se imprime, no se publica como artifact y no se guarda en el repositorio.
+- En la primera apertura escribe y lee el secreto; CI fuerza la detención del proceso y vuelve a abrir la app; en la segunda apertura verifica la lectura persistente, elimina la entrada y confirma que la lectura queda vacía.
+- Solo emite marcadores PASS/FAIL sin el secreto ni el texto de errores.
+
+La prueba de emulador cubre persistencia tras muerte del proceso, no reinicio completo del sistema operativo, migración desde una versión instalada ni interacción completa de la pantalla de perfiles. Esas pruebas siguen en la matriz manual. La APK de CI está firmada con una clave efímera de debug y nunca se distribuye como release.
+
+Resultado de CI: consultar la ejecución del workflow **Prueba Android real · ApiVault Cordova** en Actions. No se declarará superada hasta que el job del emulador termine en `success`; la auditoría estática por sí sola no cuenta como ejecución del vault.
