@@ -20,6 +20,9 @@ const publicationCss = read('.repo-publicacion/ank/ai.css');
 const vault = read('decoded/smali/com/foxdebug/system/ApiVault.smali');
 const systemSmali = read('decoded/smali/com/foxdebug/system/System.smali');
 const systemPlugin = read('decoded/assets/www/plugins/cordova-plugin-system/www/plugin.js');
+const manifest = read('decoded/AndroidManifest.xml');
+const backupRules = read('decoded/res/xml/ank_backup_rules.xml');
+const extractionRules = read('decoded/res/xml/ank_data_extraction_rules.xml');
 
 const begin = '/* ANK_AI_ENGINE_BUNDLE_BEGIN */';
 const end = '/* ANK_AI_ENGINE_BUNDLE_END */';
@@ -63,6 +66,14 @@ assert.ok(panel.includes('data-accion="eliminar-clave-api"'), 'Falta el control 
 assert.match(vault, /EncryptedSharedPreferences;->create/, 'El almacén nativo no cifra las preferencias.');
 assert.match(vault, /AES256_GCM/, 'El almacén nativo no configura AES256-GCM.');
 assert.match(vault, /AES256_SIV/, 'El almacén nativo no cifra los nombres de las claves.');
+assert.ok(manifest.includes('android:fullBackupContent="@xml/ank_backup_rules"') &&
+  manifest.includes('android:dataExtractionRules="@xml/ank_data_extraction_rules"'),
+  'El manifiesto debe aplicar exclusiones de backup para el almacén Keystore.');
+assert.ok(backupRules.includes('domain="sharedpref" path="ank_api_secrets.xml"'),
+  'El backup clásico debe excluir las preferencias cifradas ligadas al dispositivo.');
+assert.ok(extractionRules.includes('<cloud-backup>') && extractionRules.includes('<device-transfer>') &&
+  (extractionRules.match(/domain="sharedpref" path="ank_api_secrets.xml"/g) || []).length === 2,
+  'Android 12+ debe excluir el vault tanto del backup cloud como de la transferencia.');
 for (const action of ['secureGet', 'securePut', 'secureRemove']) {
   assert.ok(systemPlugin.includes(action), 'Falta puente Cordova para ' + action + '.');
   assert.ok(systemSmali.includes('"' + action + '"'), 'System.smali no enruta ' + action + '.');
