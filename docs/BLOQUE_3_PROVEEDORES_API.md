@@ -62,12 +62,14 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 - Se puede crear una conexión nueva y eliminar la conexión activa; al borrar la última se genera una ficha vacía para no dejar los ajustes inutilizables.
 - Los perfiles v3 de una sola conexión se migran automáticamente a v4 como «Conexión principal», sin descartar los valores anteriores.
 - La selección activa se restaura al abrir el panel.
+- Al cambiar, crear o eliminar perfiles, se limpia el campo de clave API para que una clave escrita en un perfil no termine accidentalmente en otro.
+- En el chat se identifica el perfil activo junto al modelo.
 - Se limita la lista a 12 perfiles y se normalizan identificadores duplicados o inválidos.
 - La lógica de creación, normalización, migración, actualización y eliminación de perfiles vive en `ank-ai/engine.js`, independiente de la vista. Esto permite probar las reglas del almacén sin depender del DOM.
 
 Las claves continúan en el archivo privado de la aplicación **sin cifrado Android Keystore**. El perfil múltiple organiza la configuración, pero no cambia ese límite de seguridad. No se debe compartir `provider.json` ni incluirlo en un repositorio.
 
-### Diseño del panel 2.4.0
+### Diseño del panel 2.4.1
 
 - Panel adaptable: pantalla completa en teléfono y ventana centrada en escritorio.
 - Cabecera y pestañas con navegación táctil, botones de al menos 42–46 px, campos con foco visible y contraste reforzado.
