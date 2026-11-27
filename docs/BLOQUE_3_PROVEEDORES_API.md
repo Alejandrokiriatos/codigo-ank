@@ -69,8 +69,12 @@ Este modo cubre JSON sobre HTTP POST, no cualquier protocolo imaginable. WebSock
 
 Las claves ya no se escriben en `provider.json`: se almacenan mediante `EncryptedSharedPreferences` (AES256-SIV para nombres y AES256-GCM para valores), con una clave maestra `AES256_GCM` respaldada por Android Keystore. El puente Cordova del plugin `System` expone lectura, escritura y borrado para cada perfil. `provider.json` v5 conserva solo los parámetros no secretos. En una instalación con datos v3/v4, la aplicación intenta migrar las claves al almacén cifrado antes de reescribir el archivo; si falla, conserva el archivo previo para no perder la clave e informa del problema en Registro. No se debe compartir `provider.json` ni incluirlo en un repositorio.
 
+Las reglas de copia de seguridad clásicas y Android 12+ excluyen `ank_api_secrets.xml` tanto de copia cloud como de transferencia entre dispositivos. El ciphertext depende de una clave Android Keystore que no puede trasladarse con el archivo cifrado.
+
 ### Diseño del panel 2.4.1
 
+- El arranque del APK solo carga `./ank/ai.js`, que es el panel integrado en la aplicación. Ya no ejecuta JavaScript o CSS guardados en `localStorage`; los paquetes antiguos no firmados se eliminan al iniciar.
+- Mientras el actualizador remoto siga desactivado, no se aceptan paquetes web. La reactivación exige validación de firma Ed25519 en el arranque, antes de ejecutar el contenido.
 - Panel adaptable: pantalla completa en teléfono y ventana centrada en escritorio.
 - Cabecera y pestañas con navegación táctil, botones de al menos 42–46 px, campos con foco visible y contraste reforzado.
 - La pestaña Entorno agrupa perfiles, estado del entorno y campos de conexión; la terminal aparece como componente opcional independiente.
@@ -125,6 +129,9 @@ La ejecución [45973457092](https://github.com/Alejandrokiriatos/codigo-ank/acti
 - Auditoría estática de los perfiles: migración v3, formato v4, creación, selección y eliminación.
 - Integridad: el panel y el CSS del APK coinciden byte a byte con sus copias de publicación y del actualizador interno.
 - Auditoría del almacenamiento de secretos: puente Cordova, `System.smali`, `ApiVault.smali` y `EncryptedSharedPreferences` detectados y conectados; claves excluidas de `provider.json` v5.
+- Copias de seguridad: `ank_api_secrets.xml` excluido del backup clásico y de Android 12+ cloud/device transfer.
+- Arranque: no se evalúa código guardado localmente; el inicio siempre carga el panel del APK y elimina los bundles web previos no verificados.
+- Acceso al vault serializado para no inicializar simultáneamente los keysets Tink cuando hay varios perfiles.
 - Se comprobó además que `ank/ai.js`, `.repo-publicacion/ank/ai.js`, `update/ank/ai.js` y las copias incluidas en Android coinciden byte a byte; los paneles de publicación no contienen el runtime OpenCode.
 - Se incorporó una corrección de aislamiento: al cambiar, crear o eliminar perfiles, se vacía el campo de clave, evitando reutilizar accidentalmente una clave que quedó escrita en el perfil anterior.
 - Diseño responsive: reglas verificadas para teléfono y escritorio.
@@ -140,5 +147,7 @@ La ejecución [45892806329](https://github.com/Alejandrokiriatos/codigo-ank/acti
 - La copia interna `update/ank/ai.js` quedó sincronizada con el bundle Android. Esto no reactiva el canal remoto: `upd.js` continúa inerte y el manifiesto antiguo no se publica.
 
 La CI valida el comportamiento simulado y la integración estática. No sustituye la prueba real con claves y endpoints de los proveedores, ni la prueba en un teléfono Android con el plugin Cordova instalado.
+
+La reconstrucción Apktool del commit validado volvió a completarse: **15.486.346 bytes**, sin firma release. El workflow solo genera un APK diagnóstico; no se publica como artefacto instalable ni sustituye la firma original. Alpine/AXS/proot sigue excluido y la terminal Linux completa no está disponible en esa reconstrucción.
 
 El workflow de reconstrucción volvió a generar un APK diagnóstico sin firma release de **15.484.081 bytes**. Se deja como resultado técnico de compilación, no como archivo instalable para el usuario: continúan faltando los assets Alpine/AXS/proot del terminal opcional y no está disponible el keystore legítimo de distribución.
